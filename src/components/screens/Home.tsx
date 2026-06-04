@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Sparkles, TrendingUp, MapPin, Calendar, BookOpen } from "lucide-react";
+import { BookOpen, Calendar, ChevronRight, MapPin, MessageCircle, Sparkles, TrendingUp } from "lucide-react";
 import Chatbot from "@/components/Chatbot";
 import {
   Carousel,
@@ -261,22 +261,15 @@ export default function Home() {
 
       {/* Chatbot */}
       {chatOpen && <Chatbot onClose={() => setChatOpen(false)} />}
-      <button
-        onClick={() => setChatOpen((v) => !v)}
-        className={`fixed bottom-24 md:bottom-8 right-4 text-white p-4 rounded-full shadow-lg shadow-navy-600/30 transition-all hover:scale-105 z-40 ${
-          chatOpen ? "bg-navy-700" : "bg-gradient-to-br from-navy-600 to-brand-500 hover:shadow-xl"
-        }`}
-        aria-label={chatOpen ? "채팅창 닫기" : "채팅창 열기"}
-      >
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-          />
-        </svg>
-      </button>
+      {!chatOpen && (
+        <button
+          onClick={() => setChatOpen(true)}
+          className="fixed bottom-24 right-4 z-40 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-navy-600 to-brand-500 text-white shadow-xl shadow-navy-600/30 ring-1 ring-white/30 transition-all hover:-translate-y-0.5 hover:scale-105 hover:shadow-2xl md:bottom-8 md:right-6"
+          aria-label="채팅창 열기"
+        >
+          <MessageCircle className="h-7 w-7" aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }
