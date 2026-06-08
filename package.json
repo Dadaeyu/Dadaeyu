@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "chatbot:tourapi:preview": "node scripts/chatbot/import-tourapi-barrier-free.mjs --dry-run --limit=5",
+    "chatbot:tourapi:import": "node scripts/chatbot/import-tourapi-barrier-free.mjs --write",
+    "chatbot:embedding:preview": "node scripts/chatbot/embed-chunks-openai.mjs --dry-run --limit=100",
+    "chatbot:embedding:write": "node scripts/chatbot/embed-chunks-openai.mjs --write --limit=100"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",

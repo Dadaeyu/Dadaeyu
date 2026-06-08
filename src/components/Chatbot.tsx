@@ -15,6 +15,21 @@ type ChatResponse = {
   chips: string[];
   confidence: Confidence;
   sources: string[];
+  debug?: {
+    analysis: QueryAnalysis;
+    searchTerms: string[];
+  };
+};
+
+type QueryAnalysis = {
+  in_scope: boolean;
+  scope_reason: string;
+  intent: "recommend_place" | "check_accessibility" | "ask_info";
+  accessibility_needs: string[];
+  weather_sensitive: boolean;
+  place_name: string | null;
+  location: string | null;
+  keywords: string[];
 };
 
 type Message =
@@ -250,6 +265,29 @@ function AssistantMessage({
         <p className="whitespace-pre-line text-[15px] leading-7 text-gray-800">
           {response.message}
         </p>
+
+        {response.debug ? (
+          <div className="mt-4 rounded-2xl border border-navy-100 bg-navy-50/70 p-3 text-xs text-gray-800">
+            <strong className="block text-xs font-extrabold text-navy-700">
+              질문분류 JSON
+            </strong>
+            <pre className="mt-3 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white p-3 font-mono text-[11px] leading-relaxed text-gray-800 ring-1 ring-navy-100">
+              {JSON.stringify(response.debug.analysis, null, 2)}
+            </pre>
+            {response.debug.searchTerms.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {response.debug.searchTerms.map((term) => (
+                  <span
+                    key={term}
+                    className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-navy-600 ring-1 ring-navy-100"
+                  >
+                    {term}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {response.card ? (
           <div className="mt-4 rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-4">
