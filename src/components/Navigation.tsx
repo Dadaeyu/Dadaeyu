@@ -9,7 +9,7 @@ const navItems = [
   { path: "/map", label: "지도", icon: Map },
   { path: "/course", label: "코스", icon: Route },
   { path: "/community", label: "커뮤니티", icon: Users },
-  { path: "/mypage", label: "마이페이지", icon: User },
+  { path: "/mypage", label: "마이페이지", icon: User }
 ];
 
 const adminItem = { path: "/admin", label: "관리", icon: ShieldCheck };
@@ -23,31 +23,31 @@ function useIsActive() {
 export function DesktopNav() {
   const isActive = useIsActive();
   return (
-    <nav className="hidden md:flex items-center gap-1">
+    <nav className="hidden items-center gap-1 md:flex">
       {navItems.map(({ path, label, icon: Icon }) => (
         <Link
           key={path}
           href={path}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all ${
+          className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition-all ${
             isActive(path)
-              ? "text-brand-700 bg-brand-50 shadow-sm shadow-brand-500/10"
-              : "text-gray-500 hover:text-brand-600 hover:bg-gray-50"
+              ? "text-brand-700 bg-brand-50 shadow-brand-500/10 shadow-sm"
+              : "hover:text-brand-600 text-gray-500 hover:bg-gray-50"
           }`}
         >
-          <Icon className="w-4 h-4" />
+          <Icon className="h-4 w-4" />
           <span>{label}</span>
         </Link>
       ))}
-      <div className="w-px h-5 bg-gray-200 mx-1" />
+      <div className="mx-1 h-5 w-px bg-gray-200" />
       <Link
         href={adminItem.path}
-        className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all ${
+        className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition-all ${
           isActive(adminItem.path)
-            ? "text-indigo-700 bg-indigo-50 shadow-sm"
-            : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50"
+            ? "bg-indigo-50 text-indigo-700 shadow-sm"
+            : "text-gray-400 hover:bg-indigo-50 hover:text-indigo-600"
         }`}
       >
-        <adminItem.icon className="w-4 h-4" />
+        <adminItem.icon className="h-4 w-4" />
         <span>{adminItem.label}</span>
       </Link>
     </nav>
@@ -57,7 +57,7 @@ export function DesktopNav() {
 export function MobileNav() {
   const isActive = useIsActive();
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-[0_-2px_12px_rgba(0,0,0,0.05)] z-50">
+    <nav className="fixed right-0 bottom-0 left-0 z-50 border-t border-gray-200 bg-white/95 shadow-[0_-2px_12px_rgba(0,0,0,0.05)] backdrop-blur-md md:hidden">
       <div className="flex items-center justify-around py-1.5">
         {[...navItems, adminItem].map(({ path, label, icon: Icon }) => {
           const active = isActive(path);
@@ -65,14 +65,10 @@ export function MobileNav() {
             <Link
               key={path}
               href={path}
-              className={`relative flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl transition-colors ${
-                active ? "text-brand-600" : "text-gray-400 hover:text-brand-500"
-              }`}
+              className={`relative flex flex-col items-center gap-1 rounded-xl px-3 py-1.5 transition-colors ${active ? "text-brand-600" : "hover:text-brand-500 text-gray-400"}`}
             >
-              {active && (
-                <span className="absolute -top-0.5 h-1 w-6 rounded-full bg-brand-500" />
-              )}
-              <Icon className="w-5 h-5" />
+              {active && <span className="bg-brand-500 absolute -top-0.5 h-1 w-6 rounded-full" />}
+              <Icon className="h-5 w-5" />
               <span className="text-[11px] font-medium">{label}</span>
             </Link>
           );
