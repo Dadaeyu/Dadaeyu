@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -9,6 +10,8 @@ import {
   Route,
   Flag,
   Calendar,
+  Database,
+  ExternalLink,
   Search,
   Plus,
   Trash2,
@@ -35,7 +38,8 @@ const SECTIONS = [
   { key: "places", label: "장소 관리", icon: MapPin },
   { key: "courses", label: "코스 관리", icon: Route },
   { key: "reports", label: "제보 확인", icon: Flag },
-  { key: "events", label: "이벤트 관리", icon: Calendar }
+  { key: "events", label: "이벤트 관리", icon: Calendar },
+  { key: "supabase", label: "Supabase", icon: Database }
 ];
 
 // ── 목업 데이터 ───────────────────────────────────────────
@@ -340,6 +344,7 @@ export default function Admin() {
           {section === "courses" && <CourseManagement />}
           {section === "reports" && <ReportManagement />}
           {section === "events" && <EventManagement />}
+          {section === "supabase" && <SupabaseTest />}
         </div>
       </div>
     </div>
@@ -1064,6 +1069,507 @@ function EventManagement() {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ── 7. Supabase 테스트 ───────────────────────────────────
+function SupabaseTest() {
+  // 클라이언트 컴포넌트 라이브 테스트 //
+  const [clientStatus, setClientStatus] = useState<"idle" | "loading" | "success" | "error">(
+    "idle"
+  );
+  const [clientResult, setClientResult] = useState<unknown>(null);
+  const [clientError, setClientError] = useState("");
+
+  const isEnvSet = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  const runClientFetch = async () => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      setClientStatus("error");
+      setClientError(
+        ".env.local에 NEXT_PUBLIC_SUPABASE_URL이 설정되지 않았습니다.\n아래 환경 변수 설정 안내를 참고하세요."
+      );
+      return;
+    }
+
+    setClientStatus("loading");
+    setClientResult(null);
+    setClientError("");
+    try {
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      const { data, error } = await supabase.from("tb_test").select("*").limit(5);
+      console.log(data);
+
+      if (error) throw error;
+
+      setClientResult(data);
+      setClientStatus("success");
+      console.log(clientResult);
+    } catch (e: unknown) {
+      setClientError(e instanceof Error ? e.message : String(e));
+      setClientStatus("error");
+    }
+  };
+
+  const clientSnippet = `'use client'
+import { useEffect, useState } from 'react'
+import { createClient } from '@/utils/supabase/client'
+
+export default function MyComponent() {
+  const [data, setData] = useState([])
+  const supabase = createClient()
+
+  useEffect(() => {
+    supabase
+      .from('tb_test')  // 테이블 이름
+      .select('id, created_at')  // 컬럼 이름
+      .then(({ data }) => {
+        if (data) setData(data)
+      })
+  }, [])
+
+  return <ul>{data.map(d => <li key={d.id}>{d.name}</li>)}</ul>
+}`;
+
+  const serverSnippet = `// 'use client' 없음 → 기본이 서버 컴포넌트
+import { createClient } from '@/utils/supabase/server'
+
+export default async function Page() {
+  const supabase = await createClient()
+
+  const { data: tests, error } = await supabase
+    .from('tb_test')
+    .select('*')
+
+  if (error) throw error
+
+  return (
+    <ul>
+      {tests?.map(p => (
+        <li key={p.id}>{p.created_at}</li>
+      ))}
+    </ul>
+  )
+}`;
+
+  const clientUtilsSnippet = `import { createBrowserClient } from "@supabase/ssr";
+
+export const createClient = () =>
+  createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+  );`;
+
+  const serverUtilsSnippet = `import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) => {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // The 'setAll' method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing
+            // user sessions.
+          }
+        }
+      }
+    }
+  );
+};`;
+
+  return (
+    <div className="space-y-6">
+      {/* 헤더 */}
+      <div>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-gray-800">Supabase 연동 테스트</h1>
+          <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-700">
+            개발용
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-gray-400">
+          클라이언트 / 서버 컴포넌트에서 Supabase 데이터를 가져오는 패턴을 확인하세요. 팀원들이 기능
+          개발 시 참고할 수 있습니다.
+        </p>
+      </div>
+
+      {/* 환경 변수 안내 */}
+      {!isEnvSet && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-amber-800">환경 변수가 설정되지 않았습니다</p>
+            <p className="mt-1 text-sm text-amber-700">
+              프로젝트 루트에{" "}
+              <code className="rounded bg-amber-100 px-1 font-mono text-amber-900">.env</code>를
+              생성하고 아래 값을 추가한 뒤 개발 서버를 재시작하세요.
+            </p>
+            <pre className="mt-3 overflow-x-auto rounded-xl bg-amber-900/10 p-4 font-mono text-xs text-amber-900">
+              {`NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co\nNEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJ...`}
+            </pre>
+            <p className="mt-2 text-xs text-amber-600">
+              Supabase 대시보드 → Project Settings → API 에서 복사하세요.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 클라이언트 / 서버 비교 패널 */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* ── 클라이언트 컴포넌트 ── */}
+        <div className="flex flex-col gap-4 rounded-2xl border border-blue-100 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="rounded-lg bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
+              &apos;use client&apos;
+            </span>
+            <h2 className="font-bold text-gray-800">클라이언트 컴포넌트</h2>
+          </div>
+          <p className="text-sm text-gray-500">
+            브라우저에서 직접 Supabase를 호출합니다. 버튼 클릭 후 조회, 실시간 구독 등 인터랙티브한
+            UI에 적합합니다.
+          </p>
+
+          {/* 코드 스니펫 */}
+          <div className="overflow-hidden rounded-xl bg-gray-950">
+            <div className="flex items-center gap-1.5 border-b border-gray-800 px-4 py-2.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+              <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+              <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+              <span className="ml-2 font-mono text-xs text-gray-500">component.tsx</span>
+            </div>
+            <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-gray-200">
+              {clientSnippet}
+            </pre>
+          </div>
+
+          {/* 라이브 테스트 */}
+          <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">라이브 실행</p>
+              <button
+                onClick={runClientFetch}
+                disabled={clientStatus === "loading"}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+                {clientStatus === "loading" ? "조회 중..." : "실행"}
+              </button>
+            </div>
+
+            {clientStatus === "idle" && (
+              <p className="py-4 text-center text-sm text-gray-400">
+                실행 버튼을 눌러 클라이언트에서 직접 데이터를 조회해보세요.
+              </p>
+            )}
+            {clientStatus === "loading" && (
+              <p className="animate-pulse py-4 text-center text-sm text-gray-500">
+                Supabase에 연결 중...
+              </p>
+            )}
+            {clientStatus === "success" && (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-green-600">✓ 응답 성공</p>
+                <pre className="overflow-x-auto rounded-lg border border-gray-200 bg-white p-3 font-mono text-xs text-gray-700">
+                  {JSON.stringify(clientResult, null, 2)}
+                </pre>
+              </div>
+            )}
+            {clientStatus === "error" && (
+              <div>
+                <p className="mb-1 text-xs font-semibold text-red-600">✗ 오류 발생</p>
+                <pre className="rounded-lg bg-red-50 p-3 font-mono text-xs whitespace-pre-wrap text-red-700">
+                  {clientError}
+                </pre>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── 서버 컴포넌트 ── */}
+        <div className="flex flex-col gap-4 rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="rounded-lg bg-green-100 px-2.5 py-1 text-xs font-bold text-green-700">
+              Server
+            </span>
+            <h2 className="font-bold text-gray-800">서버 컴포넌트</h2>
+          </div>
+          <p className="text-sm text-gray-500">
+            서버에서 데이터를 미리 가져와 HTML에 포함합니다. 페이지 최초 로드 데이터, SEO가 중요한
+            곳에 적합합니다.
+          </p>
+
+          {/* 코드 스니펫 */}
+          <div className="overflow-hidden rounded-xl bg-gray-950">
+            <div className="flex items-center gap-1.5 border-b border-gray-800 px-4 py-2.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+              <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+              <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+              <span className="ml-2 font-mono text-xs text-gray-500">
+                app/example/page.tsx (Server Component)
+              </span>
+            </div>
+            <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-gray-200">
+              {serverSnippet}
+            </pre>
+          </div>
+
+          {/* 사용 위치 안내 */}
+          <div className="rounded-xl bg-gray-50 p-4">
+            <p className="mb-3 text-xs font-bold tracking-wide text-gray-500 uppercase">
+              서버 컴포넌트를 쓸 수 있는 곳
+            </p>
+            <div className="space-y-2.5">
+              {[
+                {
+                  file: "src/app/*/page.tsx",
+                  desc: "라우트 페이지 — 기본이 서버 컴포넌트"
+                },
+                {
+                  file: "src/app/*/layout.tsx",
+                  desc: "레이아웃 — 공통 데이터 로딩"
+                },
+                {
+                  file: "src/app/api/*/route.ts",
+                  desc: "Route Handler — REST API 엔드포인트"
+                }
+              ].map(({ file, desc }) => (
+                <div key={file} className="flex items-start gap-2">
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                  <div>
+                    <code className="font-mono text-xs text-gray-800">{file}</code>
+                    <p className="mt-0.5 text-xs text-gray-500">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 주의사항 */}
+          <div className="flex items-start gap-2.5 rounded-xl border border-yellow-100 bg-yellow-50 p-4">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" />
+            <p className="text-xs text-yellow-800">
+              서버 컴포넌트는 이 어드민 화면처럼{" "}
+              <code className="rounded bg-yellow-100 px-1 font-mono">&apos;use client&apos;</code>가
+              붙은 곳에서는 직접 실행할 수 없습니다.
+              <br />
+              <span className="mt-1 block">
+                신규 페이지의 <code className="rounded bg-yellow-100 px-1 font-mono">page.tsx</code>
+                에서 사용하세요.
+              </span>
+            </p>
+          </div>
+
+          {/* 실제 서버 조회 페이지 링크 */}
+          <Link
+            href="/supabase"
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-700"
+          >
+            <ExternalLink className="h-4 w-4" />
+            서버 컴포넌트 실제 조회 결과 보기
+          </Link>
+        </div>
+      </div>
+
+      {/* RLS 안내 */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="mb-2 flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-indigo-500" />
+          <h2 className="font-bold text-gray-800">RLS (Row Level Security) — 꼭 알아두기</h2>
+        </div>
+        <p className="text-sm text-gray-500">
+          Supabase 테이블은 기본적으로 RLS가 켜져 있습니다. 정책(Policy)이 하나도 없으면, 권한이
+          없는 행은{" "}
+          <strong className="font-semibold text-gray-700">에러 없이 그냥 안 보입니다.</strong> 조회
+          코드가 맞는데도 <code className="rounded bg-gray-100 px-1 font-mono">[]</code> 빈 배열만
+          돌아온다면 거의 RLS 때문입니다.
+        </p>
+
+        {/* 증상 비교 */}
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-red-100 bg-red-50 p-4">
+            <p className="mb-1 text-xs font-bold text-red-700">정책이 없을 때</p>
+            <p className="text-sm text-red-600">
+              <code className="font-mono">error</code>는 <code className="font-mono">null</code>,{" "}
+              <code className="font-mono">data</code>는 <code className="font-mono">[]</code> — 분명
+              데이터가 있는데 0개로 조회됨
+            </p>
+          </div>
+          <div className="rounded-xl border border-green-100 bg-green-50 p-4">
+            <p className="mb-1 text-xs font-bold text-green-700">SELECT 정책 추가 후</p>
+            <p className="text-sm text-green-600">
+              <code className="font-mono">data</code>에 행이 정상적으로 채워짐
+            </p>
+          </div>
+        </div>
+
+        {/* 해결 SQL */}
+        <p className="mt-5 mb-2 text-xs font-bold tracking-wide text-gray-500 uppercase">
+          해결 — SQL Editor에서 읽기 정책 추가
+        </p>
+        <div className="overflow-hidden rounded-xl bg-gray-950">
+          <div className="flex items-center gap-1.5 border-b border-gray-800 px-4 py-2.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+            <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+            <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+            <span className="ml-2 font-mono text-xs text-gray-500">SQL Editor</span>
+          </div>
+          <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-gray-200">
+            {`-- 모두에게 SELECT(읽기) 허용
+create policy "Enable read access for all"
+on public.tb_test
+for select
+to public          -- anon + authenticated 모두 포함
+using (true);`}
+          </pre>
+        </div>
+
+        {/* 대시보드 폼으로 추가하는 법 */}
+        <div className="mt-4 rounded-xl bg-gray-50 p-4">
+          <p className="mb-3 text-xs font-bold tracking-wide text-gray-500 uppercase">
+            또는 대시보드 폼으로 (Authentication → Policies → New Policy)
+          </p>
+          <div className="space-y-2">
+            {[
+              ["Policy Command", "SELECT"],
+              ["Target Roles", "비워두기 (= public, 모두 허용)"],
+              ["using 표현식", "true"]
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center gap-2 text-sm">
+                <Check className="h-4 w-4 shrink-0 text-green-500" />
+                <span className="text-gray-500">{label}:</span>
+                <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs text-gray-800">
+                  {value}
+                </code>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 주의 */}
+        <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-100 bg-amber-50 p-4">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="text-xs text-amber-800">
+            <p>
+              <strong className="font-semibold">
+                비로그인 조회는 내부적으로 anon 역할로 실행됩니다.
+              </strong>{" "}
+              그래서 <code className="rounded bg-amber-100 px-1 font-mono">to public</code>{" "}
+              (비워두기)을 권장합니다.{" "}
+              <code className="rounded bg-amber-100 px-1 font-mono">to authenticated</code>만
+              지정하면 로그인 전에는 여전히 빈 배열이 나옵니다.
+            </p>
+            <p className="mt-1.5">
+              실제 서비스 테이블에는{" "}
+              <code className="rounded bg-amber-100 px-1 font-mono">using (true)</code> 대신{" "}
+              <code className="rounded bg-amber-100 px-1 font-mono">auth.uid() = user_id</code> 같은
+              조건으로 본인 데이터만 보이게 제한하세요. RLS 자체를 끄는 것(disable)은 테스트
+              테이블이 아니면 권장하지 않습니다.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 유틸 파일 구조 */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="mb-5 flex items-center gap-2">
+          <Database className="h-5 w-5 text-indigo-500" />
+          <h2 className="font-bold text-gray-800">유틸 파일 구조</h2>
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+            src/utils/supabase/
+          </span>
+        </div>
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          {[
+            {
+              file: "client.ts",
+              label: "브라우저용",
+              labelColor: "bg-blue-100 text-blue-700",
+              desc: "클라이언트 컴포넌트에서 import해서 사용합니다.",
+              code: clientUtilsSnippet
+            },
+            {
+              file: "server.ts",
+              label: "서버용",
+              labelColor: "bg-green-100 text-green-700",
+              desc: "서버 컴포넌트 및 Route Handler에서 import해서 사용합니다.",
+              code: serverUtilsSnippet
+            }
+          ].map(({ file, label, labelColor, desc, code }) => (
+            <div key={file} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className={`rounded-lg px-2.5 py-0.5 text-xs font-bold ${labelColor}`}>
+                  {label}
+                </span>
+                <code className="font-mono text-xs text-gray-500">src/utils/supabase/{file}</code>
+              </div>
+              <p className="text-sm text-gray-500">{desc}</p>
+              <div className="overflow-hidden rounded-xl bg-gray-950">
+                <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-gray-200">
+                  {code}
+                </pre>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 언제 뭘 쓸까 요약 */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 font-bold text-gray-800">언제 뭘 써야 할까?</h2>
+        <div className="overflow-hidden rounded-xl border border-gray-100">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50">
+                {["", "클라이언트 컴포넌트", "서버 컴포넌트"].map((h) => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-500">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["import 경로", "@/utils/supabase/client", "@/utils/supabase/server"],
+                ["함수 형태", "createClient() (동기)", "await createClient() (비동기)"],
+                ["적합한 상황", "버튼 클릭 조회, 실시간 구독", "페이지 첫 로드, SEO 필요"],
+                [
+                  "주의사항",
+                  "Publishable key가 브라우저에 노출됨",
+                  "'use client' 파일에서 사용 불가"
+                ]
+              ].map(([label, client, server]) => (
+                <tr key={label} className="border-b border-gray-50">
+                  <td className="px-4 py-3 text-xs font-semibold text-gray-500">{label}</td>
+                  <td className="px-4 py-3">
+                    <code className="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-xs text-blue-800">
+                      {client}
+                    </code>
+                  </td>
+                  <td className="px-4 py-3">
+                    <code className="rounded bg-green-50 px-1.5 py-0.5 font-mono text-xs text-green-800">
+                      {server}
+                    </code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
