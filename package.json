@@ -7,6 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "chatbot:tourapi:preview": "node scripts/chatbot/import-tourapi-barrier-free.mjs --dry-run --limit=5",
+    "chatbot:tourapi:import": "node scripts/chatbot/import-tourapi-barrier-free.mjs --write",
+    "chatbot:embedding:preview": "node scripts/chatbot/embed-chunks-openai.mjs --dry-run --limit=100",
+    "chatbot:embedding:write": "node scripts/chatbot/embed-chunks-openai.mjs --write --limit=100"
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky"
@@ -22,7 +26,7 @@
     "clsx": "^2.1.1",
     "embla-carousel-react": "^8.6.0",
     "lucide-react": "^1.17.0",
-    "next": "16.2.7",
+    "next": "^16.2.7",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "^3.6.0",
