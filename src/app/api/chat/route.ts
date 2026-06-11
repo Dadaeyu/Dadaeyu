@@ -146,11 +146,7 @@ function createNoKnowledgeResponse({
       ],
       source: "DeepSeek 질문 분류 · Supabase 조회"
     },
-    chips: [
-      "한밭수목원 휠체어 가능해?",
-      "유모차로 갈만한 실내 장소",
-      "거동이 불편한 부모님 코스"
-    ],
+    chips: ["한밭수목원 휠체어 가능해?", "유모차로 갈만한 실내 장소", "거동이 불편한 부모님 코스"],
     confidence: "low",
     sources: ["DeepSeek 질문 분류"],
     debug: {
@@ -191,14 +187,9 @@ function createSuccessResponse({
     card: {
       title: "챗봇 연결 상태",
       rows,
-      source:
-        knowledge.status === "ready" ? "DeepSeek API · Supabase" : "DeepSeek API"
+      source: knowledge.status === "ready" ? "DeepSeek API · Supabase" : "DeepSeek API"
     },
-    chips: [
-      "접근성 근거도 붙여줘",
-      "대전 여행지 추천해줘",
-      "Supabase 데이터도 연결해줘"
-    ],
+    chips: ["접근성 근거도 붙여줘", "대전 여행지 추천해줘", "Supabase 데이터도 연결해줘"],
     confidence: "medium",
     sources: [
       `DeepSeek API (${model})`,
@@ -214,11 +205,7 @@ function createSuccessResponse({
 }
 
 function getSupabaseConfig() {
-  const rawUrl = (
-    process.env.SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    ""
-  ).trim();
+  const rawUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
   const key = (
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -226,9 +213,7 @@ function getSupabaseConfig() {
   ).trim();
   const schema = (process.env.SUPABASE_SCHEMA || "chatbot").trim();
   const rawTable = (process.env.SUPABASE_CHAT_TABLE || "chunks").trim();
-  const [schemaFromTable, tableFromTable] = rawTable.includes(".")
-    ? rawTable.split(".", 2)
-    : [];
+  const [schemaFromTable, tableFromTable] = rawTable.includes(".") ? rawTable.split(".", 2) : [];
 
   return {
     key,
@@ -243,9 +228,7 @@ function normalizeSupabaseRestUrl(rawUrl: string) {
 
   try {
     const parsed = new URL(rawUrl);
-    return rawUrl.includes("/rest/v1")
-      ? rawUrl.replace(/\/$/, "")
-      : `${parsed.origin}/rest/v1`;
+    return rawUrl.includes("/rest/v1") ? rawUrl.replace(/\/$/, "") : `${parsed.origin}/rest/v1`;
   } catch {
     return "";
   }
@@ -338,8 +321,7 @@ function normalizeAnalysis(value: unknown, message: string): QueryAnalysis {
     : fallback.keywords;
 
   return {
-    in_scope:
-      typeof record.in_scope === "boolean" ? record.in_scope : fallback.in_scope,
+    in_scope: typeof record.in_scope === "boolean" ? record.in_scope : fallback.in_scope,
     scope_reason:
       typeof record.scope_reason === "string" && record.scope_reason.trim()
         ? record.scope_reason.trim()
@@ -383,13 +365,9 @@ function fallbackAnalysis(message: string): QueryAnalysis {
           ? "check_accessibility"
           : "ask_info",
     accessibility_needs:
-      message.includes("휠체어") || message.includes("장애인")
-        ? ["wheelchair"]
-        : [],
+      message.includes("휠체어") || message.includes("장애인") ? ["wheelchair"] : [],
     weather_sensitive:
-      message.includes("오늘") ||
-      message.includes("날씨") ||
-      message.includes("비"),
+      message.includes("오늘") || message.includes("날씨") || message.includes("비"),
     place_name: null,
     location: "대전",
     keywords
@@ -500,10 +478,7 @@ function escapeSupabaseFilterValue(value: string) {
 
 function formatKnowledgeContext(knowledge: KnowledgeResult) {
   if (!knowledge.rows.length) {
-    return [
-      "Supabase 근거 데이터는 아직 사용할 수 없다.",
-      `상태: ${knowledge.message}`
-    ].join("\n");
+    return ["Supabase 근거 데이터는 아직 사용할 수 없다.", `상태: ${knowledge.message}`].join("\n");
   }
 
   return [
@@ -547,10 +522,7 @@ export async function POST(request: Request) {
     const message = typeof body.message === "string" ? body.message.trim() : "";
 
     if (!message) {
-      return NextResponse.json(
-        { error: "message is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "message is required" }, { status: 400 });
     }
 
     const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
@@ -574,9 +546,7 @@ export async function POST(request: Request) {
     const knowledge = await fetchKnowledge(analysis);
 
     if (knowledge.status !== "ready") {
-      return NextResponse.json(
-        createNoKnowledgeResponse({ analysis, knowledge, searchTerms })
-      );
+      return NextResponse.json(createNoKnowledgeResponse({ analysis, knowledge, searchTerms }));
     }
 
     const controller = new AbortController();

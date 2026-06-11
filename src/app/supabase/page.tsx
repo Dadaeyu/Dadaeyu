@@ -22,33 +22,33 @@ export default async function SupabaseServerTestPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-gray-800">서버 컴포넌트 조회 결과</h1>
-            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-700">
+            <h1 className="text-ink text-xl font-bold">서버 컴포넌트 조회 결과</h1>
+            <span className="bg-brand-100 text-brand-700 rounded-full px-2.5 py-0.5 text-xs font-bold">
               Server Component
             </span>
           </div>
-          <p className="mt-1 text-sm text-gray-400">
+          <p className="text-stone mt-1 text-sm">
             이 페이지는 서버에서 <code className="font-mono">tb_test</code>를 조회한 뒤 완성된
             HTML을 전달합니다. (라우트: <code className="font-mono">/supabase</code>)
           </p>
         </div>
         <Link
           href="/admin/supabase"
-          className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+          className="border-hairline text-steel hover:bg-surface-soft rounded-lg border px-4 py-2 text-sm font-semibold transition-colors"
         >
           ← 테스트 탭으로
         </Link>
       </div>
 
       {/* 조회 코드 */}
-      <div className="overflow-hidden rounded-2xl bg-gray-950">
-        <div className="flex items-center gap-1.5 border-b border-gray-800 px-4 py-2.5">
+      <div className="bg-surface-code overflow-hidden rounded-lg">
+        <div className="border-charcoal flex items-center gap-1.5 border-b px-4 py-2.5">
           <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-          <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
-          <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-          <span className="ml-2 font-mono text-xs text-gray-500">src/app/supabase/page.tsx</span>
+          <span className="bg-gold-500 h-2.5 w-2.5 rounded-full" />
+          <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
+          <span className="text-steel ml-2 font-mono text-xs">src/app/supabase/page.tsx</span>
         </div>
-        <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-gray-200">
+        <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
           {`const cookieStore = await cookies()
 const supabase = createClient(cookieStore)
 
@@ -61,33 +61,33 @@ const { data, error } = await supabase
 
       {/* 결과 */}
       {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-5">
           <p className="mb-1 text-sm font-bold text-red-700">✗ 조회 오류</p>
           <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap text-red-600">
             {error.message}
           </pre>
         </div>
       ) : !data || data.length === 0 ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-          <p className="text-sm font-semibold text-amber-800">조회는 성공했지만 행이 0개입니다.</p>
-          <p className="mt-1 text-sm text-amber-700">
+        <div className="border-gold-200 bg-gold-50 rounded-lg border p-5">
+          <p className="text-gold-800 text-sm font-semibold">조회는 성공했지만 행이 0개입니다.</p>
+          <p className="text-gold-700 mt-1 text-sm">
             RLS 정책(SELECT to public)이 설정되어 있는지, 테이블에 데이터가 있는지 확인하세요.
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
-            <p className="text-sm font-semibold text-gray-700">tb_test</p>
-            <span className="text-xs text-gray-400">{data.length}개 행</span>
+        <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
+          <div className="border-hairline-soft bg-surface-soft flex items-center justify-between border-b px-4 py-3">
+            <p className="text-slate text-sm font-semibold">tb_test</p>
+            <span className="text-stone text-xs">{data.length}개 행</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/50">
+                <tr className="border-hairline-soft bg-surface-soft/50 border-b">
                   {columns.map((col) => (
                     <th
                       key={col}
-                      className="px-4 py-3 text-left font-mono text-xs font-bold whitespace-nowrap text-gray-500"
+                      className="text-steel px-4 py-3 text-left font-mono text-xs font-bold whitespace-nowrap"
                     >
                       {col}
                     </th>
@@ -98,10 +98,10 @@ const { data, error } = await supabase
                 {data.map((row, i) => (
                   <tr
                     key={i}
-                    className="border-b border-gray-50 transition-colors hover:bg-gray-50"
+                    className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
                   >
                     {columns.map((col) => (
-                      <td key={col} className="px-4 py-3 font-mono whitespace-nowrap text-gray-700">
+                      <td key={col} className="text-slate px-4 py-3 font-mono whitespace-nowrap">
                         {String((row as Record<string, unknown>)[col])}
                       </td>
                     ))}
@@ -115,9 +115,9 @@ const { data, error } = await supabase
 
       {/* 원본 JSON */}
       {data && data.length > 0 && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <p className="mb-2 text-sm font-semibold text-gray-700">원본 응답 (JSON)</p>
-          <pre className="overflow-x-auto rounded-lg border border-gray-100 bg-gray-50 p-3 font-mono text-xs text-gray-700">
+        <div className="border-hairline-soft rounded-lg border bg-white p-5">
+          <p className="text-slate mb-2 text-sm font-semibold">원본 응답 (JSON)</p>
+          <pre className="border-hairline-soft bg-surface-soft text-slate overflow-x-auto rounded-lg border p-3 font-mono text-xs">
             {JSON.stringify(data, null, 2)}
           </pre>
         </div>

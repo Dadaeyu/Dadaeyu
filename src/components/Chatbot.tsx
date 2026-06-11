@@ -94,10 +94,7 @@ export default function Chatbot({ onClose }: Props) {
     const text = message.trim();
     if (!text || isLoading) return;
 
-    setMessages((current) => [
-      ...current,
-      { id: nextId(), role: "user", text }
-    ]);
+    setMessages((current) => [...current, { id: nextId(), role: "user", text }]);
     setInput("");
     setIsLoading(true);
 
@@ -113,10 +110,7 @@ export default function Chatbot({ onClose }: Props) {
       }
 
       const data = (await response.json()) as ChatResponse;
-      setMessages((current) => [
-        ...current,
-        { id: nextId(), role: "assistant", content: data }
-      ]);
+      setMessages((current) => [...current, { id: nextId(), role: "assistant", content: data }]);
     } catch {
       setMessages((current) => [
         ...current,
@@ -124,8 +118,7 @@ export default function Chatbot({ onClose }: Props) {
           id: nextId(),
           role: "assistant",
           content: {
-            message:
-              "응답을 만드는 중 문제가 생겼어요. 잠시 뒤 다시 질문해 주세요.",
+            message: "응답을 만드는 중 문제가 생겼어요. 잠시 뒤 다시 질문해 주세요.",
             chips: ["한밭수목원 휠체어 가능해?", "성심당 갈 수 있어?"],
             confidence: "low",
             sources: []
@@ -144,50 +137,50 @@ export default function Chatbot({ onClose }: Props) {
 
   return (
     <section
-      className="fixed inset-x-3 bottom-20 top-20 z-[70] grid grid-rows-[96px_minmax(0,1fr)_78px] overflow-hidden rounded-3xl border border-white/60 bg-white shadow-2xl shadow-navy-900/25 sm:inset-x-auto sm:right-5 sm:bottom-24 sm:top-auto sm:h-[min(720px,calc(100dvh-7.5rem))] sm:min-h-[560px] sm:w-[min(calc(100vw-2.5rem),460px)]"
+      className="fixed inset-x-3 top-20 bottom-20 z-[70] grid grid-rows-[96px_minmax(0,1fr)_78px] overflow-hidden rounded-lg border border-white/60 bg-white shadow-2xl sm:inset-x-auto sm:top-auto sm:right-5 sm:bottom-24 sm:h-[min(720px,calc(100dvh-7.5rem))] sm:min-h-[560px] sm:w-[min(calc(100vw-2.5rem),460px)]"
       aria-label="다유 챗봇"
     >
-      <header className="relative overflow-hidden bg-gradient-to-br from-navy-700 via-navy-600 to-brand-600 px-5 py-4 text-white">
-        <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-brand-300/25 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-12 left-8 h-28 w-28 rounded-full bg-gold-300/20 blur-2xl" />
+      <header className="from-hero-sky-from to-hero-sky-to text-ink relative overflow-hidden bg-gradient-to-b px-5 py-4">
+        <div className="pointer-events-none absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/40 blur-2xl" />
+        <div className="bg-mint-soft/30 pointer-events-none absolute -bottom-12 left-8 h-28 w-28 rounded-full blur-2xl" />
         <div className="relative flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/15 ring-1 ring-white/20">
-            <Bot className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold text-white/90 ring-1 ring-white/15">
-              <Sparkles className="h-3 w-3" aria-hidden="true" />
-              다유
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-white/60 ring-1 ring-white/70">
+              <Bot className="h-5 w-5" aria-hidden="true" />
             </span>
-            <strong className="block text-base font-extrabold leading-tight">
-              무장애 여행 상담
-            </strong>
-            <span className="mt-1 flex items-center gap-1.5 text-xs text-white/80">
-              <span className="h-1.5 w-1.5 rounded-full bg-brand-200" />
-              대전 접근성 정보 확인 중
-            </span>
+            <div className="min-w-0">
+              <span className="text-ink mb-1 inline-flex items-center gap-1 rounded-full bg-white/60 px-2 py-0.5 text-[11px] font-bold ring-1 ring-white/70">
+                <Sparkles className="h-3 w-3" aria-hidden="true" />
+                다유
+              </span>
+              <strong className="block text-base leading-tight font-extrabold">
+                무장애 여행 상담
+              </strong>
+              <span className="text-slate mt-1 flex items-center gap-1.5 text-xs">
+                <span className="bg-mint-deep h-1.5 w-1.5 rounded-full" />
+                대전 접근성 정보 확인 중
+              </span>
+            </div>
           </div>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white/85 transition-colors hover:bg-white/15 hover:text-white"
-          aria-label="채팅창 닫기"
-        >
-          <X className="h-5 w-5" aria-hidden="true" />
-        </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate hover:text-ink grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors hover:bg-white/60"
+            aria-label="채팅창 닫기"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
       </header>
 
       <div
-        className="min-h-0 space-y-4 overflow-y-auto bg-gradient-to-b from-brand-50/50 via-gray-50 to-white px-4 py-4 sm:px-5"
+        className="from-brand-50/50 via-surface-soft min-h-0 space-y-4 overflow-y-auto bg-gradient-to-b to-white px-4 py-4 sm:px-5"
         aria-live="polite"
       >
         {messages.map((message) =>
           message.role === "user" ? (
             <div key={message.id} className="flex justify-end">
-              <div className="max-w-[82%] rounded-2xl rounded-br-md bg-gradient-to-br from-navy-600 to-brand-600 px-4 py-3 text-sm font-medium leading-relaxed text-white shadow-md shadow-brand-900/10">
+              <div className="bg-mint-soft/40 text-ink max-w-[82%] rounded-lg rounded-br-md px-4 py-3 text-sm leading-relaxed font-medium">
                 {message.text}
               </div>
             </div>
@@ -202,13 +195,13 @@ export default function Chatbot({ onClose }: Props) {
         )}
         {isLoading ? (
           <div className="flex items-end gap-2.5">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-navy-600 to-brand-500 text-xs font-bold text-white shadow-sm shadow-brand-500/30">
+            <div className="bg-mint-soft text-ink grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xs font-bold">
               다
             </div>
-            <div className="flex gap-1 rounded-2xl rounded-bl-md border border-gray-200 bg-white px-4 py-3 shadow-sm">
-              <span className="h-2 w-2 animate-bounce rounded-full bg-brand-500 [animation-delay:-0.2s]" />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-brand-500 [animation-delay:-0.1s]" />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-brand-500" />
+            <div className="border-hairline flex gap-1 rounded-lg rounded-bl-md border bg-white px-4 py-3">
+              <span className="bg-brand-500 h-2 w-2 animate-bounce rounded-full [animation-delay:-0.2s]" />
+              <span className="bg-brand-500 h-2 w-2 animate-bounce rounded-full [animation-delay:-0.1s]" />
+              <span className="bg-brand-500 h-2 w-2 animate-bounce rounded-full" />
             </div>
           </div>
         ) : null}
@@ -216,7 +209,7 @@ export default function Chatbot({ onClose }: Props) {
       </div>
 
       <form
-        className="flex items-center gap-2.5 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-5"
+        className="border-hairline flex items-center gap-2.5 border-t bg-white/95 px-4 py-3 backdrop-blur sm:px-5"
         onSubmit={handleSubmit}
       >
         <input
@@ -226,12 +219,12 @@ export default function Chatbot({ onClose }: Props) {
           placeholder="메시지를 입력하세요..."
           aria-label="질문 입력"
           disabled={isLoading}
-          className="min-w-0 flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition-colors placeholder:text-gray-400 focus:border-brand-400 focus:bg-white disabled:opacity-60"
+          className="border-hairline bg-surface-soft placeholder:text-stone focus:border-brand-400 min-w-0 flex-1 rounded-lg border px-4 py-3 text-sm transition-colors outline-none focus:bg-white disabled:opacity-60"
         />
         <button
           type="submit"
           disabled={isLoading || !input.trim()}
-          className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-navy-600 to-brand-500 text-white shadow-lg shadow-brand-500/20 transition-all hover:scale-105 disabled:scale-100 disabled:opacity-40"
+          className="bg-mint text-ink hover:bg-mint-deep grid h-12 w-12 shrink-0 place-items-center rounded-full shadow-lg transition-all hover:scale-105 disabled:scale-100 disabled:opacity-40"
           aria-label="전송"
         >
           <Send className="h-5 w-5" aria-hidden="true" />
@@ -252,26 +245,22 @@ function AssistantMessage({
 }) {
   return (
     <div className="flex items-end gap-2.5">
-      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-navy-600 to-brand-500 text-xs font-bold text-white shadow-sm shadow-brand-500/30">
+      <div className="bg-mint-soft text-ink grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xs font-bold">
         다
       </div>
-      <div className="max-w-[calc(100%-3rem)] rounded-3xl rounded-bl-md border border-gray-200 bg-white px-4 py-3 text-sm leading-relaxed text-gray-800 shadow-sm shadow-gray-200/50">
+      <div className="border-hairline text-ink max-w-[calc(100%-3rem)] rounded-lg rounded-bl-md border bg-white px-4 py-3 text-sm leading-relaxed">
         <span
           className={`mb-2 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${confidenceTone[response.confidence]}`}
         >
           <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
           {confidenceLabels[response.confidence]}
         </span>
-        <p className="whitespace-pre-line text-[15px] leading-7 text-gray-800">
-          {response.message}
-        </p>
+        <p className="text-ink text-[15px] leading-7 whitespace-pre-line">{response.message}</p>
 
         {response.debug ? (
-          <div className="mt-4 rounded-2xl border border-navy-100 bg-navy-50/70 p-3 text-xs text-gray-800">
-            <strong className="block text-xs font-extrabold text-navy-700">
-              질문분류 JSON
-            </strong>
-            <pre className="mt-3 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white p-3 font-mono text-[11px] leading-relaxed text-gray-800 ring-1 ring-navy-100">
+          <div className="border-navy-100 bg-navy-50/70 text-ink mt-4 rounded-lg border p-3 text-xs">
+            <strong className="text-navy-700 block text-xs font-extrabold">질문분류 JSON</strong>
+            <pre className="text-ink ring-navy-100 mt-3 max-h-60 overflow-auto rounded-lg bg-white p-3 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap ring-1">
               {JSON.stringify(response.debug.analysis, null, 2)}
             </pre>
             {response.debug.searchTerms.length > 0 ? (
@@ -279,7 +268,7 @@ function AssistantMessage({
                 {response.debug.searchTerms.map((term) => (
                   <span
                     key={term}
-                    className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-navy-600 ring-1 ring-navy-100"
+                    className="text-navy-600 ring-navy-100 rounded-full bg-white px-2 py-1 text-[11px] font-semibold ring-1"
                   >
                     {term}
                   </span>
@@ -290,17 +279,17 @@ function AssistantMessage({
         ) : null}
 
         {response.card ? (
-          <div className="mt-4 rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-4">
-            <strong className="flex items-center gap-2 text-sm text-brand-800">
+          <div className="border-brand-100 from-brand-50 mt-4 rounded-lg border bg-gradient-to-br to-white p-4">
+            <strong className="text-brand-800 flex items-center gap-2 text-sm">
               <MapPin className="h-4 w-4" aria-hidden="true" />
               {response.card.title}
             </strong>
-            <ul className="mt-3 list-disc space-y-1.5 pl-4 text-gray-700">
+            <ul className="text-slate mt-3 list-disc space-y-1.5 pl-4">
               {response.card.rows.map((row) => (
                 <li key={row}>{row}</li>
               ))}
             </ul>
-            <span className="mt-3 block border-t border-dashed border-brand-200 pt-3 text-xs leading-relaxed text-gray-500">
+            <span className="border-brand-200 text-steel mt-3 block border-t border-dashed pt-3 text-xs leading-relaxed">
               {response.card.source}
             </span>
           </div>
@@ -311,7 +300,7 @@ function AssistantMessage({
             {response.sources.map((source) => (
               <span
                 key={source}
-                className="rounded-full bg-navy-50 px-2.5 py-1 text-[11px] font-semibold text-navy-600"
+                className="bg-navy-50 text-navy-600 rounded-full px-2.5 py-1 text-[11px] font-semibold"
               >
                 {source}
               </span>
@@ -327,7 +316,7 @@ function AssistantMessage({
                 key={chip}
                 disabled={disabled}
                 onClick={() => void onChipClick(chip)}
-                className="rounded-full border border-brand-200 bg-white px-3 py-2 text-xs font-bold text-brand-700 transition-colors hover:border-brand-400 hover:bg-brand-50 disabled:opacity-50"
+                className="border-brand-200 text-brand-700 hover:border-brand-400 hover:bg-brand-50 rounded-full border bg-white px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50"
               >
                 {chip}
               </button>
