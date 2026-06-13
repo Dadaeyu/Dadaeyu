@@ -49,29 +49,31 @@ const INITIAL_COURSES: MyCourse[] = [
         places: [
           { id: 1, name: "성심당", time: "09:00", duration: "1시간" },
           { id: 2, name: "한밭수목원", time: "11:00", duration: "2시간" },
-          { id: 3, name: "유성온천", time: "16:00", duration: "2시간" }
-        ]
+          { id: 3, name: "유성온천", time: "16:00", duration: "2시간" },
+        ],
       },
       {
         day: 2,
-        places: [{ id: 4, name: "대청호 오백리길", time: "10:00", duration: "3시간" }]
-      }
-    ]
-  }
+        places: [
+          { id: 4, name: "대청호 오백리길", time: "10:00", duration: "3시간" },
+        ],
+      },
+    ],
+  },
 ];
 
 export function CourseProvider({ children }: { children: ReactNode }) {
   const [myCourses, setMyCourses] = useState<MyCourse[]>(INITIAL_COURSES);
 
   const addPlaceToCourse = (courseId: number, placeName: string) => {
-    setMyCourses((prev) =>
-      prev.map((course) => {
+    setMyCourses(prev =>
+      prev.map(course => {
         if (course.id !== courseId) return course;
         const newPlace: CoursePlace = {
           id: Date.now(),
           name: placeName,
           time: "09:00",
-          duration: "1시간"
+          duration: "1시간",
         };
         const updatedDays =
           course.days.length > 0
@@ -85,11 +87,11 @@ export function CourseProvider({ children }: { children: ReactNode }) {
   };
 
   const updateCourse = (updated: MyCourse) => {
-    setMyCourses((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    setMyCourses(prev => prev.map(c => (c.id === updated.id ? updated : c)));
   };
 
   const addCourse = (course: MyCourse) => {
-    setMyCourses((prev) => [...prev, course]);
+    setMyCourses(prev => [...prev, course]);
   };
 
   return (
