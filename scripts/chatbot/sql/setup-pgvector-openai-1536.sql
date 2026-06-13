@@ -1,4 +1,6 @@
-create extension if not exists vector;
+create extension if not exists vector with schema extensions;
+
+set search_path = chatbot, extensions, public;
 
 alter table chatbot.chunks
   add column if not exists embedding vector(1536);
@@ -22,7 +24,7 @@ returns table (
 )
 language sql
 stable
-set search_path = chatbot, public
+set search_path = chatbot, extensions, public
 as $$
   select
     c.id,
