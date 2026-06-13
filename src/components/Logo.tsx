@@ -9,12 +9,12 @@ export default function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <Link
       href="/"
-      className="group flex shrink-0 items-center gap-2.5"
+      className="flex items-center gap-2.5 shrink-0 group"
       aria-label="다대유 - 대전 무장애 여행 홈"
     >
       {/* Mark */}
-      <span className="from-navy-600 to-brand-500 shadow-brand-500/30 relative inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br shadow-sm transition-transform duration-200 group-hover:scale-105">
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+      <span className="relative inline-flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-navy-600 to-brand-500 shadow-sm shadow-brand-500/30 transition-transform duration-200 group-hover:scale-105">
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" aria-hidden="true">
           {/* pin */}
           <path
             d="M12 21.5s-6.6-5.6-6.6-10.8A6.6 6.6 0 0 1 12 4.1a6.6 6.6 0 0 1 6.6 6.6c0 5.2-6.6 10.8-6.6 10.8Z"
@@ -35,7 +35,7 @@ export default function Logo({ compact = false }: { compact?: boolean }) {
             <span className="text-navy-600">다대</span>
             <span className="text-brand-500">유</span>
           </span>
-          <span className="mt-1 text-[10px] font-semibold tracking-tight text-gray-400">
+          <span className="mt-1 text-[10px] font-semibold text-gray-400 tracking-tight">
             대전 무장애 여행
           </span>
         </span>

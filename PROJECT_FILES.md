@@ -1,6 +1,132 @@
 # 프로젝트 파일 정리
 
-대전 무장애 여행 가이드 서비스 **다대유**. Next.js App Router 기반 프로젝트입니다.
+`create-next-app`으로 생성된 Next.js 16 + React 19 + TypeScript 보일러플레이트입니다.
+
+---
+
+## 루트 파일
+
+### `package.json`
+프로젝트 메타데이터와 의존성 정의 파일.
+
+| 항목 | 내용 |
+|------|------|
+| 프로젝트명 | Dadaeyu |
+| 버전 | 0.1.0 |
+| Next.js | 16.2.7 |
+| React | 19.2.4 |
+| TypeScript | ^5 |
+
+스크립트:
+- `dev` — 개발 서버 실행 (`next dev`)
+- `build` — 프로덕션 빌드 (`next build`)
+- `start` — 프로덕션 서버 실행 (`next start`)
+- `lint` — ESLint 실행
+
+---
+
+### `next.config.ts`
+Next.js 설정 파일. 현재는 빈 설정 객체만 있으며, 이미지 도메인 허용, 리다이렉트, 환경변수 노출 등 필요 시 여기에 추가합니다.
+
+```ts
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+```
+
+---
+
+### `tsconfig.json`
+TypeScript 컴파일러 설정 파일.
+
+주요 옵션:
+- `target: ES2017` — 출력 JS 버전
+- `strict: true` — 엄격 타입 검사 활성화
+- `moduleResolution: bundler` — Next.js/Vite 번들러 환경에 최적화된 모듈 해석
+- `paths: { "@/*": ["./src/*"] }` — `@/` 경로 alias (예: `@/components/Button`)
+- `incremental: true` — 빌드 캐시로 컴파일 속도 향상
+
+---
+
+### `eslint.config.mjs`
+ESLint 설정 파일 (Flat Config 형식, ESLint 9+).
+
+- `eslint-config-next/core-web-vitals` — Next.js 권장 규칙 + Core Web Vitals 관련 규칙
+- `eslint-config-next/typescript` — TypeScript 전용 규칙
+- `.next/`, `out/`, `build/` 폴더는 린트 대상에서 제외
+
+---
+
+### `.gitignore`
+Git이 추적하지 않을 파일/폴더 목록.
+
+주요 제외 항목:
+- `node_modules/` — 패키지 디렉토리
+- `.next/`, `out/`, `build/` — 빌드 산출물
+- `.env*` — 환경변수 파일 (보안)
+- `*.tsbuildinfo`, `next-env.d.ts` — TypeScript 자동 생성 파일
+- `.DS_Store` — macOS 메타데이터
+- `*.pem` — 인증서 파일
+
+---
+
+### `README.md`
+`create-next-app`이 자동 생성한 기본 안내 문서. 개발 서버 실행 방법과 Vercel 배포 링크 포함. 프로젝트가 구체화되면 내용을 교체하는 것이 일반적입니다.
+
+---
+
+## `src/app/` 파일
+
+### `layout.tsx`
+앱 전체를 감싸는 루트 레이아웃. Next.js App Router에서 모든 페이지에 공통 적용됩니다.
+import 없이도 Next.js 내부에서 빌드 타임에 직접 가져다 씁니다. 파일 이름이 곧 설정입니다.
+
+- `<html>`, `<body>` 태그를 여기서 정의
+- Geist Sans / Geist Mono 폰트를 CSS 변수로 주입
+- `metadata` export로 기본 `<title>`, `<meta description>` 설정
+
+---
+
+### `page.tsx`
+`/` 경로의 홈 페이지 컴포넌트. 현재는 기본 랜딩 UI(Next.js 로고, Deploy/Documentation 버튼)만 있는 초기 상태입니다. 실제 서비스 개발은 이 파일을 교체하는 것부터 시작합니다.
+
+---
+
+### `page.module.css`
+`page.tsx` 전용 CSS Modules 스타일. 클래스명이 빌드 시 해시로 변환되어 전역 충돌을 방지합니다.
+
+주요 스타일:
+- `.page` — 전체 페이지 레이아웃 (flexbox, 배경색 CSS 변수 정의)
+- `.main` — 콘텐츠 영역 (max-width: 800px, padding 설정)
+- `.intro` — 제목/설명 영역
+- `.ctas` — 버튼 그룹
+- 다크모드 및 모바일(max-width: 600px) 반응형 포함
+
+---
+
+### `globals.css`
+앱 전역 CSS. `layout.tsx`에서 import되어 모든 페이지에 적용됩니다.
+
+- CSS 변수로 `--background`, `--foreground` 색상 정의
+- `box-sizing: border-box`, `margin/padding: 0` 리셋
+- 다크모드(`prefers-color-scheme: dark`) 자동 대응
+- `body`에 `display: flex`로 전체 높이 레이아웃 구성
+
+---
+
+## `public/` 파일
+
+정적 파일 폴더. `/` 경로로 직접 접근 가능합니다 (예: `/next.svg`).
+
+| 파일 | 용도 |
+|------|------|
+| `next.svg` | Next.js 로고 (홈 페이지에서 사용) |
+| `vercel.svg` | Vercel 로고 (홈 페이지 버튼에서 사용) |
+| `globe.svg` | 지구본 아이콘 |
+| `file.svg` | 파일 아이콘 |
+| `window.svg` | 창 아이콘 |
+
+`favicon.ico`는 `src/app/` 안에 위치하며, Next.js App Router가 자동으로 `<link rel="icon">`으로 연결합니다.
 
 ---
 
@@ -9,131 +135,17 @@
 ```
 Dadaeyu/
 ├── src/
-│   ├── app/                      # 라우팅 레이어 (URL 경로 정의)
-│   │   ├── layout.tsx            # 루트 레이아웃
-│   │   ├── page.tsx              # / (홈)
-│   │   ├── globals.css           # 전역 스타일
-│   │   ├── not-found.tsx         # 404 페이지
-│   │   ├── map/page.tsx          # /map (지도)
-│   │   ├── course/               # /course, /course/[id]
-│   │   ├── community/            # /community, /community/[id]
-│   │   ├── mypage/page.tsx       # /mypage
-│   │   └── admin/                # /admin, /admin/[section]
-│   ├── components/               # 공유 컴포넌트
-│   │   ├── screens/              # 페이지 단위 UI (실제 화면 구현)
-│   │   │   ├── Home.tsx
-│   │   │   ├── MapScreen.tsx
-│   │   │   ├── Course.tsx
-│   │   │   ├── Community.tsx
-│   │   │   ├── MyPage.tsx
-│   │   │   ├── Admin.tsx
-│   │   │   └── NotFound.tsx
-│   │   ├── ui/                   # 재사용 가능한 원자 컴포넌트
-│   │   │   ├── button.tsx
-│   │   │   ├── carousel.tsx
-│   │   │   └── utils.ts
-│   │   ├── RootShell.tsx         # 앱 전체 레이아웃 셸
-│   │   ├── Navigation.tsx        # 상단/하단 내비게이션
-│   │   ├── AccessibilitySettings.tsx
-│   │   ├── Chatbot.tsx
-│   │   ├── Logo.tsx
-│   │   ├── MapCanvas.tsx
-│   │   ├── PlaceDetailPanel.tsx
-│   │   └── PlaceFilters.tsx
-│   ├── context/                  # 공유 데이터 전역 상태 관리
-│   │   └── CourseContext.tsx
-│   └── data/
-│       └── placesData.ts         # 장소 정적 데이터 (임시)
-├── public/                       # 정적 파일
-├── package.json
-├── next.config.ts
-├── tsconfig.json
-└── eslint.config.mjs
+│   └── app/
+│       ├── layout.tsx        # 루트 레이아웃 (공통 HTML 구조, 폰트)
+│       ├── page.tsx          # 홈 페이지 (/)
+│       ├── page.module.css   # 홈 페이지 스타일
+│       ├── globals.css       # 전역 스타일
+│       └── favicon.ico       # 파비콘
+├── public/                   # 정적 파일 (SVG 아이콘 등)
+├── package.json              # 의존성 및 스크립트
+├── next.config.ts            # Next.js 설정
+├── tsconfig.json             # TypeScript 설정
+├── eslint.config.mjs         # ESLint 설정
+├── .gitignore                # Git 제외 목록
+└── README.md                 # 기본 안내 문서
 ```
-
----
-
-## `src/app/` — 라우팅 레이어
-
-> **역할 분리 원칙**: `app/` 파일들은 URL 경로 등록과 서버 전용 설정(메타데이터, 레이아웃)만 담당합니다. 실제 UI 코드는 `components/screens/`에 있으며, `app/page.tsx`는 해당 Screen 컴포넌트를 단순 re-export하는 형태입니다.
-
-### `layout.tsx`
-
-앱 전체 루트 레이아웃. 모든 페이지에 공통 적용됩니다.
-
-- `<html lang="ko">`, `<body>` 정의
-- `RootShell`로 children을 감싸 공통 헤더·내비게이션·CourseProvider 주입
-- `metadata` export로 `<title>다대유</title>`, `<meta description>` 설정
-- Geist 폰트 제거, globals.css import
-
-### `not-found.tsx`
-
-App Router의 404 처리 파일. `notFound()`를 호출하거나 잘못된 경로 접근 시 이 컴포넌트가 렌더링됩니다.
-
-### `globals.css`
-
-앱 전역 CSS. Tailwind CSS base/components/utilities를 import하고 커스텀 CSS 변수(브랜드 색상 등)를 정의합니다.
-
----
-
-## `src/components/` — 공유 컴포넌트
-
-### `src/components/screens/` — 페이지 단위 UI
-
-> `app/` 파일이 "어디로 가냐(라우팅)"를 담당한다면, 이 폴더는 "뭘 보여주냐(UI)"를 담당합니다.
->
-> **이 분리를 유지하는 이유:**
->
-> - `app/page.tsx`는 서버 컴포넌트로 유지하면서 필요한 부분만 `"use client"`로 위임할 수 있음
-> - Screen 컴포넌트는 순수 React 컴포넌트라 Next.js 런타임 없이 단독 테스트 가능
-> - 동일 UI를 Modal, Drawer, 다른 경로에서 재사용할 때 `app/` 파일 복사 없이 import 하나로 해결
-
-### `src/components/ui/` — 원자 UI 컴포넌트
-
-#### `utils.ts`
-
-UI 컴포넌트에서 공통으로 사용하는 유틸리티 함수 (예: `cn()` className 병합).
-
-### `RootShell.tsx`
-
-`"use client"` 컴포넌트. 앱 전체의 시각적 셸을 구성합니다.
-
-- sticky 헤더 (Logo + DesktopNav + 접근성 설정 버튼)
-- 메인 콘텐츠 영역 (`max-w-7xl` 컨테이너)
-- 모바일 하단 내비게이션
-- `CourseProvider`로 children을 감싸 코스 컨텍스트 공급
-
----
-
-## `src/context/ - 전역 데이터 상태 관리
-
-여러 페이지에서 공유해야 하는 데이터의 전역 상태를 관리하는 React Context
-
----
-
-## 루트 설정 파일
-
-### `package.json`
-
-| 항목       | 내용    |
-| ---------- | ------- |
-| 프로젝트명 | Dadaeyu |
-| Next.js    | 16.x    |
-| React      | 19.x    |
-| TypeScript | ^5      |
-
-스크립트: `dev` · `build` · `start` · `lint`
-
-### `next.config.ts`
-
-Next.js 설정. 현재 빈 설정 객체. 이미지 도메인, 리다이렉트, 환경변수 노출 등 필요 시 추가합니다.
-
-### `tsconfig.json`
-
-- `strict: true` — 엄격 타입 검사
-- `moduleResolution: bundler` — Next.js 번들러 환경 최적화
-- `paths: { "@/*": ["./src/*"] }` — `@/` 경로 alias
-
-### `eslint.config.mjs`
-
-Flat Config(ESLint 9+). `eslint-config-next/core-web-vitals` + TypeScript 규칙 적용.
