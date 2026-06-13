@@ -2,19 +2,12 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  Search,
-  Filter,
-  X,
-  ChevronDown,
-  Star,
-  Heart,
-  SlidersHorizontal,
-  Navigation
-} from "lucide-react";
+import { Search, Filter, X, ChevronDown, SlidersHorizontal, Navigation, Star } from "lucide-react";
 import { THEMES, Filters, DEFAULT_FILTERS, FilterFields } from "@/components/PlaceFilters";
 import { PLACES, type Place } from "@/data/placesData";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 
 const MY_LOCATION = { cx: 130, cy: 510 };
 
@@ -103,7 +96,7 @@ export default function Map() {
       style={{ height: "calc(100vh - 64px)" }}
     >
       {/* ── LEFT SIDEBAR (desktop only) ── */}
-      <aside className="relative hidden w-72 shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white md:flex">
+      <aside className="border-hairline relative hidden w-72 shrink-0 flex-col overflow-hidden border-r bg-white md:flex">
         {detailPlace ? (
           /* 상세 패널 */
           <PlaceDetailPanel
@@ -115,9 +108,9 @@ export default function Map() {
           /* 목록 패널 */
           <>
             {/* Search */}
-            <div className="shrink-0 border-b border-gray-100 p-3">
+            <div className="border-hairline-soft shrink-0 border-b p-3">
               <div className="relative">
-                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="장소 검색"
@@ -127,7 +120,7 @@ export default function Map() {
                   className={`focus:ring-brand-500 w-full rounded-lg border py-2 pl-9 text-sm focus:ring-2 focus:outline-none ${
                     hotFilter
                       ? "border-orange-300 bg-orange-50 pr-8 font-medium text-orange-700"
-                      : "border-gray-200 pr-4"
+                      : "border-hairline pr-4"
                   }`}
                 />
                 {hotFilter && (
@@ -143,23 +136,23 @@ export default function Map() {
             </div>
 
             {/* Filter toggle */}
-            <div className="shrink-0 border-b border-gray-100">
+            <div className="border-hairline-soft shrink-0 border-b">
               <div className="flex items-center">
                 <button
                   onClick={() => setShowFilters(!showFilters)}
-                  className="flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                  className="text-slate hover:bg-surface-soft flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <SlidersHorizontal className="h-4 w-4" />
                     <span>필터</span>
                     {activeFilterCount > 0 && (
-                      <span className="bg-brand-600 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white">
+                      <span className="bg-brand-500 text-ink flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold">
                         {activeFilterCount}
                       </span>
                     )}
                   </div>
                   <ChevronDown
-                    className={`h-4 w-4 text-gray-400 transition-transform ${showFilters ? "rotate-180" : ""}`}
+                    className={`text-stone h-4 w-4 transition-transform ${showFilters ? "rotate-180" : ""}`}
                   />
                 </button>
                 {activeFilterCount > 0 && (
@@ -168,7 +161,7 @@ export default function Map() {
                       setFilters(DEFAULT_FILTERS);
                       setHotFilter(false);
                     }}
-                    className="shrink-0 border-l border-gray-100 px-3 py-2.5 text-xs text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                    className="border-hairline-soft shrink-0 border-l px-3 py-2.5 text-xs text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
                   >
                     초기화
                   </button>
@@ -176,7 +169,7 @@ export default function Map() {
               </div>
               {showFilters && (
                 <div
-                  className="overflow-y-auto border-t border-gray-100 px-3 pt-2 pb-3"
+                  className="border-hairline-soft overflow-y-auto border-t px-3 pt-2 pb-3"
                   style={{ maxHeight: "45vh" }}
                 >
                   <FilterFields filters={filters} set={set} toggleList={toggleList} compact />
@@ -186,8 +179,8 @@ export default function Map() {
 
             {/* Place list */}
             <div className="flex-1 overflow-y-auto">
-              <div className="sticky top-0 border-b border-gray-100 bg-gray-50 px-4 py-2">
-                <span className="text-xs font-semibold tracking-wide text-gray-400 uppercase">
+              <div className="border-hairline-soft bg-surface-soft sticky top-0 border-b px-4 py-2">
+                <span className="text-stone text-xs font-semibold tracking-wide uppercase">
                   장소 {visiblePlaces.length}개
                 </span>
               </div>
@@ -195,27 +188,24 @@ export default function Map() {
                 <button
                   key={place.id}
                   onClick={() => setDetailId(place.id)}
-                  className="group w-full border-b border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50"
+                  className="group border-hairline-soft hover:bg-surface-soft w-full border-b px-4 py-3 text-left transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="group-hover:text-brand-700 truncate text-sm font-medium text-gray-800 transition-colors">
+                      <p className="group-hover:text-brand-700 text-ink truncate text-sm font-medium transition-colors">
                         {place.name}
                       </p>
                       <div className="mt-1 flex items-center gap-2">
-                        <span
-                          className="rounded-full px-1.5 py-0.5 text-xs font-medium"
-                          style={{ background: place.bg, color: place.color }}
-                        >
+                        <Badge tone="custom" style={{ background: place.bg, color: place.color }}>
                           {place.category}
-                        </span>
-                        <div className="flex items-center gap-0.5 text-xs text-gray-500">
-                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                        </Badge>
+                        <div className="text-steel flex items-center gap-0.5 text-xs">
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-500" />
                           {place.rating}
                         </div>
                       </div>
                     </div>
-                    <span className="mt-0.5 shrink-0 text-xs text-gray-400">{place.distance}</span>
+                    <span className="text-stone mt-0.5 shrink-0 text-xs">{place.distance}</span>
                   </div>
                 </button>
               ))}
@@ -228,32 +218,35 @@ export default function Map() {
       <div className="relative flex-1 overflow-hidden">
         {/* Mobile search + filter bar */}
         <div className="absolute top-3 right-3 left-3 z-20 flex gap-2 md:hidden">
-          <div className="relative flex-1 rounded-xl border border-gray-100 bg-white shadow-lg">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <div className="relative flex-1 rounded-lg shadow-lg">
+            <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
             <input
               type="text"
               placeholder="장소 검색"
-              className="w-full rounded-xl bg-transparent py-2.5 pr-4 pl-9 text-sm focus:outline-none"
+              className="focus:ring-brand-500 border-hairline w-full rounded-lg border bg-white py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
             />
           </div>
-          <button
+          <Button
+            variant="accent"
+            size="icon"
             onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className={`relative rounded-xl px-3 shadow-lg transition-colors ${showMobileFilters ? "bg-brand-700 text-white" : "bg-brand-600 hover:bg-brand-700 text-white"}`}
+            className="relative shadow-lg"
+            aria-label="필터"
           >
             <Filter className="h-4 w-4" />
             {activeFilterCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+              <span className="bg-error absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white">
                 {activeFilterCount}
               </span>
             )}
-          </button>
+          </Button>
         </div>
 
         {/* Mobile filter panel */}
         {showMobileFilters && (
-          <div className="absolute top-16 right-3 left-3 z-30 max-h-[60vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl md:hidden">
+          <div className="border-hairline-soft absolute top-16 right-3 left-3 z-30 max-h-[60vh] overflow-y-auto rounded-lg border bg-white p-4 shadow-2xl md:hidden">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-bold text-gray-800">필터</p>
+              <p className="text-ink text-sm font-bold">필터</p>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
@@ -266,7 +259,7 @@ export default function Map() {
                 </button>
                 <button
                   onClick={() => setShowMobileFilters(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-stone hover:text-steel"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -488,31 +481,41 @@ export default function Map() {
 
         {/* Zoom controls */}
         <div className="absolute top-3 right-3 z-10 flex flex-col gap-1">
-          <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-lg leading-none font-bold text-gray-700 shadow-md hover:bg-gray-50">
+          <Button
+            variant="outline"
+            size="icon"
+            className="text-slate h-8 w-8 bg-white text-lg leading-none font-bold"
+            aria-label="확대"
+          >
             +
-          </button>
-          <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-lg leading-none font-bold text-gray-700 shadow-md hover:bg-gray-50">
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="text-slate h-8 w-8 bg-white text-lg leading-none font-bold"
+            aria-label="축소"
+          >
             −
-          </button>
+          </Button>
         </div>
 
         {/* 경로 안내 정보 바 */}
         {navTarget && !detailPlace && (
-          <div className="absolute bottom-4 left-1/2 z-20 flex min-w-[260px] -translate-x-1/2 items-center gap-4 rounded-2xl border border-blue-100 bg-white px-4 py-3 shadow-xl">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50">
-              <Navigation className="h-5 w-5 text-blue-500" />
+          <div className="border-navy-100 absolute bottom-4 left-1/2 z-20 flex min-w-[260px] -translate-x-1/2 items-center gap-4 rounded-lg border bg-white px-4 py-3 shadow-xl">
+            <div className="bg-navy-50 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+              <Navigation className="text-navy-500 h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-medium text-gray-400">목적지</p>
-              <p className="truncate text-sm font-bold text-gray-800">{navTarget.name}</p>
+              <p className="text-stone text-[10px] font-medium">목적지</p>
+              <p className="text-ink truncate text-sm font-bold">{navTarget.name}</p>
             </div>
             <div className="shrink-0 text-center">
-              <p className="text-[10px] font-medium text-gray-400">거리</p>
-              <p className="text-sm font-semibold text-blue-600">{navTarget.distance}</p>
+              <p className="text-stone text-[10px] font-medium">거리</p>
+              <p className="text-navy-600 text-sm font-semibold">{navTarget.distance}</p>
             </div>
             <button
               onClick={() => setNavTarget(null)}
-              className="shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              className="text-stone hover:bg-surface hover:text-steel shrink-0 rounded-full p-1.5 transition-colors"
               aria-label="경로 안내 종료"
             >
               <X className="h-4 w-4" />

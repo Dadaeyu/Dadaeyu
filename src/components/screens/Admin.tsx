@@ -23,13 +23,15 @@ import {
   TrendingUp,
   ShieldCheck,
   Star,
-  ToggleLeft,
-  ToggleRight,
   AlertCircle,
   FileText,
   ChevronRight
 } from "lucide-react";
 import { PLACES } from "@/data/placesData";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { genId } from "@/utils/id";
 
 // ── 사이드바 메뉴 ─────────────────────────────────────────
 const SECTIONS = [
@@ -265,14 +267,9 @@ const INIT_EVENTS: AdminEvent[] = [
 ];
 
 // ── 공통 스타일 헬퍼 ─────────────────────────────────────
-const reportBadge = (s: ReportStatus) =>
-  s === "대기"
-    ? "bg-red-100 text-red-700"
-    : s === "검토중"
-      ? "bg-yellow-100 text-yellow-700"
-      : s === "반영됨"
-        ? "bg-brand-100 text-brand-700"
-        : "bg-gray-100 text-gray-500";
+// 제보 상태 → Badge tone
+const reportTone = (s: ReportStatus): "error" | "warn" | "brand" | "neutral" =>
+  s === "대기" ? "error" : s === "검토중" ? "warn" : s === "반영됨" ? "brand" : "neutral";
 
 // ── 레이아웃 ─────────────────────────────────────────────
 export default function Admin() {
@@ -286,8 +283,8 @@ export default function Admin() {
       style={{ minHeight: "calc(100vh - 64px)" }}
     >
       {/* 데스크톱 사이드바 */}
-      <aside className="hidden w-56 shrink-0 flex-col gap-0.5 border-r border-gray-100 bg-white px-3 py-6 md:flex">
-        <p className="mb-2 px-3 text-[10px] font-bold tracking-widest text-gray-400 uppercase">
+      <aside className="border-hairline-soft hidden w-56 shrink-0 flex-col gap-0.5 border-r bg-white px-3 py-6 md:flex">
+        <p className="text-stone mb-2 px-3 text-[10px] font-bold tracking-widest uppercase">
           관리자
         </p>
         {SECTIONS.map(({ key, label, icon: Icon }) => {
@@ -296,15 +293,13 @@ export default function Admin() {
             <button
               key={key}
               onClick={() => router.push(key === "dashboard" ? "/admin" : `/admin/${key}`)}
-              className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
+              className={`flex items-center gap-2.5 rounded-full px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
                 active
-                  ? "bg-indigo-50 text-indigo-700"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                  ? "bg-navy-50 text-navy-700"
+                  : "text-steel hover:bg-surface-soft hover:text-ink"
               }`}
             >
-              <Icon
-                className={`h-4 w-4 shrink-0 ${active ? "text-indigo-600" : "text-gray-400"}`}
-              />
+              <Icon className={`h-4 w-4 shrink-0 ${active ? "text-navy-600" : "text-stone"}`} />
               {label}
               {key === "reports" && (
                 <span className="ml-auto rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
@@ -319,15 +314,15 @@ export default function Admin() {
       {/* 메인 영역 */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* 모바일 탭바 */}
-        <div className="flex gap-1 overflow-x-auto border-b border-gray-100 bg-white px-4 py-2 md:hidden">
+        <div className="border-hairline-soft flex gap-1 overflow-x-auto border-b bg-white px-4 py-2 md:hidden">
           {SECTIONS.map(({ key, label, icon: Icon }) => {
             const active = section === key;
             return (
               <button
                 key={key}
                 onClick={() => router.push(key === "dashboard" ? "/admin" : `/admin/${key}`)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
-                  active ? "bg-indigo-50 text-indigo-700" : "text-gray-500 hover:bg-gray-50"
+                className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                  active ? "bg-navy-50 text-navy-700" : "text-steel hover:bg-surface-soft"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -359,8 +354,8 @@ function Dashboard() {
       value: "1,234",
       delta: "+12",
       icon: Users,
-      bg: "bg-blue-50",
-      color: "text-blue-600"
+      bg: "bg-navy-50",
+      color: "text-navy-600"
     },
     {
       label: "등록 장소",
@@ -375,8 +370,8 @@ function Dashboard() {
       value: "4",
       delta: "+1",
       icon: Route,
-      bg: "bg-purple-50",
-      color: "text-purple-600"
+      bg: "bg-navy-50",
+      color: "text-navy-600"
     },
     {
       label: "제보 대기",
@@ -397,31 +392,35 @@ function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-800">관리자 대시보드</h1>
-        <p className="mt-0.5 text-sm text-gray-400">2026년 6월 3일 기준</p>
+        <h1 className="text-ink text-xl font-bold">관리자 대시보드</h1>
+        <p className="text-stone mt-0.5 text-sm">2026년 6월 3일 기준</p>
       </div>
 
       {/* 요약 통계 */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map(({ label, value, delta, icon: Icon, bg, color }) => (
-          <div key={label} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-            <div className={`h-10 w-10 ${bg} mb-3 flex items-center justify-center rounded-xl`}>
+          <Card key={label} padding="none" className="border-hairline-soft p-5">
+            <div className={`h-10 w-10 ${bg} mb-3 flex items-center justify-center rounded-lg`}>
               <Icon className={`h-5 w-5 ${color}`} />
             </div>
-            <p className="text-2xl font-bold text-gray-800">{value}</p>
+            <p className="text-ink text-2xl font-bold">{value}</p>
             <div className="mt-1 flex items-center justify-between">
-              <p className="text-sm text-gray-500">{label}</p>
-              <span className="text-brand-600 text-xs font-semibold">{delta}</span>
+              <p className="text-steel text-sm">{label}</p>
+              <span
+                className={`text-xs font-semibold ${delta === "처리필요" ? "text-error" : "text-annotate"}`}
+              >
+                {delta}
+              </span>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* 주간 신규 가입 */}
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="border-hairline-soft rounded-lg border bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-bold text-gray-800">주간 신규 가입</h3>
+            <h3 className="text-ink font-bold">주간 신규 가입</h3>
             <TrendingUp className="text-brand-500 h-4 w-4" />
           </div>
           <div className="flex h-28 items-end gap-2">
@@ -431,41 +430,39 @@ function Dashboard() {
                   className="bg-brand-400 w-full rounded-t-md transition-all"
                   style={{ height: `${(v / max) * 100}%` }}
                 />
-                <span className="text-[10px] text-gray-400">{days[i]}</span>
+                <span className="text-stone text-[10px]">{days[i]}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* 처리 필요 제보 */}
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="border-hairline-soft rounded-lg border bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-bold text-gray-800">처리 필요 제보</h3>
+            <h3 className="text-ink font-bold">처리 필요 제보</h3>
             <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
               {recentReports.length}건
             </span>
           </div>
           <div className="space-y-3">
             {recentReports.length === 0 && (
-              <p className="py-4 text-center text-sm text-gray-400">처리할 제보가 없어요 🎉</p>
+              <p className="text-stone py-4 text-center text-sm">처리할 제보가 없어요 🎉</p>
             )}
             {recentReports.map((r) => (
               <div
                 key={r.id}
-                className="flex items-start justify-between gap-3 rounded-xl bg-gray-50 p-3"
+                className="bg-surface-soft flex items-start justify-between gap-3 rounded-lg p-3"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800">{r.target}</p>
-                  <p className="truncate text-xs text-gray-500">{r.content}</p>
-                  <p className="mt-0.5 text-[10px] text-gray-400">
+                  <p className="text-ink text-sm font-semibold">{r.target}</p>
+                  <p className="text-steel truncate text-xs">{r.content}</p>
+                  <p className="text-stone mt-0.5 text-[10px]">
                     {r.user} · {r.date}
                   </p>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${reportBadge(r.status)}`}
-                >
+                <Badge tone={reportTone(r.status)} className="shrink-0 font-semibold">
                   {r.status}
-                </span>
+                </Badge>
               </div>
             ))}
           </div>
@@ -473,11 +470,11 @@ function Dashboard() {
       </div>
 
       {/* 접근 권한 안내 */}
-      <div className="flex items-start gap-4 rounded-2xl border border-indigo-100 bg-indigo-50 p-5">
-        <ShieldCheck className="mt-0.5 h-8 w-8 shrink-0 text-indigo-500" />
+      <div className="border-navy-100 bg-navy-50 flex items-start gap-4 rounded-lg border p-5">
+        <ShieldCheck className="text-navy-500 mt-0.5 h-8 w-8 shrink-0" />
         <div>
-          <p className="mb-1 font-bold text-indigo-800">관리자 접근 권한</p>
-          <p className="text-sm text-indigo-600">
+          <p className="text-navy-800 mb-1 font-bold">관리자 접근 권한</p>
+          <p className="text-navy-600 text-sm">
             현재 계정은 슈퍼 관리자 권한을 보유하고 있습니다. 좌측 메뉴에서
             유저·장소·코스·제보·이벤트를 관리하세요. 모든 변경사항은 즉시 서비스에 반영됩니다.
           </p>
@@ -507,29 +504,29 @@ function UserManagement() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">유저 관리</h1>
-        <span className="text-sm text-gray-400">총 {users.length}명</span>
+        <h1 className="text-ink text-xl font-bold">유저 관리</h1>
+        <span className="text-stone text-sm">총 {users.length}명</span>
       </div>
 
       <div className="relative">
-        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="닉네임 또는 이메일 검색"
-          className="w-full rounded-xl border border-gray-200 py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+          className="border-hairline focus:ring-navy-400 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
         />
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
+              <tr className="border-hairline-soft bg-surface-soft border-b">
                 {["닉네임", "이메일", "가입일", "등급", "권한", "상태", "액션"].map((h) => (
                   <th
                     key={h}
-                    className="px-4 py-3 text-left text-xs font-bold whitespace-nowrap text-gray-500"
+                    className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
                   >
                     {h}
                   </th>
@@ -540,13 +537,13 @@ function UserManagement() {
               {filtered.map((u) => (
                 <tr
                   key={u.id}
-                  className="border-b border-gray-50 transition-colors hover:bg-gray-50"
+                  className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
                 >
-                  <td className="px-4 py-3 font-semibold text-gray-800">{u.nickname}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-500">{u.email}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-400">{u.joined}</td>
+                  <td className="text-ink px-4 py-3 font-semibold">{u.nickname}</td>
+                  <td className="text-steel px-4 py-3 whitespace-nowrap">{u.email}</td>
+                  <td className="text-stone px-4 py-3 whitespace-nowrap">{u.joined}</td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">
+                    <span className="bg-surface text-steel rounded-full px-2 py-0.5 text-xs font-semibold">
                       {u.level}
                     </span>
                   </td>
@@ -555,8 +552,8 @@ function UserManagement() {
                       onClick={() => toggleRole(u.id)}
                       className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
                         u.role === "관리자"
-                          ? "bg-indigo-100 text-indigo-700"
-                          : "bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                          ? "bg-navy-100 text-navy-700"
+                          : "bg-surface text-steel hover:bg-navy-50 hover:text-navy-600"
                       }`}
                     >
                       {u.role}
@@ -575,9 +572,14 @@ function UserManagement() {
                     </button>
                   </td>
                   <td className="px-4 py-3">
-                    <button className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600">
+                    <Button
+                      variant="ghost"
+                      size="iconSm"
+                      aria-label="수정"
+                      className="text-stone hover:bg-surface hover:text-steel rounded-full"
+                    >
                       <Edit className="h-3.5 w-3.5" />
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -585,7 +587,7 @@ function UserManagement() {
           </table>
         </div>
         {filtered.length === 0 && (
-          <p className="py-8 text-center text-sm text-gray-400">검색 결과가 없어요</p>
+          <p className="text-stone py-8 text-center text-sm">검색 결과가 없어요</p>
         )}
       </div>
     </div>
@@ -604,32 +606,32 @@ function PlaceManagement() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">장소 관리</h1>
-        <button className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700">
+        <h1 className="text-ink text-xl font-bold">장소 관리</h1>
+        <button className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors">
           <Plus className="h-4 w-4" />
           장소 등록
         </button>
       </div>
 
       <div className="relative">
-        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="장소명 또는 카테고리 검색"
-          className="w-full rounded-xl border border-gray-200 py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+          className="border-hairline focus:ring-navy-400 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
         />
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
+              <tr className="border-hairline-soft bg-surface-soft border-b">
                 {["장소명", "카테고리", "평점", "접근성 태그", "액션"].map((h) => (
                   <th
                     key={h}
-                    className="px-4 py-3 text-left text-xs font-bold whitespace-nowrap text-gray-500"
+                    className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
                   >
                     {h}
                   </th>
@@ -640,12 +642,12 @@ function PlaceManagement() {
               {filtered.map((p) => (
                 <tr
                   key={p.id}
-                  className="border-b border-gray-50 transition-colors hover:bg-gray-50"
+                  className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{p.emoji}</span>
-                      <span className="font-semibold text-gray-800">{p.name}</span>
+                      <span className="text-ink font-semibold">{p.name}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -658,8 +660,8 @@ function PlaceManagement() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="font-medium text-gray-700">{p.rating}</span>
+                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-500" />
+                      <span className="text-slate font-medium">{p.rating}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -676,15 +678,23 @@ function PlaceManagement() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <button className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600">
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        aria-label="수정"
+                        className="text-stone hover:bg-navy-50 hover:text-navy-600 rounded-full"
+                      >
                         <Edit className="h-3.5 w-3.5" />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
                         onClick={() => deletePlace(p.id)}
-                        className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                        aria-label="삭제"
+                        className="text-stone rounded-full hover:bg-red-50 hover:text-red-500"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -693,7 +703,7 @@ function PlaceManagement() {
           </table>
         </div>
         {filtered.length === 0 && (
-          <p className="py-8 text-center text-sm text-gray-400">검색 결과가 없어요</p>
+          <p className="text-stone py-8 text-center text-sm">검색 결과가 없어요</p>
         )}
       </div>
     </div>
@@ -718,8 +728,8 @@ function CourseManagement() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">코스 관리</h1>
-        <button className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700">
+        <h1 className="text-ink text-xl font-bold">코스 관리</h1>
+        <button className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors">
           <Plus className="h-4 w-4" />
           코스 등록
         </button>
@@ -730,7 +740,7 @@ function CourseManagement() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${filter === f ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${filter === f ? "bg-navy-600 text-white" : "bg-surface text-steel hover:bg-hairline"}`}
           >
             {f}
           </button>
@@ -741,23 +751,23 @@ function CourseManagement() {
         {filtered.map((c) => (
           <div
             key={c.id}
-            className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white px-5 py-4 shadow-sm"
+            className="border-hairline-soft flex items-center gap-4 rounded-lg border bg-white px-5 py-4"
           >
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-center gap-2">
-                <h3 className="truncate font-semibold text-gray-800">{c.title}</h3>
+                <h3 className="text-ink truncate font-semibold">{c.title}</h3>
                 {c.best && (
-                  <span className="shrink-0 rounded-full bg-yellow-100 px-1.5 py-0.5 text-[10px] font-bold text-yellow-700">
+                  <span className="bg-gold-100 text-gold-700 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
                     BEST
                   </span>
                 )}
                 {!c.visible && (
-                  <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
+                  <span className="bg-surface text-steel shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
                     비공개
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-400">
+              <p className="text-stone text-xs">
                 {c.author} · {c.duration} · {c.places}곳 · {c.date}
               </p>
             </div>
@@ -767,41 +777,52 @@ function CourseManagement() {
               <button
                 onClick={() => toggleBest(c.id)}
                 title="베스트 코스 설정"
-                className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                className={`flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
                   c.best
-                    ? "border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
-                    : "border-gray-200 bg-white text-gray-500 hover:border-yellow-300 hover:text-yellow-600"
+                    ? "border-gold-300 bg-gold-50 text-gold-700 hover:bg-gold-100"
+                    : "border-hairline text-steel hover:border-gold-300 hover:text-gold-600 bg-white"
                 }`}
               >
                 <Star
-                  className={`h-3.5 w-3.5 ${c.best ? "fill-yellow-400 text-yellow-400" : ""}`}
+                  className={`h-3.5 w-3.5 ${c.best ? "fill-yellow-400 text-yellow-500" : ""}`}
                 />
                 베스트
               </button>
 
               {/* 노출 토글 */}
-              <button
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={() => toggleVisible(c.id)}
                 title="공개 여부 변경"
-                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                aria-label="공개 여부 변경"
+                className="text-stone hover:bg-surface hover:text-steel rounded-full"
               >
                 {c.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-              </button>
+              </Button>
 
-              <button className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600">
+              <Button
+                variant="ghost"
+                size="iconSm"
+                aria-label="수정"
+                className="text-stone hover:bg-navy-50 hover:text-navy-600 rounded-full"
+              >
                 <Edit className="h-4 w-4" />
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={() => deleteCourse(c.id)}
-                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                aria-label="삭제"
+                className="text-stone rounded-full hover:bg-red-50 hover:text-red-500"
               >
                 <Trash2 className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
         ))}
         {filtered.length === 0 && (
-          <p className="py-10 text-center text-sm text-gray-400">해당하는 코스가 없어요</p>
+          <p className="text-stone py-10 text-center text-sm">해당하는 코스가 없어요</p>
         )}
       </div>
     </div>
@@ -829,8 +850,8 @@ function ReportManagement() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">제보 내용 확인</h1>
-        <span className="text-sm text-gray-400">총 {reports.length}건</span>
+        <h1 className="text-ink text-xl font-bold">제보 내용 확인</h1>
+        <span className="text-stone text-sm">총 {reports.length}건</span>
       </div>
 
       {/* 상태 필터 */}
@@ -840,14 +861,12 @@ function ReportManagement() {
             key={f}
             onClick={() => setFilter(f)}
             className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-              filter === f
-                ? "bg-indigo-600 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              filter === f ? "bg-navy-600 text-white" : "bg-surface text-steel hover:bg-hairline"
             }`}
           >
             {f}
             <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${filter === f ? "bg-white/20 text-white" : "bg-white text-gray-500"}`}
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${filter === f ? "bg-white/20 text-white" : "text-steel bg-white"}`}
             >
               {counts[f]}
             </span>
@@ -857,19 +876,17 @@ function ReportManagement() {
 
       <div className="space-y-3">
         {filtered.map((r) => (
-          <div key={r.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+          <Card key={r.id} className="border-hairline-soft">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <div className="mb-1.5 flex items-center gap-2">
-                  <span className="font-bold text-gray-800">{r.target}</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${reportBadge(r.status)}`}
-                  >
+                  <span className="text-ink font-bold">{r.target}</span>
+                  <Badge tone={reportTone(r.status)} className="text-[10px] font-bold">
                     {r.status}
-                  </span>
+                  </Badge>
                 </div>
-                <p className="mb-1 text-sm text-gray-600">{r.content}</p>
-                <p className="text-xs text-gray-400">
+                <p className="text-steel mb-1 text-sm">{r.content}</p>
+                <p className="text-stone text-xs">
                   {r.user} · {r.date}
                 </p>
               </div>
@@ -880,21 +897,21 @@ function ReportManagement() {
                   {r.status === "대기" && (
                     <button
                       onClick={() => setStatus(r.id, "검토중")}
-                      className="rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-1.5 text-xs font-semibold text-yellow-700 transition-colors hover:bg-yellow-100"
+                      className="border-gold-200 bg-gold-50 text-gold-700 hover:bg-gold-100 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
                     >
                       검토 시작
                     </button>
                   )}
                   <button
                     onClick={() => setStatus(r.id, "반영됨")}
-                    className="bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100 flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors"
+                    className="bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100 flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
                   >
                     <Check className="h-3 w-3" />
                     반영
                   </button>
                   <button
                     onClick={() => setStatus(r.id, "반려")}
-                    className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                    className="border-hairline bg-surface-soft text-steel flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
                   >
                     <X className="h-3 w-3" />
                     반려
@@ -904,16 +921,16 @@ function ReportManagement() {
               {(r.status === "반영됨" || r.status === "반려") && (
                 <button
                   onClick={() => setStatus(r.id, "대기")}
-                  className="shrink-0 text-xs text-gray-400 underline underline-offset-2 hover:text-gray-600"
+                  className="text-stone hover:text-steel shrink-0 text-xs underline underline-offset-2"
                 >
                   되돌리기
                 </button>
               )}
             </div>
-          </div>
+          </Card>
         ))}
         {filtered.length === 0 && (
-          <p className="py-10 text-center text-sm text-gray-400">해당하는 제보가 없어요</p>
+          <p className="text-stone py-10 text-center text-sm">해당하는 제보가 없어요</p>
         )}
       </div>
     </div>
@@ -939,7 +956,7 @@ function EventManagement() {
     setEvents((prev) => [
       ...prev,
       {
-        id: `e${Date.now()}`,
+        id: `e${genId()}`,
         title: newTitle,
         period: newPeriod,
         badge: newBadge,
@@ -957,10 +974,10 @@ function EventManagement() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">이벤트 관리</h1>
+        <h1 className="text-ink text-xl font-bold">이벤트 관리</h1>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors"
         >
           <Plus className="h-4 w-4" />
           이벤트 등록
@@ -969,42 +986,42 @@ function EventManagement() {
 
       {/* 등록 폼 */}
       {showForm && (
-        <div className="space-y-3 rounded-2xl border border-indigo-100 bg-indigo-50 p-5">
-          <p className="text-sm font-bold text-indigo-800">새 이벤트 등록</p>
+        <div className="border-navy-100 bg-navy-50 space-y-3 rounded-lg border p-5">
+          <p className="text-navy-800 text-sm font-bold">새 이벤트 등록</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-500">이모지</label>
+              <label className="text-steel mb-1 block text-xs font-semibold">이모지</label>
               <input
                 value={newEmoji}
                 onChange={(e) => setNewEmoji(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                className="border-hairline focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
                 placeholder="🎉"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-500">배지</label>
+              <label className="text-steel mb-1 block text-xs font-semibold">배지</label>
               <input
                 value={newBadge}
                 onChange={(e) => setNewBadge(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                className="border-hairline focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
                 placeholder="진행중"
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-semibold text-gray-500">이벤트명</label>
+              <label className="text-steel mb-1 block text-xs font-semibold">이벤트명</label>
               <input
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                className="border-hairline focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
                 placeholder="이벤트 제목"
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-semibold text-gray-500">기간</label>
+              <label className="text-steel mb-1 block text-xs font-semibold">기간</label>
               <input
                 value={newPeriod}
                 onChange={(e) => setNewPeriod(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                className="border-hairline focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
                 placeholder="2026.07.01 – 07.31"
               />
             </div>
@@ -1012,14 +1029,14 @@ function EventManagement() {
           <div className="flex justify-end gap-2">
             <button
               onClick={() => setShowForm(false)}
-              className="rounded-xl border border-gray-200 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50"
+              className="border-hairline text-steel hover:bg-surface-soft rounded-full border px-4 py-2 text-sm"
             >
               취소
             </button>
             <button
               onClick={handleAdd}
               disabled={!newTitle.trim()}
-              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
+              className="bg-navy-600 hover:bg-navy-700 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-40"
             >
               등록
             </button>
@@ -1031,41 +1048,52 @@ function EventManagement() {
         {events.map((ev) => (
           <div
             key={ev.id}
-            className={`flex items-center gap-4 rounded-2xl border bg-white px-5 py-4 shadow-sm transition-opacity ${ev.visible ? "border-gray-100" : "border-dashed border-gray-200 opacity-60"}`}
+            className={`flex items-center gap-4 rounded-lg border bg-white px-5 py-4 transition-opacity ${ev.visible ? "border-hairline-soft" : "border-hairline border-dashed opacity-60"}`}
           >
             <span className="shrink-0 text-2xl">{ev.emoji}</span>
             <div className="min-w-0 flex-1">
               <div className="mb-0.5 flex items-center gap-2">
-                <h3 className="truncate font-semibold text-gray-800">{ev.title}</h3>
+                <h3 className="text-ink truncate font-semibold">{ev.title}</h3>
                 <span className="bg-brand-100 text-brand-700 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold">
                   {ev.badge}
                 </span>
                 {!ev.visible && (
-                  <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-500">
+                  <span className="bg-surface text-steel shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold">
                     숨김
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-400">{ev.period}</p>
+              <p className="text-stone text-xs">{ev.period}</p>
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
-              <button
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={() => toggleVisible(ev.id)}
                 title={ev.visible ? "노출 중지" : "노출 시작"}
-                className={`rounded-lg p-1.5 transition-colors ${ev.visible ? "text-gray-400 hover:bg-gray-100 hover:text-gray-600" : "hover:bg-brand-50 hover:text-brand-500 text-gray-300"}`}
+                aria-label="노출 여부 변경"
+                className={`rounded-full ${ev.visible ? "text-stone hover:bg-surface hover:text-steel" : "hover:bg-brand-50 hover:text-brand-500 text-stone"}`}
               >
                 {ev.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-              </button>
-              <button className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600">
+              </Button>
+              <Button
+                variant="ghost"
+                size="iconSm"
+                aria-label="수정"
+                className="text-stone hover:bg-navy-50 hover:text-navy-600 rounded-full"
+              >
                 <Edit className="h-4 w-4" />
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={() => deleteEvent(ev.id)}
-                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                aria-label="삭제"
+                className="text-stone rounded-full hover:bg-red-50 hover:text-red-500"
               >
                 <Trash2 className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
         ))}
@@ -1196,12 +1224,12 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
       {/* 헤더 */}
       <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-gray-800">Supabase 연동 테스트</h1>
+          <h1 className="text-ink text-xl font-bold">Supabase 연동 테스트</h1>
           <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-700">
             개발용
           </span>
         </div>
-        <p className="mt-1 text-sm text-gray-400">
+        <p className="text-stone mt-1 text-sm">
           클라이언트 / 서버 컴포넌트에서 Supabase 데이터를 가져오는 패턴을 확인하세요. 팀원들이 기능
           개발 시 참고할 수 있습니다.
         </p>
@@ -1209,19 +1237,19 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
 
       {/* 환경 변수 안내 */}
       {!isEnvSet && (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5">
-          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-5">
+          <AlertCircle className="text-gold-500 mt-0.5 h-5 w-5 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-amber-800">환경 변수가 설정되지 않았습니다</p>
-            <p className="mt-1 text-sm text-amber-700">
+            <p className="text-gold-800 font-semibold">환경 변수가 설정되지 않았습니다</p>
+            <p className="text-gold-700 mt-1 text-sm">
               프로젝트 루트에{" "}
-              <code className="rounded bg-amber-100 px-1 font-mono text-amber-900">.env</code>를
+              <code className="bg-gold-100 text-gold-900 rounded px-1 font-mono">.env</code>를
               생성하고 아래 값을 추가한 뒤 개발 서버를 재시작하세요.
             </p>
-            <pre className="mt-3 overflow-x-auto rounded-xl bg-amber-900/10 p-4 font-mono text-xs text-amber-900">
+            <pre className="bg-gold-900/10 text-gold-900 mt-3 overflow-x-auto rounded-lg p-4 font-mono text-xs">
               {`NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co\nNEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJ...`}
             </pre>
-            <p className="mt-2 text-xs text-amber-600">
+            <p className="text-gold-600 mt-2 text-xs">
               Supabase 대시보드 → Project Settings → API 에서 복사하세요.
             </p>
           </div>
@@ -1231,39 +1259,39 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
       {/* 클라이언트 / 서버 비교 패널 */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* ── 클라이언트 컴포넌트 ── */}
-        <div className="flex flex-col gap-4 rounded-2xl border border-blue-100 bg-white p-6 shadow-sm">
+        <div className="border-navy-100 flex flex-col gap-4 rounded-lg border bg-white p-6">
           <div className="flex items-center gap-2">
-            <span className="rounded-lg bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
+            <span className="bg-navy-100 text-navy-700 rounded-lg px-2.5 py-1 text-xs font-bold">
               &apos;use client&apos;
             </span>
-            <h2 className="font-bold text-gray-800">클라이언트 컴포넌트</h2>
+            <h2 className="text-ink font-bold">클라이언트 컴포넌트</h2>
           </div>
-          <p className="text-sm text-gray-500">
+          <p className="text-steel text-sm">
             브라우저에서 직접 Supabase를 호출합니다. 버튼 클릭 후 조회, 실시간 구독 등 인터랙티브한
             UI에 적합합니다.
           </p>
 
           {/* 코드 스니펫 */}
-          <div className="overflow-hidden rounded-xl bg-gray-950">
-            <div className="flex items-center gap-1.5 border-b border-gray-800 px-4 py-2.5">
+          <div className="bg-surface-code overflow-hidden rounded-lg">
+            <div className="border-charcoal flex items-center gap-1.5 border-b px-4 py-2.5">
               <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-              <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
-              <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-              <span className="ml-2 font-mono text-xs text-gray-500">component.tsx</span>
+              <span className="bg-gold-500 h-2.5 w-2.5 rounded-full" />
+              <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
+              <span className="text-steel ml-2 font-mono text-xs">component.tsx</span>
             </div>
-            <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-gray-200">
+            <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
               {clientSnippet}
             </pre>
           </div>
 
           {/* 라이브 테스트 */}
-          <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+          <div className="border-hairline-soft bg-surface-soft rounded-lg border p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-700">라이브 실행</p>
+              <p className="text-slate text-sm font-semibold">라이브 실행</p>
               <button
                 onClick={runClientFetch}
                 disabled={clientStatus === "loading"}
-                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
                 {clientStatus === "loading" ? "조회 중..." : "실행"}
@@ -1271,19 +1299,19 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
             </div>
 
             {clientStatus === "idle" && (
-              <p className="py-4 text-center text-sm text-gray-400">
+              <p className="text-stone py-4 text-center text-sm">
                 실행 버튼을 눌러 클라이언트에서 직접 데이터를 조회해보세요.
               </p>
             )}
             {clientStatus === "loading" && (
-              <p className="animate-pulse py-4 text-center text-sm text-gray-500">
+              <p className="text-steel animate-pulse py-4 text-center text-sm">
                 Supabase에 연결 중...
               </p>
             )}
             {clientStatus === "success" && (
               <div>
-                <p className="mb-2 text-xs font-semibold text-green-600">✓ 응답 성공</p>
-                <pre className="overflow-x-auto rounded-lg border border-gray-200 bg-white p-3 font-mono text-xs text-gray-700">
+                <p className="text-brand-600 mb-2 text-xs font-semibold">✓ 응답 성공</p>
+                <pre className="border-hairline text-slate overflow-x-auto rounded-lg border bg-white p-3 font-mono text-xs">
                   {JSON.stringify(clientResult, null, 2)}
                 </pre>
               </div>
@@ -1300,36 +1328,36 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
         </div>
 
         {/* ── 서버 컴포넌트 ── */}
-        <div className="flex flex-col gap-4 rounded-2xl border border-green-100 bg-white p-6 shadow-sm">
+        <div className="border-brand-100 flex flex-col gap-4 rounded-lg border bg-white p-6">
           <div className="flex items-center gap-2">
-            <span className="rounded-lg bg-green-100 px-2.5 py-1 text-xs font-bold text-green-700">
+            <span className="bg-brand-100 text-brand-700 rounded-lg px-2.5 py-1 text-xs font-bold">
               Server
             </span>
-            <h2 className="font-bold text-gray-800">서버 컴포넌트</h2>
+            <h2 className="text-ink font-bold">서버 컴포넌트</h2>
           </div>
-          <p className="text-sm text-gray-500">
+          <p className="text-steel text-sm">
             서버에서 데이터를 미리 가져와 HTML에 포함합니다. 페이지 최초 로드 데이터, SEO가 중요한
             곳에 적합합니다.
           </p>
 
           {/* 코드 스니펫 */}
-          <div className="overflow-hidden rounded-xl bg-gray-950">
-            <div className="flex items-center gap-1.5 border-b border-gray-800 px-4 py-2.5">
+          <div className="bg-surface-code overflow-hidden rounded-lg">
+            <div className="border-charcoal flex items-center gap-1.5 border-b px-4 py-2.5">
               <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-              <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
-              <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-              <span className="ml-2 font-mono text-xs text-gray-500">
+              <span className="bg-gold-500 h-2.5 w-2.5 rounded-full" />
+              <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
+              <span className="text-steel ml-2 font-mono text-xs">
                 app/example/page.tsx (Server Component)
               </span>
             </div>
-            <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-gray-200">
+            <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
               {serverSnippet}
             </pre>
           </div>
 
           {/* 사용 위치 안내 */}
-          <div className="rounded-xl bg-gray-50 p-4">
-            <p className="mb-3 text-xs font-bold tracking-wide text-gray-500 uppercase">
+          <div className="bg-surface-soft rounded-lg p-4">
+            <p className="text-steel mb-3 text-xs font-bold tracking-wide uppercase">
               서버 컴포넌트를 쓸 수 있는 곳
             </p>
             <div className="space-y-2.5">
@@ -1348,10 +1376,10 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
                 }
               ].map(({ file, desc }) => (
                 <div key={file} className="flex items-start gap-2">
-                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                  <FileText className="text-brand-500 mt-0.5 h-4 w-4 shrink-0" />
                   <div>
-                    <code className="font-mono text-xs text-gray-800">{file}</code>
-                    <p className="mt-0.5 text-xs text-gray-500">{desc}</p>
+                    <code className="text-ink font-mono text-xs">{file}</code>
+                    <p className="text-steel mt-0.5 text-xs">{desc}</p>
                   </div>
                 </div>
               ))}
@@ -1359,48 +1387,47 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
           </div>
 
           {/* 주의사항 */}
-          <div className="flex items-start gap-2.5 rounded-xl border border-yellow-100 bg-yellow-50 p-4">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" />
-            <p className="text-xs text-yellow-800">
+          <div className="border-gold-100 bg-gold-50 flex items-start gap-2.5 rounded-lg border p-4">
+            <AlertCircle className="text-gold-600 mt-0.5 h-4 w-4 shrink-0" />
+            <p className="text-gold-800 text-xs">
               서버 컴포넌트는 이 어드민 화면처럼{" "}
-              <code className="rounded bg-yellow-100 px-1 font-mono">&apos;use client&apos;</code>가
+              <code className="bg-gold-100 rounded px-1 font-mono">&apos;use client&apos;</code>가
               붙은 곳에서는 직접 실행할 수 없습니다.
               <br />
               <span className="mt-1 block">
-                신규 페이지의 <code className="rounded bg-yellow-100 px-1 font-mono">page.tsx</code>
+                신규 페이지의 <code className="bg-gold-100 rounded px-1 font-mono">page.tsx</code>
                 에서 사용하세요.
               </span>
             </p>
           </div>
 
           {/* 실제 서버 조회 페이지 링크 */}
-          <Link
-            href="/supabase"
-            className="flex items-center justify-center gap-1.5 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-700"
-          >
-            <ExternalLink className="h-4 w-4" />
-            서버 컴포넌트 실제 조회 결과 보기
-          </Link>
+          <Button asChild variant="accent">
+            <Link href="/supabase">
+              <ExternalLink className="h-4 w-4" />
+              서버 컴포넌트 실제 조회 결과 보기
+            </Link>
+          </Button>
         </div>
       </div>
 
       {/* RLS 안내 */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="border-hairline-soft rounded-lg border bg-white p-6">
         <div className="mb-2 flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-indigo-500" />
-          <h2 className="font-bold text-gray-800">RLS (Row Level Security) — 꼭 알아두기</h2>
+          <ShieldCheck className="text-navy-500 h-5 w-5" />
+          <h2 className="text-ink font-bold">RLS (Row Level Security) — 꼭 알아두기</h2>
         </div>
-        <p className="text-sm text-gray-500">
+        <p className="text-steel text-sm">
           Supabase 테이블은 기본적으로 RLS가 켜져 있습니다. 정책(Policy)이 하나도 없으면, 권한이
           없는 행은{" "}
-          <strong className="font-semibold text-gray-700">에러 없이 그냥 안 보입니다.</strong> 조회
-          코드가 맞는데도 <code className="rounded bg-gray-100 px-1 font-mono">[]</code> 빈 배열만
+          <strong className="text-slate font-semibold">에러 없이 그냥 안 보입니다.</strong> 조회
+          코드가 맞는데도 <code className="bg-surface rounded px-1 font-mono">[]</code> 빈 배열만
           돌아온다면 거의 RLS 때문입니다.
         </p>
 
         {/* 증상 비교 */}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-red-100 bg-red-50 p-4">
+          <div className="rounded-lg border border-red-100 bg-red-50 p-4">
             <p className="mb-1 text-xs font-bold text-red-700">정책이 없을 때</p>
             <p className="text-sm text-red-600">
               <code className="font-mono">error</code>는 <code className="font-mono">null</code>,{" "}
@@ -1408,26 +1435,26 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
               데이터가 있는데 0개로 조회됨
             </p>
           </div>
-          <div className="rounded-xl border border-green-100 bg-green-50 p-4">
-            <p className="mb-1 text-xs font-bold text-green-700">SELECT 정책 추가 후</p>
-            <p className="text-sm text-green-600">
+          <div className="border-brand-100 bg-brand-50 rounded-lg border p-4">
+            <p className="text-brand-700 mb-1 text-xs font-bold">SELECT 정책 추가 후</p>
+            <p className="text-brand-600 text-sm">
               <code className="font-mono">data</code>에 행이 정상적으로 채워짐
             </p>
           </div>
         </div>
 
         {/* 해결 SQL */}
-        <p className="mt-5 mb-2 text-xs font-bold tracking-wide text-gray-500 uppercase">
+        <p className="text-steel mt-5 mb-2 text-xs font-bold tracking-wide uppercase">
           해결 — SQL Editor에서 읽기 정책 추가
         </p>
-        <div className="overflow-hidden rounded-xl bg-gray-950">
-          <div className="flex items-center gap-1.5 border-b border-gray-800 px-4 py-2.5">
+        <div className="bg-surface-code overflow-hidden rounded-lg">
+          <div className="border-charcoal flex items-center gap-1.5 border-b px-4 py-2.5">
             <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-            <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
-            <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-            <span className="ml-2 font-mono text-xs text-gray-500">SQL Editor</span>
+            <span className="bg-gold-500 h-2.5 w-2.5 rounded-full" />
+            <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
+            <span className="text-steel ml-2 font-mono text-xs">SQL Editor</span>
           </div>
-          <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-gray-200">
+          <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
             {`-- 모두에게 SELECT(읽기) 허용
 create policy "Enable read access for all"
 on public.tb_test
@@ -1438,8 +1465,8 @@ using (true);`}
         </div>
 
         {/* 대시보드 폼으로 추가하는 법 */}
-        <div className="mt-4 rounded-xl bg-gray-50 p-4">
-          <p className="mb-3 text-xs font-bold tracking-wide text-gray-500 uppercase">
+        <div className="bg-surface-soft mt-4 rounded-lg p-4">
+          <p className="text-steel mb-3 text-xs font-bold tracking-wide uppercase">
             또는 대시보드 폼으로 (Authentication → Policies → New Policy)
           </p>
           <div className="space-y-2">
@@ -1449,9 +1476,9 @@ using (true);`}
               ["using 표현식", "true"]
             ].map(([label, value]) => (
               <div key={label} className="flex items-center gap-2 text-sm">
-                <Check className="h-4 w-4 shrink-0 text-green-500" />
-                <span className="text-gray-500">{label}:</span>
-                <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs text-gray-800">
+                <Check className="text-brand-500 h-4 w-4 shrink-0" />
+                <span className="text-steel">{label}:</span>
+                <code className="text-ink rounded bg-white px-1.5 py-0.5 font-mono text-xs">
                   {value}
                 </code>
               </div>
@@ -1460,22 +1487,22 @@ using (true);`}
         </div>
 
         {/* 주의 */}
-        <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-100 bg-amber-50 p-4">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <div className="text-xs text-amber-800">
+        <div className="border-gold-100 bg-gold-50 mt-4 flex items-start gap-2.5 rounded-lg border p-4">
+          <AlertCircle className="text-gold-600 mt-0.5 h-4 w-4 shrink-0" />
+          <div className="text-gold-800 text-xs">
             <p>
               <strong className="font-semibold">
                 비로그인 조회는 내부적으로 anon 역할로 실행됩니다.
               </strong>{" "}
-              그래서 <code className="rounded bg-amber-100 px-1 font-mono">to public</code>{" "}
+              그래서 <code className="bg-gold-100 rounded px-1 font-mono">to public</code>{" "}
               (비워두기)을 권장합니다.{" "}
-              <code className="rounded bg-amber-100 px-1 font-mono">to authenticated</code>만
+              <code className="bg-gold-100 rounded px-1 font-mono">to authenticated</code>만
               지정하면 로그인 전에는 여전히 빈 배열이 나옵니다.
             </p>
             <p className="mt-1.5">
               실제 서비스 테이블에는{" "}
-              <code className="rounded bg-amber-100 px-1 font-mono">using (true)</code> 대신{" "}
-              <code className="rounded bg-amber-100 px-1 font-mono">auth.uid() = user_id</code> 같은
+              <code className="bg-gold-100 rounded px-1 font-mono">using (true)</code> 대신{" "}
+              <code className="bg-gold-100 rounded px-1 font-mono">auth.uid() = user_id</code> 같은
               조건으로 본인 데이터만 보이게 제한하세요. RLS 자체를 끄는 것(disable)은 테스트
               테이블이 아니면 권장하지 않습니다.
             </p>
@@ -1484,11 +1511,11 @@ using (true);`}
       </div>
 
       {/* 유틸 파일 구조 */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="border-hairline-soft rounded-lg border bg-white p-6">
         <div className="mb-5 flex items-center gap-2">
-          <Database className="h-5 w-5 text-indigo-500" />
-          <h2 className="font-bold text-gray-800">유틸 파일 구조</h2>
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+          <Database className="text-navy-500 h-5 w-5" />
+          <h2 className="text-ink font-bold">유틸 파일 구조</h2>
+          <span className="bg-surface text-steel rounded-full px-2 py-0.5 text-xs">
             src/utils/supabase/
           </span>
         </div>
@@ -1498,14 +1525,14 @@ using (true);`}
             {
               file: "client.ts",
               label: "브라우저용",
-              labelColor: "bg-blue-100 text-blue-700",
+              labelColor: "bg-navy-100 text-navy-700",
               desc: "클라이언트 컴포넌트에서 import해서 사용합니다.",
               code: clientUtilsSnippet
             },
             {
               file: "server.ts",
               label: "서버용",
-              labelColor: "bg-green-100 text-green-700",
+              labelColor: "bg-brand-100 text-brand-700",
               desc: "서버 컴포넌트 및 Route Handler에서 import해서 사용합니다.",
               code: serverUtilsSnippet
             }
@@ -1515,11 +1542,11 @@ using (true);`}
                 <span className={`rounded-lg px-2.5 py-0.5 text-xs font-bold ${labelColor}`}>
                   {label}
                 </span>
-                <code className="font-mono text-xs text-gray-500">src/utils/supabase/{file}</code>
+                <code className="text-steel font-mono text-xs">src/utils/supabase/{file}</code>
               </div>
-              <p className="text-sm text-gray-500">{desc}</p>
-              <div className="overflow-hidden rounded-xl bg-gray-950">
-                <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-gray-200">
+              <p className="text-steel text-sm">{desc}</p>
+              <div className="bg-surface-code overflow-hidden rounded-lg">
+                <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
                   {code}
                 </pre>
               </div>
@@ -1529,14 +1556,14 @@ using (true);`}
       </div>
 
       {/* 언제 뭘 쓸까 요약 */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 font-bold text-gray-800">언제 뭘 써야 할까?</h2>
-        <div className="overflow-hidden rounded-xl border border-gray-100">
+      <div className="border-hairline-soft rounded-lg border bg-white p-6">
+        <h2 className="text-ink mb-4 font-bold">언제 뭘 써야 할까?</h2>
+        <div className="border-hairline-soft overflow-hidden rounded-lg border">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
+              <tr className="border-hairline-soft bg-surface-soft border-b">
                 {["", "클라이언트 컴포넌트", "서버 컴포넌트"].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-500">
+                  <th key={h} className="text-steel px-4 py-3 text-left text-xs font-bold">
                     {h}
                   </th>
                 ))}
@@ -1553,15 +1580,15 @@ using (true);`}
                   "'use client' 파일에서 사용 불가"
                 ]
               ].map(([label, client, server]) => (
-                <tr key={label} className="border-b border-gray-50">
-                  <td className="px-4 py-3 text-xs font-semibold text-gray-500">{label}</td>
+                <tr key={label} className="border-hairline-soft border-b">
+                  <td className="text-steel px-4 py-3 text-xs font-semibold">{label}</td>
                   <td className="px-4 py-3">
-                    <code className="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-xs text-blue-800">
+                    <code className="bg-navy-50 text-navy-800 rounded px-1.5 py-0.5 font-mono text-xs">
                       {client}
                     </code>
                   </td>
                   <td className="px-4 py-3">
-                    <code className="rounded bg-green-50 px-1.5 py-0.5 font-mono text-xs text-green-800">
+                    <code className="bg-brand-50 text-brand-800 rounded px-1.5 py-0.5 font-mono text-xs">
                       {server}
                     </code>
                   </td>

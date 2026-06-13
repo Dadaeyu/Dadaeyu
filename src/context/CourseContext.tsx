@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, ReactNode } from "react";
+import { genId } from "@/utils/id";
 
 export interface CoursePlace {
   id: number;
@@ -68,7 +69,7 @@ export function CourseProvider({ children }: { children: ReactNode }) {
       prev.map((course) => {
         if (course.id !== courseId) return course;
         const newPlace: CoursePlace = {
-          id: Date.now(),
+          id: genId(),
           name: placeName,
           time: "09:00",
           duration: "1시간"
