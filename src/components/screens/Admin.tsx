@@ -11,6 +11,7 @@ import {
   Flag,
   Calendar,
   Database,
+  Globe,
   ExternalLink,
   Search,
   Plus,
@@ -41,7 +42,8 @@ const SECTIONS = [
   { key: "courses", label: "코스 관리", icon: Route },
   { key: "reports", label: "제보 확인", icon: Flag },
   { key: "events", label: "이벤트 관리", icon: Calendar },
-  { key: "supabase", label: "Supabase", icon: Database }
+  { key: "supabase", label: "Supabase", icon: Database },
+  { key: "restapi", label: "Rest API", icon: Globe }
 ];
 
 // ── 목업 데이터 ───────────────────────────────────────────
@@ -340,6 +342,7 @@ export default function Admin() {
           {section === "reports" && <ReportManagement />}
           {section === "events" && <EventManagement />}
           {section === "supabase" && <SupabaseTest />}
+          {section === "restapi" && <RestApiTest />}
         </div>
       </div>
     </div>
@@ -1125,63 +1128,20 @@ function SupabaseTest() {
     setClientStatus("loading");
     setClientResult(null);
     setClientError("");
+
     try {
       const { createClient } = await import("@/utils/supabase/client");
       const supabase = createClient();
       const { data, error } = await supabase.from("tb_test").select("*").limit(5);
-      console.log(data);
 
       if (error) throw error;
-
       setClientResult(data);
       setClientStatus("success");
-      console.log(clientResult);
     } catch (e: unknown) {
       setClientError(e instanceof Error ? e.message : String(e));
       setClientStatus("error");
     }
   };
-
-  const clientSnippet = `'use client'
-import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
-
-export default function MyComponent() {
-  const [data, setData] = useState([])
-  const supabase = createClient()
-
-  useEffect(() => {
-    supabase
-      .from('tb_test')  // 테이블 이름
-      .select('id, created_at')  // 컬럼 이름
-      .then(({ data }) => {
-        if (data) setData(data)
-      })
-  }, [])
-
-  return <ul>{data.map(d => <li key={d.id}>{d.name}</li>)}</ul>
-}`;
-
-  const serverSnippet = `// 'use client' 없음 → 기본이 서버 컴포넌트
-import { createClient } from '@/utils/supabase/server'
-
-export default async function Page() {
-  const supabase = await createClient()
-
-  const { data: tests, error } = await supabase
-    .from('tb_test')
-    .select('*')
-
-  if (error) throw error
-
-  return (
-    <ul>
-      {tests?.map(p => (
-        <li key={p.id}>{p.created_at}</li>
-      ))}
-    </ul>
-  )
-}`;
 
   const clientUtilsSnippet = `import { createBrowserClient } from "@supabase/ssr";
 
@@ -1219,6 +1179,61 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
   );
 };`;
 
+  const clientSnippet = `'use client'
+
+import { useState } from 'react'
+import { createClient } from '@/utils/supabase/client'
+
+export default function Admin() {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [data, setData] = useState<unknown>(null)
+  const [error, setError] = useState('')
+
+  const runClientFetch = async () => {
+    setStatus('loading')
+
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('tb_test')  // 테이블 이름
+        .select('*')      // 컬럼 이름
+        .limit(5)
+
+      if (error) throw error
+      setData(data)
+      setStatus('success')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setStatus('error')
+    }
+  }
+}`;
+
+  const serverSnippet = `// 'use client' 없음 → 기본이 서버 컴포넌트
+import { createClient } from '@/utils/supabase/server'
+import { cookies } from "next/headers";
+
+export default async function SupabaseServerTestPage() {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  try {
+    const { data: tests, error } = await supabase
+    .from('tb_test')
+    .select('*');
+  } catch (e) {
+    errorMessage = e instanceof Error ? e.message : "DB 호출 실패";
+  }
+
+  return (
+    <ul>
+      {tests?.map(p => (
+        <li key={p.id}>{p.created_at}</li>
+      ))}
+    </ul>
+  )
+}`;
+
   return (
     <div className="space-y-6">
       {/* 헤더 */}
@@ -1233,6 +1248,51 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
           클라이언트 / 서버 컴포넌트에서 Supabase 데이터를 가져오는 패턴을 확인하세요. 팀원들이 기능
           개발 시 참고할 수 있습니다.
         </p>
+      </div>
+
+      {/* 유틸 파일 구조 */}
+      <div className="border-hairline-soft rounded-lg border bg-white p-6">
+        <div className="mb-5 flex items-center gap-2">
+          <Database className="text-navy-500 h-5 w-5" />
+          <h2 className="text-ink font-bold">유틸 파일 구조</h2>
+          <span className="bg-surface text-steel rounded-full px-2 py-0.5 text-xs">
+            src/utils/supabase/
+          </span>
+        </div>
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          {[
+            {
+              file: "client.ts",
+              label: "브라우저용",
+              labelColor: "bg-navy-100 text-navy-700",
+              desc: "클라이언트 컴포넌트에서 import해서 사용합니다.",
+              code: clientUtilsSnippet
+            },
+            {
+              file: "server.ts",
+              label: "서버용",
+              labelColor: "bg-brand-100 text-brand-700",
+              desc: "서버 컴포넌트 및 Route Handler에서 import해서 사용합니다.",
+              code: serverUtilsSnippet
+            }
+          ].map(({ file, label, labelColor, desc, code }) => (
+            <div key={file} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className={`rounded-lg px-2.5 py-0.5 text-xs font-bold ${labelColor}`}>
+                  {label}
+                </span>
+                <code className="text-steel font-mono text-xs">src/utils/supabase/{file}</code>
+              </div>
+              <p className="text-steel text-sm">{desc}</p>
+              <div className="bg-surface-code overflow-hidden rounded-lg">
+                <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
+                  {code}
+                </pre>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* 환경 변수 안내 */}
@@ -1277,7 +1337,9 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
               <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
               <span className="bg-gold-500 h-2.5 w-2.5 rounded-full" />
               <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
-              <span className="text-steel ml-2 font-mono text-xs">component.tsx</span>
+              <span className="text-steel ml-2 font-mono text-xs">
+                components/screens/Admin.tsx
+              </span>
             </div>
             <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
               {clientSnippet}
@@ -1346,9 +1408,7 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
               <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
               <span className="bg-gold-500 h-2.5 w-2.5 rounded-full" />
               <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
-              <span className="text-steel ml-2 font-mono text-xs">
-                app/example/page.tsx (Server Component)
-              </span>
+              <span className="text-steel ml-2 font-mono text-xs">app/test/supabase/page.tsx</span>
             </div>
             <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
               {serverSnippet}
@@ -1403,7 +1463,7 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
 
           {/* 실제 서버 조회 페이지 링크 */}
           <Button asChild variant="accent">
-            <Link href="/supabase">
+            <Link href="/test/supabase">
               <ExternalLink className="h-4 w-4" />
               서버 컴포넌트 실제 조회 결과 보기
             </Link>
@@ -1510,51 +1570,6 @@ using (true);`}
         </div>
       </div>
 
-      {/* 유틸 파일 구조 */}
-      <div className="border-hairline-soft rounded-lg border bg-white p-6">
-        <div className="mb-5 flex items-center gap-2">
-          <Database className="text-navy-500 h-5 w-5" />
-          <h2 className="text-ink font-bold">유틸 파일 구조</h2>
-          <span className="bg-surface text-steel rounded-full px-2 py-0.5 text-xs">
-            src/utils/supabase/
-          </span>
-        </div>
-
-        <div className="grid gap-6 sm:grid-cols-2">
-          {[
-            {
-              file: "client.ts",
-              label: "브라우저용",
-              labelColor: "bg-navy-100 text-navy-700",
-              desc: "클라이언트 컴포넌트에서 import해서 사용합니다.",
-              code: clientUtilsSnippet
-            },
-            {
-              file: "server.ts",
-              label: "서버용",
-              labelColor: "bg-brand-100 text-brand-700",
-              desc: "서버 컴포넌트 및 Route Handler에서 import해서 사용합니다.",
-              code: serverUtilsSnippet
-            }
-          ].map(({ file, label, labelColor, desc, code }) => (
-            <div key={file} className="space-y-3">
-              <div className="flex items-center gap-2">
-                <span className={`rounded-lg px-2.5 py-0.5 text-xs font-bold ${labelColor}`}>
-                  {label}
-                </span>
-                <code className="text-steel font-mono text-xs">src/utils/supabase/{file}</code>
-              </div>
-              <p className="text-steel text-sm">{desc}</p>
-              <div className="bg-surface-code overflow-hidden rounded-lg">
-                <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
-                  {code}
-                </pre>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* 언제 뭘 쓸까 요약 */}
       <div className="border-hairline-soft rounded-lg border bg-white p-6">
         <h2 className="text-ink mb-4 font-bold">언제 뭘 써야 할까?</h2>
@@ -1596,6 +1611,440 @@ using (true);`}
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 8. Rest API 테스트 ────────────────────────────────────
+function RestApiTest() {
+  // 클라이언트 컴포넌트 라이브 테스트 (Route Handler 경유) //
+  const [clientStatus, setClientStatus] = useState<"idle" | "loading" | "success" | "error">(
+    "idle"
+  );
+  const [clientResult, setClientResult] = useState<unknown>(null);
+  const [clientError, setClientError] = useState("");
+
+  const runClientFetch = async () => {
+    setClientStatus("loading");
+    setClientResult(null);
+    setClientError("");
+
+    try {
+      // 클라이언트는 serviceKey를 모릅니다. 우리 Route Handler를 호출합니다.
+      const res = await fetch(
+        "/api/restapi/areaBasedList2?lDongRegnCd=30&lclsSystm1=FD&numOfRows=5"
+      );
+      const json = await res.json();
+
+      if (!res.ok) throw new Error(json?.error ?? `요청 실패: ${res.status}`);
+      setClientResult(json);
+      setClientStatus("success");
+    } catch (e: unknown) {
+      setClientError(e instanceof Error ? e.message : String(e));
+      setClientStatus("error");
+    }
+  };
+
+  const axiosSnippet = `import axios from "axios";
+
+type Options = {
+  headers?: Record<string, string>;
+};
+
+export async function GET<T>(url: string, options?: Options): Promise<T> {
+  const { data } = await axios.get<T>(url, { headers: options?.headers });
+  return data;
+}
+
+export async function POST<T>(url: string, body: unknown, options?: Options): Promise<T> {
+  const { data } = await axios.post<T>(url, body, { headers: options?.headers });
+  return data;
+}`;
+
+  const externalSnippet = `import { GET } from './axios'
+
+const PUBLIC_DATA_URL = "https://apis.data.go.kr";
+
+const BRFR_TOUR_INFO_BASE_URL = "/B551011/KorWithService2";
+
+const tourDefaultParams = (): Record<string, string> => ({
+  serviceKey: process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? "",
+  MobileOS: "WIN",
+  MobileApp: "Dadaeyu",
+  _type: "json"
+});
+
+export const brfrTourInfoApi = {
+  // 지역기반 관광정보 조회 (areaBasedList2)
+  areaBasedList: <T>(params: Record<string, string> = {}) => {
+    // URLSearchParams가 serviceKey의 "=="를 자동으로 인코딩합니다.
+    const query = new URLSearchParams({ ...tourDefaultParams(), ...params });
+    return GET<T>(
+      \`\${PUBLIC_DATA_URL}\${BRFR_TOUR_INFO_BASE_URL}/areaBasedList2?\${query.toString()}\`
+    );
+  }
+};`;
+
+  const clientSnippet = `'use client'
+
+import { useState } from 'react'
+
+// 클라이언트는 serviceKey(비밀키)를 알 수 없으므로
+// 외부 API를 직접 부르지 않고 우리 Route Handler를 호출합니다.
+export default function Admin() {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [data, setData] = useState<unknown>(null)
+  const [error, setError] = useState('')
+
+  const runClientFetch = async () => {
+    setStatus('loading')
+
+    try {
+      const res = await fetch('/api/restapi/areaBasedList2?lDongRegnCd=30&lclsSystm1=FD')
+      const json = await res.json()
+      const items = json.response.body.items.item
+
+      if (!res.ok) throw new Error(json?.error ?? \`요청 실패: \${res.status}\`);
+      setData(items)
+      setStatus('success')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setStatus('error')
+    }
+  }
+}`;
+
+  const routeSnippet = `import { NextResponse } from 'next/server'
+import { brfrTourInfoApi } from '@/utils/api/external'
+
+export const dynamic = "force-dynamic";
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ action: string }> }
+) {
+  const { action } = await params
+  const { searchParams } = new URL(request.url)
+
+  try {
+    switch (action) {
+      case 'areaBasedList2': {
+        const data = await brfrTourInfoApi.areaBasedList({
+          lDongRegnCd: searchParams.get('lDongRegnCd') ?? '30',
+        })
+        return NextResponse.json(data)
+      }
+
+      case 'areaCode2': {
+        const data = await brfrTourInfoApi.areaCode({
+          areaCode: searchParams.get('areaCode') ?? '',
+        })
+        return NextResponse.json(data)
+      }
+
+      default:
+        return NextResponse.json({ error: \`알 수 없는 액션: \${action}\` }, { status: 404 })
+    }
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "외부 API 호출 실패" },
+      { status: 502 }
+    );
+  }
+}`;
+
+  const serverSnippet = `import { brfrTourInfoApi } from '@/utils/api/external'
+
+export const dynamic = "force-dynamic";
+
+export default async function OpenApiServerTestPage() {
+  // 서버에서 직접 외부 API 호출 (serviceKey 노출 없음)
+  try {
+    const data = await brfrTourInfoApi.areaBasedList({
+      lDongRegnCd: '30',  // 대전
+      lclsSystm1: 'FD',   // 음식
+    })
+
+    const items = data.response.body.items.item
+  } catch (e) {
+    errorMessage = e instanceof Error ? e.message : "외부 API 호출 실패";
+  }
+
+  return <ul>{items.map(i => <li key={i.contentid}>{i.title}</li>)}</ul>
+}`;
+
+  return (
+    <div className="space-y-6">
+      {/* 헤더 */}
+      <div>
+        <div className="flex items-center gap-2">
+          <h1 className="text-ink text-xl font-bold">Rest API 연동 테스트</h1>
+          <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-700">
+            개발용
+          </span>
+        </div>
+        <p className="text-stone mt-1 text-sm">
+          REST API를 클라이언트 / 서버 컴포넌트에서 호출하는 패턴을 확인하세요. 예시로
+          공공데이터포털 OpenAPI(한국관광공사 무장애 여행 · GET)를 사용합니다.{" "}
+          <code className="font-mono">serviceKey</code>는 비밀키라 클라이언트는 반드시 Route
+          Handler를 경유합니다.
+        </p>
+      </div>
+
+      {/* 데이터 흐름 다이어그램 */}
+      <div className="border-navy-100 bg-navy-50/40 rounded-lg border p-6">
+        <p className="text-steel mb-4 text-xs font-bold tracking-wide uppercase">데이터 흐름</p>
+        <div className="space-y-3 font-mono text-xs sm:text-sm">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="bg-brand-100 text-brand-700 rounded px-2 py-1 font-semibold">
+              서버 컴포넌트
+            </span>
+            <span className="text-stone">→</span>
+            <span className="bg-surface text-steel rounded px-2 py-1">external.ts</span>
+            <span className="text-stone">→</span>
+            <span className="bg-surface text-steel rounded px-2 py-1">axios.ts</span>
+            <span className="text-stone">→</span>
+            <span className="text-slate rounded bg-white px-2 py-1 font-semibold">
+              공공데이터포털
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="bg-navy-100 text-navy-700 rounded px-2 py-1 font-semibold">
+              클라이언트 컴포넌트
+            </span>
+            <span className="text-stone">→</span>
+            <span className="bg-gold-100 text-gold-700 rounded px-2 py-1 font-semibold">
+              Route Handler
+            </span>
+            <span className="text-stone">→</span>
+            <span className="bg-surface text-steel rounded px-2 py-1">external.ts</span>
+            <span className="text-stone">→</span>
+            <span className="bg-surface text-steel rounded px-2 py-1">axios.ts</span>
+            <span className="text-stone">→</span>
+            <span className="text-slate rounded bg-white px-2 py-1 font-semibold">
+              공공데이터포털
+            </span>
+          </div>
+        </div>
+        <p className="text-stone mt-4 text-xs">
+          클라이언트만 <span className="text-steel font-semibold">Route Handler</span> 한 단계가 더
+          있습니다. 그 뒤 <code className="font-mono">external → axios</code> 흐름은 동일합니다.
+        </p>
+      </div>
+
+      {/* 유틸 파일 구조 */}
+      <div className="border-hairline-soft rounded-lg border bg-white p-6">
+        <div className="mb-5 flex items-center gap-2">
+          <Globe className="text-navy-500 h-5 w-5" />
+          <h2 className="text-ink font-bold">유틸 파일 구조</h2>
+          <span className="bg-surface text-steel rounded-full px-2 py-0.5 text-xs">
+            src/utils/api/
+          </span>
+        </div>
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          {[
+            {
+              file: "axios.ts",
+              label: "통신 레이어",
+              labelColor: "bg-navy-100 text-navy-700",
+              desc: "axios로 GET/POST를 감싼 공용 래퍼. 모든 외부 호출의 최하단입니다.",
+              code: axiosSnippet
+            },
+            {
+              file: "external.ts",
+              label: "엔드포인트",
+              labelColor: "bg-brand-100 text-brand-700",
+              desc: "외부 API의 BASE_URL·인증·파라미터를 정의합니다. serviceKey는 여기서만 읽습니다.",
+              code: externalSnippet
+            }
+          ].map(({ file, label, labelColor, desc, code }) => (
+            <div key={file} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className={`rounded-lg px-2.5 py-0.5 text-xs font-bold ${labelColor}`}>
+                  {label}
+                </span>
+                <code className="text-steel font-mono text-xs">src/utils/api/{file}</code>
+              </div>
+              <p className="text-steel text-sm">{desc}</p>
+              <div className="bg-surface-code overflow-hidden rounded-lg">
+                <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
+                  {code}
+                </pre>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 클라이언트 / 서버 비교 패널 */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* ── 클라이언트 컴포넌트 ── */}
+        <div className="border-navy-100 flex flex-col gap-4 rounded-lg border bg-white p-6">
+          <div className="flex items-center gap-2">
+            <span className="bg-navy-100 text-navy-700 rounded-lg px-2.5 py-1 text-xs font-bold">
+              &apos;use client&apos;
+            </span>
+            <h2 className="text-ink font-bold">클라이언트 컴포넌트</h2>
+          </div>
+          <p className="text-steel text-sm">
+            브라우저에서 실행되므로 외부 API를 직접 부르지 않고{" "}
+            <code className="bg-surface rounded px-1 font-mono">/api/restapi</code> Route Handler를
+            호출합니다. 버튼 클릭·필터 변경 등 인터랙티브한 UI에 적합합니다.
+          </p>
+
+          {/* 코드 스니펫 */}
+          <div className="bg-surface-code overflow-hidden rounded-lg">
+            <div className="border-charcoal flex items-center gap-1.5 border-b px-4 py-2.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+              <span className="bg-gold-500 h-2.5 w-2.5 rounded-full" />
+              <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
+              <span className="text-steel ml-2 font-mono text-xs">
+                components/screens/Admin.tsx
+              </span>
+            </div>
+            <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
+              {clientSnippet}
+            </pre>
+          </div>
+
+          {/* 라이브 테스트 */}
+          <div className="border-hairline-soft bg-surface-soft rounded-lg border p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-slate text-sm font-semibold">라이브 실행</p>
+              <button
+                onClick={runClientFetch}
+                disabled={clientStatus === "loading"}
+                className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+                {clientStatus === "loading" ? "조회 중..." : "실행"}
+              </button>
+            </div>
+
+            {clientStatus === "idle" && (
+              <p className="text-stone py-4 text-center text-sm">
+                실행 버튼을 누르면 Route Handler를 거쳐 대전·음식 데이터를 조회합니다.
+              </p>
+            )}
+            {clientStatus === "loading" && (
+              <p className="text-steel animate-pulse py-4 text-center text-sm">
+                /api/restapi 호출 중...
+              </p>
+            )}
+            {clientStatus === "success" && (
+              <div>
+                <p className="text-brand-600 mb-2 text-xs font-semibold">✓ 응답 성공</p>
+                <pre className="border-hairline text-slate max-h-72 overflow-auto rounded-lg border bg-white p-3 font-mono text-xs">
+                  {JSON.stringify(clientResult, null, 2)}
+                </pre>
+              </div>
+            )}
+            {clientStatus === "error" && (
+              <div>
+                <p className="mb-1 text-xs font-semibold text-red-600">✗ 오류 발생</p>
+                <pre className="rounded-lg bg-red-50 p-3 font-mono text-xs whitespace-pre-wrap text-red-700">
+                  {clientError}
+                </pre>
+              </div>
+            )}
+          </div>
+
+          {/* Route Handler 스니펫 */}
+          <div>
+            <p className="text-steel mb-2 text-xs font-bold tracking-wide uppercase">
+              경유하는 Route Handler
+            </p>
+            <div className="bg-surface-code overflow-hidden rounded-lg">
+              <div className="border-charcoal flex items-center gap-1.5 border-b px-4 py-2.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                <span className="bg-gold-500 h-2.5 w-2.5 rounded-full" />
+                <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
+                <span className="text-steel ml-2 font-mono text-xs">
+                  api/restapi/[action]/route.ts
+                </span>
+              </div>
+              <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
+                {routeSnippet}
+              </pre>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 서버 컴포넌트 ── */}
+        <div className="border-brand-100 flex flex-col gap-4 rounded-lg border bg-white p-6">
+          <div className="flex items-center gap-2">
+            <span className="bg-brand-100 text-brand-700 rounded-lg px-2.5 py-1 text-xs font-bold">
+              Server
+            </span>
+            <h2 className="text-ink font-bold">서버 컴포넌트</h2>
+          </div>
+          <p className="text-steel text-sm">
+            서버에서 실행되므로{" "}
+            <code className="bg-surface rounded px-1 font-mono">brfrTourInfoApi</code>로 외부 API를
+            직접 호출합니다. serviceKey가 브라우저에 노출되지 않고, 페이지 첫 로드 데이터에
+            적합합니다.
+          </p>
+
+          {/* 코드 스니펫 */}
+          <div className="bg-surface-code overflow-hidden rounded-lg">
+            <div className="border-charcoal flex items-center gap-1.5 border-b px-4 py-2.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+              <span className="bg-gold-500 h-2.5 w-2.5 rounded-full" />
+              <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
+              <span className="text-steel ml-2 font-mono text-xs">app/test/restapi/page.tsx</span>
+            </div>
+            <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
+              {serverSnippet}
+            </pre>
+          </div>
+
+          {/* 사용 위치 안내 */}
+          <div className="bg-surface-soft rounded-lg p-4">
+            <p className="text-steel mb-3 text-xs font-bold tracking-wide uppercase">
+              서버에서 외부 API를 호출할 수 있는 곳
+            </p>
+            <div className="space-y-2.5">
+              {[
+                { file: "src/app/*/page.tsx", desc: "라우트 페이지 — 기본이 서버 컴포넌트" },
+                { file: "src/app/*/layout.tsx", desc: "레이아웃 — 공통 데이터 로딩" },
+                { file: "src/app/api/*/route.ts", desc: "Route Handler — 클라이언트용 프록시" }
+              ].map(({ file, desc }) => (
+                <div key={file} className="flex items-start gap-2">
+                  <FileText className="text-brand-500 mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <code className="text-ink font-mono text-xs">{file}</code>
+                    <p className="text-steel mt-0.5 text-xs">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 주의사항 */}
+          <div className="border-gold-100 bg-gold-50 flex items-start gap-2.5 rounded-lg border p-4">
+            <AlertCircle className="text-gold-600 mt-0.5 h-4 w-4 shrink-0" />
+            <p className="text-gold-800 text-xs">
+              서버 컴포넌트는 이 어드민 화면처럼{" "}
+              <code className="bg-gold-100 rounded px-1 font-mono">&apos;use client&apos;</code>가
+              붙은 곳에서는 직접 실행할 수 없습니다.
+              <br />
+              <span className="mt-1 block">
+                신규 페이지의 <code className="bg-gold-100 rounded px-1 font-mono">page.tsx</code>
+                에서 사용하세요.
+              </span>
+            </p>
+          </div>
+
+          {/* 실제 서버 조회 페이지 링크 */}
+          <Button asChild variant="accent">
+            <Link href="/test/restapi">
+              <ExternalLink className="h-4 w-4" />
+              서버 컴포넌트 실제 조회 결과 보기
+            </Link>
+          </Button>
         </div>
       </div>
     </div>
