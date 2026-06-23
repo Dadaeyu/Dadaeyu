@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  fetchTourWeather,
+  formatWeatherItem,
+  type TourWeatherDebug,
+  type TourWeatherResult
+} from "@/lib/tour-weather";
 
 type Confidence = "high" | "medium" | "low";
 
@@ -14,7 +20,10 @@ type ChatResponse = {
   sources: string[];
   debug?: {
     analysis: QueryAnalysis;
+    inputMessage?: string;
+    rag?: RagDebug;
     searchTerms: string[];
+    weather?: TourWeatherDebug;
   };
 };
 
@@ -69,8 +78,34 @@ type KnowledgeResult = {
   rows: KnowledgeRow[];
   message: string;
   searchMode: "vector" | "keyword" | "none";
+  debug?: RagDebug;
   embeddingModel?: string;
   fallbackReason?: string;
+};
+
+type EmbeddingDebug = {
+  dimensions?: number;
+  input?: string;
+  model?: string;
+  status: "created" | "failed" | "not_configured" | "skipped";
+  vectorPreview?: number[];
+  vectorPreviewNote?: string;
+};
+
+type RagDebug = {
+  dbMatches: Array<{
+    category: string | null;
+    chunkIndex: number | null;
+    contentPreview: string | null;
+    rank: number;
+    similarity: number | null;
+    source: string | null;
+    title: string | null;
+  }>;
+  embedding?: EmbeddingDebug;
+  searchMode: "vector" | "keyword" | "none";
+  statusMessage: string;
+  vectorCandidateCount?: number;
 };
 
 type VectorReadiness = {
@@ -88,24 +123,18 @@ const KNOWLEDGE_CANDIDATE_LIMIT = 100;
 const KNOWLEDGE_RESULT_LIMIT = 5;
 const VECTOR_CANDIDATE_LIMIT = 20;
 const VECTOR_READINESS_TTL_MS = 60_000;
-const SITE_GUIDE_CHIPS = [
-  "왜 만들었어?",
-  "어떻게 질문하면 돼?",
-  "데이터 출처는 어디야?"
-];
+const SITE_GUIDE_CHIPS = ["왜 만들었어?", "어떻게 질문하면 돼?", "데이터 출처는 어디야?"];
 const FALLBACK_CHIPS = [
   "다대유는 어떤 사이트야?",
   "대전어린이회관 휠체어 가능해?",
   "대전한밭도서관 접근성 알려줘"
 ];
 
-let vectorReadinessCache:
-  | {
-      checkedAt: number;
-      key: string;
-      result: VectorReadiness;
-    }
-  | null = null;
+let vectorReadinessCache: {
+  checkedAt: number;
+  key: string;
+  result: VectorReadiness;
+} | null = null;
 
 const GENERIC_SEARCH_TERMS = new Set([
   "대전",
@@ -128,10 +157,7 @@ const CATEGORY_ALIASES: Record<string, string[]> = {
   레포츠: ["레포츠", "운동", "체육", "캠핑"]
 };
 
-const ACCESSIBILITY_RULES: Record<
-  string,
-  { tags: string[]; fields: string[]; terms: string[] }
-> = {
+const ACCESSIBILITY_RULES: Record<string, { tags: string[]; fields: string[]; terms: string[] }> = {
   wheelchair: {
     tags: ["wheelchair", "mobility_access"],
     fields: [
@@ -195,7 +221,12 @@ const systemPrompt = [
   "희화화된 방언, 억지스러운 사투리, 장난스러운 말투는 피한다.",
   "Supabase 근거 데이터가 제공되면 그 내용을 우선 사용한다.",
   "근거 데이터에 없는 내용은 확정 정보처럼 단정하지 말고 방문 전 확인이 필요한 부분을 분명히 말한다.",
-  "답변은 3~6문장으로 작성하고, 불확실한 시설 정보는 확인 권장으로 표현한다.",
+  "기상청 관광기후지수 데이터가 제공되면 날씨 조건을 보조 근거로 반영하되, 실시간 현장 날씨를 직접 확인한 것처럼 말하지 않는다.",
+  "날씨 데이터가 제공되지 않으면 현재 날씨를 알고 있다고 말하지 않는다.",
+  "장소를 추천할 때는 접근성만 나열하지 말고, 각 장소에서 사용자가 무엇을 할 수 있는지와 왜 가볼 만한지도 함께 말한다.",
+  "추천 장소 설명은 '어떤 활동을 할 수 있는지'와 '접근성 근거'가 한 문장 안에서 자연스럽게 연결되게 쓴다.",
+  "방문 활동은 제공된 제목, 분류, 내용, 방문 활동 힌트 안에서만 말하고, 근거 없는 체험 프로그램이나 편의시설은 지어내지 않는다.",
+  "답변은 4~8문장으로 작성하고, 불확실한 시설 정보는 확인 권장으로 표현한다.",
   "마크다운, 굵게 표시, 번호 목록은 쓰지 말고 일반 문장으로만 답한다."
 ].join(" ");
 
@@ -252,14 +283,7 @@ function createStaticSiteFaqResponse(message: string): ChatResponse | null {
   }
 
   if (
-    includesAny(compactMessage, [
-      "왜만들",
-      "만든이유",
-      "기획의도",
-      "서비스목적",
-      "취지",
-      "왜필요"
-    ])
+    includesAny(compactMessage, ["왜만들", "만든이유", "기획의도", "서비스목적", "취지", "왜필요"])
   ) {
     return createSiteGuideResponse({
       message:
@@ -296,14 +320,7 @@ function createStaticSiteFaqResponse(message: string): ChatResponse | null {
   }
 
   if (
-    includesAny(compactMessage, [
-      "누가써",
-      "누구를위한",
-      "사용자",
-      "대상",
-      "장애인만",
-      "비장애인"
-    ])
+    includesAny(compactMessage, ["누가써", "누구를위한", "사용자", "대상", "장애인만", "비장애인"])
   ) {
     return createSiteGuideResponse({
       message:
@@ -354,10 +371,7 @@ function createSiteGuideResponse({
       rows,
       source: "고정 서비스 안내"
     },
-    chips: [
-      ...SITE_GUIDE_CHIPS,
-      "대전어린이회관 휠체어 가능해?"
-    ],
+    chips: [...SITE_GUIDE_CHIPS, "대전어린이회관 휠체어 가능해?"],
     confidence: "high",
     sources: []
   };
@@ -396,17 +410,19 @@ function createOutOfScopeResponse(analysis: QueryAnalysis): ChatResponse {
 
 function createNoKnowledgeResponse({
   analysis,
+  inputMessage,
   knowledge,
-  searchTerms
+  searchTerms,
+  weather
 }: {
   analysis: QueryAnalysis;
+  inputMessage: string;
   knowledge: KnowledgeResult;
   searchTerms: string[];
+  weather?: TourWeatherResult;
 }): ChatResponse {
   const hasNoMatchingEvidence = knowledge.message.includes("조건 일치 없음");
-  const target = analysis.place_name
-    ? `'${analysis.place_name}'에 대한`
-    : "질문 조건에 맞는";
+  const target = analysis.place_name ? `'${analysis.place_name}'에 대한` : "질문 조건에 맞는";
 
   return {
     message: hasNoMatchingEvidence
@@ -436,7 +452,10 @@ function createNoKnowledgeResponse({
     sources: [],
     debug: {
       analysis,
-      searchTerms
+      inputMessage,
+      rag: knowledge.debug,
+      searchTerms,
+      ...getWeatherDebugPayload(weather)
     }
   };
 }
@@ -445,16 +464,20 @@ function createSuccessResponse({
   message,
   model,
   usage,
+  inputMessage,
   knowledge,
   analysis,
-  searchTerms
+  searchTerms,
+  weather
 }: {
   message: string;
   model: string;
   usage?: DeepSeekChatResponse["usage"];
+  inputMessage: string;
   knowledge: KnowledgeResult;
   analysis: QueryAnalysis;
   searchTerms: string[];
+  weather?: TourWeatherResult;
 }): ChatResponse {
   const evidenceCount = knowledge.rows.length;
   const rows = [
@@ -470,6 +493,11 @@ function createSuccessResponse({
 
   if (knowledge.fallbackReason) {
     rows.push(`fallback: ${knowledge.fallbackReason}`);
+  }
+
+  const weatherCardRow = formatWeatherCardRow(weather);
+  if (weatherCardRow) {
+    rows.push(weatherCardRow);
   }
 
   if (usage?.total_tokens) {
@@ -497,23 +525,23 @@ function createSuccessResponse({
       ...(knowledge.searchMode === "vector" && knowledge.embeddingModel
         ? [`OpenAI embeddings (${knowledge.embeddingModel})`]
         : []),
+      ...(weather?.status === "ready" ? [weather.source] : []),
       ...knowledge.rows
         .map((row) => getRowText(row, "source"))
         .filter((source): source is string => Boolean(source))
     ],
     debug: {
       analysis,
-      searchTerms
+      inputMessage,
+      rag: knowledge.debug,
+      searchTerms,
+      ...getWeatherDebugPayload(weather)
     }
   };
 }
 
 function getSupabaseConfig() {
-  const rawUrl = (
-    process.env.SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    ""
-  ).trim();
+  const rawUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
   const key = (
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -521,9 +549,7 @@ function getSupabaseConfig() {
   ).trim();
   const schema = (process.env.SUPABASE_SCHEMA || "chatbot").trim();
   const rawTable = (process.env.SUPABASE_CHAT_TABLE || "chunks").trim();
-  const [schemaFromTable, tableFromTable] = rawTable.includes(".")
-    ? rawTable.split(".", 2)
-    : [];
+  const [schemaFromTable, tableFromTable] = rawTable.includes(".") ? rawTable.split(".", 2) : [];
 
   return {
     key,
@@ -538,9 +564,7 @@ function normalizeSupabaseRestUrl(rawUrl: string) {
 
   try {
     const parsed = new URL(rawUrl);
-    return rawUrl.includes("/rest/v1")
-      ? rawUrl.replace(/\/$/, "")
-      : `${parsed.origin}/rest/v1`;
+    return rawUrl.includes("/rest/v1") ? rawUrl.replace(/\/$/, "") : `${parsed.origin}/rest/v1`;
   } catch {
     return "";
   }
@@ -552,27 +576,27 @@ function getDeepSeekModel() {
 }
 
 function getEmbeddingConfig() {
-  const dimensions = Number(
-    process.env.EMBEDDING_DIMENSIONS || DEFAULT_EMBEDDING_DIMENSIONS
-  );
+  const dimensions = Number(process.env.EMBEDDING_DIMENSIONS || DEFAULT_EMBEDDING_DIMENSIONS);
 
   return {
-    apiKey: (
-      process.env.OPENAI_API_KEY ||
-      process.env.EMBEDDING_API_KEY ||
-      ""
-    ).trim(),
-    dimensions: Number.isInteger(dimensions) && dimensions > 0
-      ? dimensions
-      : DEFAULT_EMBEDDING_DIMENSIONS,
+    apiKey: (process.env.OPENAI_API_KEY || process.env.EMBEDDING_API_KEY || "").trim(),
+    dimensions:
+      Number.isInteger(dimensions) && dimensions > 0 ? dimensions : DEFAULT_EMBEDDING_DIMENSIONS,
     model: (process.env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL).trim()
   };
 }
 
-function getSupabaseHeaders(
-  config: ReturnType<typeof getSupabaseConfig>,
-  extra?: HeadersInit
-) {
+function getWeatherDebugPayload(weather?: TourWeatherResult) {
+  if (!weather || weather.status === "not_requested") return {};
+  return { weather: weather.debug };
+}
+
+function formatWeatherCardRow(weather?: TourWeatherResult) {
+  if (weather?.status !== "ready" || !weather.items.length) return null;
+  return `관광기후지수: ${formatWeatherItem(weather.items[0])}`;
+}
+
+function getSupabaseHeaders(config: ReturnType<typeof getSupabaseConfig>, extra?: HeadersInit) {
   return {
     apikey: config.key,
     Authorization: `Bearer ${config.key}`,
@@ -665,8 +689,7 @@ function normalizeAnalysis(value: unknown, message: string): QueryAnalysis {
     : fallback.keywords;
 
   return {
-    in_scope:
-      typeof record.in_scope === "boolean" ? record.in_scope : fallback.in_scope,
+    in_scope: typeof record.in_scope === "boolean" ? record.in_scope : fallback.in_scope,
     scope_reason:
       typeof record.scope_reason === "string" && record.scope_reason.trim()
         ? record.scope_reason.trim()
@@ -710,34 +733,22 @@ function fallbackAnalysis(message: string): QueryAnalysis {
           ? "check_accessibility"
           : "ask_info",
     accessibility_needs:
-      message.includes("휠체어") || message.includes("장애인")
-        ? ["wheelchair"]
-        : [],
+      message.includes("휠체어") || message.includes("장애인") ? ["wheelchair"] : [],
     weather_sensitive:
-      message.includes("오늘") ||
-      message.includes("날씨") ||
-      message.includes("비"),
+      message.includes("오늘") || message.includes("날씨") || message.includes("비"),
     place_name: null,
     location: "대전",
     keywords
   };
 }
 
-function rankKnowledgeRows(
-  rows: KnowledgeRow[],
-  analysis: QueryAnalysis,
-  searchTerms: string[]
-) {
+function rankKnowledgeRows(rows: KnowledgeRow[], analysis: QueryAnalysis, searchTerms: string[]) {
   const placeName = normalizeForSearch(analysis.place_name || "");
   const placeMatchedRows = placeName
     ? rows.filter((row) => rowMatchesPlaceName(row, placeName))
     : [];
 
-  if (
-    placeName &&
-    analysis.intent === "check_accessibility" &&
-    !placeMatchedRows.length
-  ) {
+  if (placeName && analysis.intent === "check_accessibility" && !placeMatchedRows.length) {
     return [];
   }
 
@@ -785,9 +796,7 @@ function scoreKnowledgeRow({
   const normalizedCategory = normalizeForSearch(category);
   const tags = getRowTags(row).map(normalizeForSearch);
   const accessibility = getRowAccessibility(row);
-  const accessibilityText = normalizeForSearch(
-    Object.values(accessibility).join(" ")
-  );
+  const accessibilityText = normalizeForSearch(Object.values(accessibility).join(" "));
   const rowText = buildRowSearchText(row);
   let score = 0;
 
@@ -880,7 +889,9 @@ function isUsefulRankingTerm(term: string) {
 
 function rowMatchesPlaceName(row: KnowledgeRow, normalizedPlaceName: string) {
   const title = normalizeForSearch(getRowText(row, "title") || "");
-  return title.includes(normalizedPlaceName) || buildRowSearchText(row).includes(normalizedPlaceName);
+  return (
+    title.includes(normalizedPlaceName) || buildRowSearchText(row).includes(normalizedPlaceName)
+  );
 }
 
 function buildRowSearchText(row: KnowledgeRow) {
@@ -951,8 +962,7 @@ async function createQueryEmbedding({
   const data = (await response.json()) as OpenAIEmbeddingResponse;
   const embedding = data.data
     ?.slice()
-    .sort((left, right) => (left.index || 0) - (right.index || 0))[0]
-    ?.embedding;
+    .sort((left, right) => (left.index || 0) - (right.index || 0))[0]?.embedding;
 
   if (!Array.isArray(embedding) || embedding.length !== dimensions) {
     throw new Error("OpenAI embedding response was invalid.");
@@ -1003,6 +1013,61 @@ function getKnowledgeSearchLabel(knowledge: KnowledgeResult) {
   if (knowledge.searchMode === "vector") return "pgvector";
   if (knowledge.searchMode === "keyword") return "JS 랭킹 fallback";
   return "검색 준비 전";
+}
+
+function createEmbeddingDebug({
+  dimensions,
+  input,
+  model,
+  status,
+  vector
+}: {
+  dimensions?: number;
+  input?: string;
+  model?: string;
+  status: EmbeddingDebug["status"];
+  vector?: number[];
+}): EmbeddingDebug {
+  return {
+    dimensions,
+    input,
+    model,
+    status,
+    vectorPreview: vector
+      ? vector.slice(0, 12).map((value) => Number(value.toFixed(6)))
+      : undefined,
+    vectorPreviewNote: vector ? `전체 ${vector.length}차원 중 앞 12개만 표시` : undefined
+  };
+}
+
+function createRagDebug({
+  embedding,
+  rows,
+  searchMode,
+  statusMessage,
+  vectorCandidateCount
+}: {
+  embedding?: EmbeddingDebug;
+  rows: KnowledgeRow[];
+  searchMode: KnowledgeResult["searchMode"];
+  statusMessage: string;
+  vectorCandidateCount?: number;
+}): RagDebug {
+  return {
+    dbMatches: rows.map((row, index) => ({
+      category: getRowText(row, "category"),
+      chunkIndex: row.chunk_index ?? null,
+      contentPreview: row.content ? row.content.slice(0, 180) : null,
+      rank: index + 1,
+      similarity: typeof row.similarity === "number" ? Number(row.similarity.toFixed(6)) : null,
+      source: getRowText(row, "source"),
+      title: getRowText(row, "title")
+    })),
+    embedding,
+    searchMode,
+    statusMessage,
+    vectorCandidateCount
+  };
 }
 
 async function checkVectorReadiness(
@@ -1102,7 +1167,12 @@ async function fetchKnowledge(analysis: QueryAnalysis): Promise<KnowledgeResult>
       status: "not_configured",
       rows: [],
       message: "환경변수 미설정",
-      searchMode: "none"
+      searchMode: "none",
+      debug: createRagDebug({
+        rows: [],
+        searchMode: "none",
+        statusMessage: "환경변수 미설정"
+      })
     };
   }
 
@@ -1114,12 +1184,22 @@ async function fetchKnowledge(analysis: QueryAnalysis): Promise<KnowledgeResult>
   }
 
   const keywordKnowledge = await fetchKeywordKnowledge(config, analysis, searchTerms);
-  if (
-    keywordKnowledge.status === "ready" &&
-    vectorKnowledge.status !== "not_configured"
-  ) {
+  if (keywordKnowledge.status === "ready" && vectorKnowledge.status !== "not_configured") {
+    const fallbackDebug =
+      keywordKnowledge.debug ||
+      createRagDebug({
+        rows: keywordKnowledge.rows,
+        searchMode: "keyword",
+        statusMessage: keywordKnowledge.message
+      });
+
     return {
       ...keywordKnowledge,
+      debug: {
+        ...fallbackDebug,
+        embedding: vectorKnowledge.debug?.embedding,
+        statusMessage: `${keywordKnowledge.message} / fallback: ${vectorKnowledge.message}`
+      },
       fallbackReason: vectorKnowledge.message
     };
   }
@@ -1139,11 +1219,20 @@ async function fetchVectorKnowledge(
       status: "not_configured",
       rows: [],
       message: "OpenAI embedding 키 미설정",
-      searchMode: "none"
+      searchMode: "none",
+      debug: createRagDebug({
+        embedding: createEmbeddingDebug({
+          status: "not_configured"
+        }),
+        rows: [],
+        searchMode: "none",
+        statusMessage: "OpenAI embedding 키 미설정"
+      })
     };
   }
 
   try {
+    const embeddingInput = buildEmbeddingInput(analysis, searchTerms);
     const readiness = await checkVectorReadiness(config, embedding.dimensions);
     if (!readiness.ready) {
       return {
@@ -1151,6 +1240,17 @@ async function fetchVectorKnowledge(
         rows: [],
         message: readiness.message,
         searchMode: "none",
+        debug: createRagDebug({
+          embedding: createEmbeddingDebug({
+            dimensions: embedding.dimensions,
+            input: embeddingInput,
+            model: embedding.model,
+            status: "skipped"
+          }),
+          rows: [],
+          searchMode: "none",
+          statusMessage: readiness.message
+        }),
         embeddingModel: embedding.model
       };
     }
@@ -1158,8 +1258,15 @@ async function fetchVectorKnowledge(
     const queryEmbedding = await createQueryEmbedding({
       apiKey: embedding.apiKey,
       dimensions: embedding.dimensions,
-      input: buildEmbeddingInput(analysis, searchTerms),
+      input: embeddingInput,
       model: embedding.model
+    });
+    const embeddingDebug = createEmbeddingDebug({
+      dimensions: embedding.dimensions,
+      input: embeddingInput,
+      model: embedding.model,
+      status: "created",
+      vector: queryEmbedding
     });
 
     const response = await fetch(`${config.url}/rpc/match_chunks`, {
@@ -1178,6 +1285,12 @@ async function fetchVectorKnowledge(
         rows: [],
         message: getVectorFailureMessage(response.status, text),
         searchMode: "none",
+        debug: createRagDebug({
+          embedding: embeddingDebug,
+          rows: [],
+          searchMode: "none",
+          statusMessage: getVectorFailureMessage(response.status, text)
+        }),
         embeddingModel: embedding.model
       };
     }
@@ -1190,6 +1303,13 @@ async function fetchVectorKnowledge(
         rows: [],
         message: "pgvector 검색 결과 없음",
         searchMode: "vector",
+        debug: createRagDebug({
+          embedding: embeddingDebug,
+          rows: [],
+          searchMode: "vector",
+          statusMessage: "pgvector 검색 결과 없음",
+          vectorCandidateCount: 0
+        }),
         embeddingModel: embedding.model
       };
     }
@@ -1205,6 +1325,13 @@ async function fetchVectorKnowledge(
         rows: [],
         message: `pgvector ${rows.length}개 후보 중 조건 일치 없음`,
         searchMode: "vector",
+        debug: createRagDebug({
+          embedding: embeddingDebug,
+          rows,
+          searchMode: "vector",
+          statusMessage: `pgvector ${rows.length}개 후보 중 조건 일치 없음`,
+          vectorCandidateCount: rows.length
+        }),
         embeddingModel: embedding.model
       };
     }
@@ -1214,6 +1341,13 @@ async function fetchVectorKnowledge(
       rows: rankedRows,
       message: `pgvector ${rows.length}개 후보 중 ${rankedRows.length}건 사용`,
       searchMode: "vector",
+      debug: createRagDebug({
+        embedding: embeddingDebug,
+        rows: rankedRows,
+        searchMode: "vector",
+        statusMessage: `pgvector ${rows.length}개 후보 중 ${rankedRows.length}건 사용`,
+        vectorCandidateCount: rows.length
+      }),
       embeddingModel: embedding.model
     };
   } catch {
@@ -1222,6 +1356,17 @@ async function fetchVectorKnowledge(
       rows: [],
       message: "embedding 또는 pgvector 검색 실패",
       searchMode: "none",
+      debug: createRagDebug({
+        embedding: createEmbeddingDebug({
+          dimensions: embedding.dimensions,
+          input: buildEmbeddingInput(analysis, searchTerms),
+          model: embedding.model,
+          status: "failed"
+        }),
+        rows: [],
+        searchMode: "none",
+        statusMessage: "embedding 또는 pgvector 검색 실패"
+      }),
       embeddingModel: embedding.model
     };
   }
@@ -1255,7 +1400,15 @@ async function fetchKeywordKnowledge(
           response.status === 406
             ? `${config.schema} schema 미노출`
             : `${config.table} 테이블 확인 필요`,
-        searchMode: "keyword"
+        searchMode: "keyword",
+        debug: createRagDebug({
+          rows: [],
+          searchMode: "keyword",
+          statusMessage:
+            response.status === 406
+              ? `${config.schema} schema 미노출`
+              : `${config.table} 테이블 확인 필요`
+        })
       };
     }
 
@@ -1266,7 +1419,12 @@ async function fetchKeywordKnowledge(
         status: "empty",
         rows: [],
         message: `${config.schema}.${config.table} 데이터 없음`,
-        searchMode: "keyword"
+        searchMode: "keyword",
+        debug: createRagDebug({
+          rows: [],
+          searchMode: "keyword",
+          statusMessage: `${config.schema}.${config.table} 데이터 없음`
+        })
       };
     }
 
@@ -1280,7 +1438,12 @@ async function fetchKeywordKnowledge(
         status: "empty",
         rows: [],
         message: `${config.schema}.${config.table} ${rows.length}개 후보 중 조건 일치 없음`,
-        searchMode: "keyword"
+        searchMode: "keyword",
+        debug: createRagDebug({
+          rows,
+          searchMode: "keyword",
+          statusMessage: `${config.schema}.${config.table} ${rows.length}개 후보 중 조건 일치 없음`
+        })
       };
     }
 
@@ -1288,14 +1451,24 @@ async function fetchKeywordKnowledge(
       status: "ready",
       rows: rankedRows,
       message: `${config.schema}.${config.table} ${rows.length}개 후보 중 ${rankedRows.length}건 사용`,
-      searchMode: "keyword"
+      searchMode: "keyword",
+      debug: createRagDebug({
+        rows: rankedRows,
+        searchMode: "keyword",
+        statusMessage: `${config.schema}.${config.table} ${rows.length}개 후보 중 ${rankedRows.length}건 사용`
+      })
     };
   } catch {
     return {
       status: "unavailable",
       rows: [],
       message: "연결 실패",
-      searchMode: "keyword"
+      searchMode: "keyword",
+      debug: createRagDebug({
+        rows: [],
+        searchMode: "keyword",
+        statusMessage: "연결 실패"
+      })
     };
   }
 }
@@ -1326,20 +1499,45 @@ function buildSearchTerms(analysis: QueryAnalysis) {
   ).slice(0, 10);
 }
 
-function formatKnowledgeContext(knowledge: KnowledgeResult) {
-  if (!knowledge.rows.length) {
+function formatWeatherContext(weather?: TourWeatherResult) {
+  if (!weather || weather.status === "not_requested") return null;
+
+  if (weather.status !== "ready" || !weather.items.length) {
     return [
-      "Supabase 근거 데이터는 아직 사용할 수 없다.",
-      `상태: ${knowledge.message}`
+      "기상청 관광기후지수 데이터:",
+      `상태: ${weather.message}`,
+      "주의: 현재 날씨를 확인했다고 말하지 않는다."
     ].join("\n");
   }
 
   return [
+    "기상청 관광기후지수 데이터:",
+    ...weather.items.map((item, index) => `${index + 1}. ${formatWeatherItem(item)}`),
+    "주의: 관광기후지수는 추천 보조 근거로만 사용하고, 방문 전 실제 기상 상황 확인을 권장한다."
+  ].join("\n");
+}
+
+function formatKnowledgeContext(knowledge: KnowledgeResult, weather?: TourWeatherResult) {
+  const weatherContext = formatWeatherContext(weather);
+
+  if (!knowledge.rows.length) {
+    return [
+      weatherContext,
+      "Supabase 근거 데이터는 아직 사용할 수 없다.",
+      `상태: ${knowledge.message}`
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
+  return [
+    weatherContext,
     "Supabase 근거 데이터:",
     ...knowledge.rows.map((row, index) =>
       [
         `${index + 1}. ${getRowText(row, "title") || "제목 없음"}`,
         getRowText(row, "category") ? `분류: ${getRowText(row, "category")}` : null,
+        `방문 활동 힌트: ${getRowActivityHint(row)}`,
         row.content ? `내용: ${row.content}` : null,
         getRowText(row, "source") ? `출처: ${getRowText(row, "source")}` : null,
         getRowTags(row).length ? `태그: ${getRowTags(row).join(", ")}` : null
@@ -1347,7 +1545,9 @@ function formatKnowledgeContext(knowledge: KnowledgeResult) {
         .filter(Boolean)
         .join("\n")
     )
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function getRowText(row: KnowledgeRow, key: "title" | "category" | "source") {
@@ -1358,6 +1558,48 @@ function getRowText(row: KnowledgeRow, key: "title" | "category" | "source") {
     : typeof metadataValue === "string"
       ? metadataValue
       : null;
+}
+
+function getRowActivityHint(row: KnowledgeRow) {
+  const title = getRowText(row, "title") || "";
+  const category = getRowText(row, "category") || "";
+  const sourceText = getRowText(row, "source") || "";
+  const content = row.content || "";
+  const searchableText = normalizeForSearch([title, category, sourceText, content].join(" "));
+
+  if (includesAny(searchableText, ["트래블라운지", "관광안내", "안내소", "여행안내"])) {
+    return "여행 정보를 확인하고, 동선이나 코스를 정리하며, 현장 안내를 받을 수 있는 곳";
+  }
+
+  if (includesAny(searchableText, ["수목원", "공원", "정원", "호수", "숲", "둘레길", "산책"])) {
+    return "천천히 산책하고 쉬면서 자연 경관을 둘러볼 수 있는 곳";
+  }
+
+  if (includesAny(searchableText, ["박물관", "미술관", "전시", "문화시설", "기념관", "도서관"])) {
+    return "전시, 자료, 문화 콘텐츠를 실내에서 관람하거나 쉬어갈 수 있는 곳";
+  }
+
+  if (includesAny(searchableText, ["시장", "쇼핑", "상점", "백화점", "몰"])) {
+    return "상점 구경, 쇼핑, 먹거리 탐색을 함께 할 수 있는 곳";
+  }
+
+  if (includesAny(searchableText, ["음식점", "식당", "카페", "맛집", "빵", "성심당"])) {
+    return "식사나 간식을 즐기고 잠시 쉬어갈 수 있는 곳";
+  }
+
+  if (includesAny(searchableText, ["축제", "공연", "행사"])) {
+    return "행사 분위기와 공연, 현장 프로그램을 확인해볼 수 있는 곳";
+  }
+
+  if (includesAny(searchableText, ["체험", "레포츠", "액티비티", "놀이", "어린이"])) {
+    return "가벼운 체험이나 가족 단위 활동을 살펴볼 수 있는 곳";
+  }
+
+  if (category) {
+    return `${category} 성격의 장소라 방문 목적에 맞는 관람이나 휴식을 계획해볼 수 있는 곳`;
+  }
+
+  return "방문 목적과 동선을 함께 확인해볼 수 있는 장소";
 }
 
 function getRowTags(row: KnowledgeRow) {
@@ -1375,10 +1617,7 @@ export async function POST(request: Request) {
     const message = typeof body.message === "string" ? body.message.trim() : "";
 
     if (!message) {
-      return NextResponse.json(
-        { error: "message is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "message is required" }, { status: 400 });
     }
 
     const staticSiteFaqResponse = createStaticSiteFaqResponse(message);
@@ -1404,11 +1643,23 @@ export async function POST(request: Request) {
     }
 
     const searchTerms = buildSearchTerms(analysis);
-    const knowledge = await fetchKnowledge(analysis);
+    const [knowledge, weather] = await Promise.all([
+      fetchKnowledge(analysis),
+      fetchTourWeather({
+        location: analysis.location,
+        weatherSensitive: analysis.weather_sensitive
+      })
+    ]);
 
     if (knowledge.status !== "ready") {
       return NextResponse.json(
-        createNoKnowledgeResponse({ analysis, knowledge, searchTerms })
+        createNoKnowledgeResponse({
+          analysis,
+          inputMessage: message,
+          knowledge,
+          searchTerms,
+          weather
+        })
       );
     }
 
@@ -1425,7 +1676,7 @@ export async function POST(request: Request) {
         model,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "system", content: formatKnowledgeContext(knowledge) },
+          { role: "system", content: formatKnowledgeContext(knowledge, weather) },
           { role: "user", content: message }
         ],
         thinking: { type: "disabled" },
@@ -1460,9 +1711,11 @@ export async function POST(request: Request) {
         message: answer,
         model: data.model || model,
         usage: data.usage,
+        inputMessage: message,
         knowledge,
         analysis,
-        searchTerms
+        searchTerms,
+        weather
       })
     );
   } catch (error) {
