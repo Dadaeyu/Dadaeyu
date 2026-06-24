@@ -2,11 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
-import { PLACES, PLACE_COLORS, type Place } from "@/data/placesData";
 
-// ── Minimal Kakao Maps type declarations ───────────────────
+// ── Kakao Maps type declarations ───────────────────────────
 interface KakaoLatLng { getLat(): number; getLng(): number; }
-interface KakaoMapInstance { setLevel(n: number): void; getLevel(): number; addControl(ctrl: object, pos: number): void; }
+interface KakaoMapInstance { setLevel(n: number, options?: { animate?: boolean; anchor?: KakaoLatLng }): void; getLevel(): number; addControl(ctrl: object, pos: number): void; panTo(latlng: KakaoLatLng): void; setCenter(latlng: KakaoLatLng): void; }
 interface KakaoOverlay { setMap(m: KakaoMapInstance | null): void; }
 
 declare global {
@@ -38,85 +37,47 @@ declare global {
   }
 }
 
-// ── Constants ──────────────────────────────────────────────
-const MAP_CENTER = { lat: 36.387, lng: 127.443 };
-const MAP_LEVEL = 8;
+// ── 공개 상수 ──────────────────────────────────────────────
+export const MAP_CENTER = { lat: 36.387, lng: 127.443 };
+export const MAP_LEVEL = 8;
 export const MY_LOCATION = { lat: 36.3511, lng: 127.3786 };
 
-// ── Marker colors cycling through PLACES ──────────────────
-const MARKER_COLORS = PLACES.map(p => PLACE_COLORS[p.colorKey].color);
-
-// ── Search place type (searchKeyword2 API) ─────────────────
-export interface SearchPlace {
+// ── 범용 마커 타입 ─────────────────────────────────────────
+export interface MapMarker {
   id: string;
-  name: string;
   lat: number;
   lng: number;
-  image: string;
+  color: string;
 }
-
-// ── Tourism place type - on hold ───────────────────────────
-/* export interface TourismPlace {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  addr: string;
-  typeId: string;
-} */
 
 // ── Props ──────────────────────────────────────────────────
 interface Props {
-  places: Place[];
-  selectedId: number | null;
-  navTarget: Place | null;
-  onSelectPlace: (id: number) => void;
-  onDeselect: () => void;
-  // tourismPlaces?: TourismPlace[];
-  searchPlaces?: SearchPlace[];
-  selectedSearchId?: string | null;
-  onSelectSearchPlace?: (id: string) => void;
+  markers?: MapMarker[];
+  selectedId?: string | null;
+  onSelect?: (id: string) => void;
+  onDeselect?: () => void;
+  navTarget?: { lat: number; lng: number } | null;
+  center?: { lat: number; lng: number };
+  level?: number;
 }
 
-// ── PLACES pin renderer ────────────────────────────────────
-function renderPin(container: HTMLDivElement, place: Place, selected: boolean, isNav: boolean) {
+// ── 핀 렌더러 ──────────────────────────────────────────────
+function renderPin(el: HTMLDivElement, color: string, selected: boolean) {
   const size = selected ? 36 : 28;
-  const triSize = Math.round(size / 3);
-  const dotSize = Math.round(size / 3.5);
-  const ring = selected
-    ? `box-shadow:0 0 0 6px ${PLACE_COLORS[place.colorKey].color}30,0 2px 8px rgba(0,0,0,0.35);`
-    : isNav
-      ? "box-shadow:0 0 0 6px #2563eb30,0 2px 8px rgba(0,0,0,0.35);"
-      : "box-shadow:0 2px 6px rgba(0,0,0,0.28);";
-  container.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;cursor:pointer;${selected || isNav ? "transform:scale(1.15);" : ""}transition:transform 0.15s;">
-      <div style="width:${size}px;height:${size}px;border-radius:50%;background:${PLACE_COLORS[place.colorKey].color};border:3px solid white;${ring}display:flex;align-items:center;justify-content:center;">
-        <div style="width:${dotSize}px;height:${dotSize}px;background:white;border-radius:50%;"></div>
-      </div>
-      <div style="width:0;height:0;border-left:${triSize}px solid transparent;border-right:${triSize}px solid transparent;border-top:${triSize}px solid ${PLACE_COLORS[place.colorKey].color};margin-top:-1px;"></div>
-    </div>
-  `;
-}
-
-// ── Search pin renderer (cycles through MARKER_COLORS) ─────
-function renderSearchPin(container: HTMLDivElement, color: string, selected: boolean) {
-  const size = selected ? 36 : 28;
-  const triSize = Math.round(size / 3);
-  const dotSize = Math.round(size / 3.5);
+  const tri = Math.round(size / 3);
+  const dot = Math.round(size / 3.5);
   const ring = selected
     ? `box-shadow:0 0 0 6px ${color}30,0 2px 8px rgba(0,0,0,0.35);`
     : "box-shadow:0 2px 6px rgba(0,0,0,0.28);";
-  container.innerHTML = `
+  el.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;cursor:pointer;${selected ? "transform:scale(1.15);" : ""}transition:transform 0.15s;">
       <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid white;${ring}display:flex;align-items:center;justify-content:center;">
-        <div style="width:${dotSize}px;height:${dotSize}px;background:white;border-radius:50%;"></div>
+        <div style="width:${dot}px;height:${dot}px;background:white;border-radius:50%;"></div>
       </div>
-      <div style="width:0;height:0;border-left:${triSize}px solid transparent;border-right:${triSize}px solid transparent;border-top:${triSize}px solid ${color};margin-top:-1px;"></div>
-    </div>
-  `;
+      <div style="width:0;height:0;border-left:${tri}px solid transparent;border-right:${tri}px solid transparent;border-top:${tri}px solid ${color};margin-top:-1px;"></div>
+    </div>`;
 }
 
-// ── My-location overlay content ────────────────────────────
 function createMyLocationEl(): HTMLDivElement {
   const el = document.createElement("div");
   el.innerHTML = `
@@ -127,56 +88,35 @@ function createMyLocationEl(): HTMLDivElement {
         <div style="width:12px;height:12px;border-radius:50%;background:#2563eb;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);position:relative;z-index:1;"></div>
       </div>
       <div style="font-size:10px;color:#1d4ed8;font-weight:600;margin-top:1px;white-space:nowrap;background:rgba(255,255,255,0.85);padding:1px 4px;border-radius:3px;">현재 위치</div>
-    </div>
-  `;
+    </div>`;
   return el;
 }
 
-/* Tourism pin renderer - on hold
-function createTourismPinEl(name: string): HTMLDivElement {
-  const el = document.createElement("div");
-  el.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;cursor:default;" title="${name.replace(/"/g, "&quot;")}">
-      <div style="width:16px;height:16px;border-radius:50%;background:#0d9488;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25);"></div>
-      <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4px solid #0d9488;margin-top:-1px;"></div>
-    </div>
-  `;
-  return el;
-}
-*/
-
+// ── 컴포넌트 ───────────────────────────────────────────────
 export default function KakaoMap({
-  places,
-  selectedId,
-  navTarget,
-  onSelectPlace: _onSelectPlace,
+  markers = [],
+  selectedId = null,
+  onSelect,
   onDeselect,
-  // tourismPlaces = [],
-  searchPlaces = [],
-  selectedSearchId,
-  onSelectSearchPlace,
+  navTarget = null,
+  center = MAP_CENTER,
+  level = MAP_LEVEL,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<KakaoMapInstance | null>(null);
-  const markerElemsRef = useRef(new Map<number, HTMLDivElement>());
+  const overlaysRef = useRef<KakaoOverlay[]>([]);
+  const markerElemsRef = useRef(new Map<string, HTMLDivElement>());
   const polylineRef = useRef<KakaoOverlay | null>(null);
-  /* const tourismOverlaysRef = useRef<KakaoOverlay[]>([]); */
-  const searchOverlaysRef = useRef<KakaoOverlay[]>([]);
-  const searchMarkerElemsRef = useRef(new Map<string, HTMLDivElement>());
   const [mapInitCount, setMapInitCount] = useState(0);
 
   const initMap = () => {
     if (!containerRef.current || !window.kakao?.maps) return;
-
-    /* Tourism overlays cleanup - on hold
-    tourismOverlaysRef.current.forEach(o => o.setMap(null));
-    tourismOverlaysRef.current = []; */
-
     const K = window.kakao.maps;
-    const center = new K.LatLng(MAP_CENTER.lat, MAP_CENTER.lng);
-    const map = new K.Map(containerRef.current, { center, level: MAP_LEVEL });
+    const map = new K.Map(containerRef.current, {
+      center: new K.LatLng(center.lat, center.lng),
+      level,
+    });
     mapRef.current = map;
-
     map.addControl(new K.ZoomControl(), K.ControlPosition.TOPRIGHT);
 
     const myOverlay = new K.CustomOverlay({
@@ -188,103 +128,69 @@ export default function KakaoMap({
     });
     myOverlay.setMap(map);
 
-    /* 기존 
-    places.forEach(place => {
-      const el = document.createElement("div");
-      markerElemsRef.current.set(place.id, el);
-      renderPin(el, place, false, false);
-
-      const overlay = new K.CustomOverlay({
-        position: new K.LatLng(place.lat, place.lng),
-        content: el,
-        yAnchor: 1,
-        xAnchor: 0.5,
-        zIndex: 3,
-      });
-      overlay.setMap(map);
-
-      el.addEventListener("click", e => {
-        e.stopPropagation();
-        onSelectPlace(place.id);
-      });
-    }); */
-
-    K.event.addListener(map, "click", onDeselect);
+    K.event.addListener(map, "click", () => onDeselect?.());
     setMapInitCount(c => c + 1);
   };
 
-  // Update PLACES pin visuals on selection/nav change (no-op while markers are commented out)
-  useEffect(() => {
-    places.forEach(place => {
-      const el = markerElemsRef.current.get(place.id);
-      if (el) renderPin(el, place, place.id === selectedId, place.id === navTarget?.id);
-    });
-  }, [selectedId, navTarget, places]);
-
-  // Add/update search markers whenever searchPlaces or selectedSearchId changes
+  // 마커 동기화
   useEffect(() => {
     if (!mapRef.current || !window.kakao?.maps) return;
     const K = window.kakao.maps;
 
-    searchOverlaysRef.current.forEach(o => o.setMap(null));
-    searchOverlaysRef.current = [];
-    searchMarkerElemsRef.current.clear();
+    overlaysRef.current.forEach(o => o.setMap(null));
+    overlaysRef.current = [];
+    markerElemsRef.current.clear();
 
-    searchPlaces.forEach((sp, idx) => {
-      const color = MARKER_COLORS[idx % MARKER_COLORS.length];
+    markers.forEach(marker => {
       const el = document.createElement("div");
-      searchMarkerElemsRef.current.set(sp.id, el);
-      renderSearchPin(el, color, sp.id === selectedSearchId);
+      markerElemsRef.current.set(marker.id, el);
+      renderPin(el, marker.color, marker.id === selectedId);
 
       const overlay = new K.CustomOverlay({
-        position: new K.LatLng(sp.lat, sp.lng),
+        position: new K.LatLng(marker.lat, marker.lng),
         content: el,
         yAnchor: 1,
         xAnchor: 0.5,
         zIndex: 3,
       });
       overlay.setMap(mapRef.current!);
-      searchOverlaysRef.current.push(overlay);
+      overlaysRef.current.push(overlay);
 
       el.addEventListener("click", e => {
         e.stopPropagation();
-        onSelectSearchPlace?.(sp.id);
+        onSelect?.(marker.id);
       });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapInitCount, searchPlaces, selectedSearchId]);
+  }, [mapInitCount, markers, selectedId]);
 
-  /* Tourism markers useEffect - on hold
+  // 선택 상태 시각 업데이트
   useEffect(() => {
-    if (!mapRef.current || !window.kakao?.maps) return;
-    const K = window.kakao.maps;
-
-    tourismOverlaysRef.current.forEach(o => o.setMap(null));
-    tourismOverlaysRef.current = [];
-
-    tourismPlaces.forEach(tp => {
-      const el = createTourismPinEl(tp.name);
-      const overlay = new K.CustomOverlay({
-        position: new K.LatLng(tp.lat, tp.lng),
-        content: el,
-        yAnchor: 1,
-        xAnchor: 0.5,
-        zIndex: 2,
-      });
-      overlay.setMap(mapRef.current!);
-      tourismOverlaysRef.current.push(overlay);
+    markers.forEach(marker => {
+      const el = markerElemsRef.current.get(marker.id);
+      if (el) renderPin(el, marker.color, marker.id === selectedId);
     });
-  }, [mapInitCount, tourismPlaces]); */
+  }, [selectedId, markers]);
 
-  // Draw/remove route polyline on navTarget change
+  // [줌-투-마커] selectedId 변경 시 해당 마커로 줌인 — 필요 없으면 이 useEffect 삭제
+  useEffect(() => {
+    if (!selectedId || !mapRef.current || !window.kakao?.maps) return;
+    const marker = markers.find(m => m.id === selectedId);
+    if (!marker) return;
+    const K = window.kakao.maps;
+    mapRef.current.setCenter(new K.LatLng(marker.lat, marker.lng));
+    mapRef.current.setLevel(5, { animate: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, mapInitCount]);
+
+  // 경로 폴리라인
   useEffect(() => {
     if (!mapRef.current || !window.kakao?.maps) return;
     const K = window.kakao.maps;
 
-    if (polylineRef.current) {
-      polylineRef.current.setMap(null);
-      polylineRef.current = null;
-    }
+    polylineRef.current?.setMap(null);
+    polylineRef.current = null;
+
     if (navTarget) {
       const line = new K.Polyline({
         path: [
