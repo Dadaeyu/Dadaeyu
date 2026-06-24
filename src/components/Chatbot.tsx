@@ -1,119 +1,328 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { X, Send, Bot } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { Bot, CheckCircle2, MapPin, Send, Sparkles, X } from "lucide-react";
 
-interface Message {
-  id: number;
-  role: "bot" | "user";
-  text: string;
-}
+type Confidence = "high" | "medium" | "low";
 
-const INITIAL_MESSAGES: Message[] = [
-  { id: 0, role: "bot", text: "안녕하세요! 대전 무장애 여행 도우미입니다 😊\n궁금한 여행지나 코스를 알려드릴게요!" },
-];
-
-const BOT_REPLIES: Record<string, string> = {
-  default: "죄송해요, 아직 해당 질문에 대한 답변을 준비 중이에요. 다른 질문을 해주세요!",
+type ChatResponse = {
+  message: string;
+  card?: {
+    title: string;
+    rows: string[];
+    source: string;
+  };
+  chips: string[];
+  confidence: Confidence;
+  sources: string[];
+  debug?: {
+    analysis: QueryAnalysis;
+    searchTerms: string[];
+  };
 };
 
-function getBotReply(text: string): string {
-  const t = text.trim();
-  if (t.includes("성심당")) return "성심당은 대전의 대표 빵집으로, 휠체어 접근이 가능한 1층 매장이 있습니다. 본점은 중구 은행동에 위치해요!";
-  if (t.includes("엑스포") || t.includes("과학공원")) return "대전 엑스포 과학공원은 무장애 탐방로와 전동 휠체어 대여 서비스를 제공합니다. 입장료는 성인 2,000원이에요.";
-  if (t.includes("수목원") || t.includes("한밭")) return "한밭수목원은 평탄한 산책로가 잘 갖춰져 있어 휠체어·유모차 이용이 편리합니다. 입장 무료예요!";
-  if (t.includes("코스") || t.includes("추천")) return "하루 코스 추천드려요: 성심당 → 한밭수목원 → 엑스포 과학공원 순서로 이동하면 이동 거리도 짧고 무장애 시설이 잘 되어 있어요.";
-  if (t.includes("교통") || t.includes("버스") || t.includes("지하철")) return "대전 지하철 1호선은 전 역사에 엘리베이터가 설치되어 있습니다. 저상버스 노선 정보는 대전 교통정보 앱에서 확인하세요!";
-  if (t.includes("화장실") || t.includes("장애인")) return "대전 주요 관광지 대부분 장애인 화장실이 설치되어 있어요. 구체적인 위치는 지도 메뉴에서 확인하실 수 있습니다.";
-  return BOT_REPLIES.default;
-}
+type QueryAnalysis = {
+  in_scope: boolean;
+  scope_reason: string;
+  intent: "recommend_place" | "check_accessibility" | "ask_info";
+  accessibility_needs: string[];
+  weather_sensitive: boolean;
+  place_name: string | null;
+  location: string | null;
+  keywords: string[];
+};
+
+type Message =
+  | {
+      id: number;
+      role: "assistant";
+      content: ChatResponse;
+    }
+  | {
+      id: number;
+      role: "user";
+      text: string;
+    };
+
+const INITIAL_RESPONSE: ChatResponse = {
+  message:
+    "안녕하세요! 대전 무장애 여행 도우미 다유예요. 궁금한 여행지나 코스를 알려주시면 방문 전 확인할 접근성 정보를 정리해드릴게요.",
+  chips: [
+    "한밭수목원 휠체어 가능해?",
+    "성심당 휠체어로 갈 수 있어?",
+    "아기랑 같이 갈만한 곳 추천해줘"
+  ],
+  confidence: "high",
+  sources: ["MVP 시나리오"]
+};
+
+const confidenceLabels: Record<Confidence, string> = {
+  high: "근거 충분",
+  medium: "부분 확인",
+  low: "확인 필요"
+};
+
+const confidenceTone: Record<Confidence, string> = {
+  high: "border-brand-200 bg-brand-50 text-brand-700",
+  medium: "border-gold-200 bg-gold-50 text-gold-700",
+  low: "border-red-200 bg-red-50 text-red-700"
+};
 
 interface Props {
   onClose: () => void;
 }
 
 export default function Chatbot({ onClose }: Props) {
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([
+    { id: 1, role: "assistant", content: INITIAL_RESPONSE }
+  ]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const nextIdRef = useRef(1);
+
+  function nextId() {
+    nextIdRef.current += 1;
+    return nextIdRef.current;
+  }
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [messages, isLoading]);
 
-  const send = () => {
-    const text = input.trim();
-    if (!text) return;
+  async function sendMessage(message: string) {
+    const text = message.trim();
+    if (!text || isLoading) return;
 
-    const userMsg: Message = { id: Date.now(), role: "user", text };
-    const botMsg: Message = { id: Date.now() + 1, role: "bot", text: getBotReply(text) };
-
-    setMessages((prev) => [...prev, userMsg, botMsg]);
+    setMessages((current) => [...current, { id: nextId(), role: "user", text }]);
     setInput("");
-  };
+    setIsLoading(true);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text })
+      });
+
+      if (!response.ok) {
+        throw new Error("chat request failed");
+      }
+
+      const data = (await response.json()) as ChatResponse;
+      setMessages((current) => [...current, { id: nextId(), role: "assistant", content: data }]);
+    } catch {
+      setMessages((current) => [
+        ...current,
+        {
+          id: nextId(),
+          role: "assistant",
+          content: {
+            message: "응답을 만드는 중 문제가 생겼어요. 잠시 뒤 다시 질문해 주세요.",
+            chips: ["한밭수목원 휠체어 가능해?", "성심당 갈 수 있어?"],
+            confidence: "low",
+            sources: []
+          }
+        }
+      ]);
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void sendMessage(input);
+  }
 
   return (
-    <div className="fixed bottom-24 md:bottom-24 right-4 z-50 w-80 flex flex-col rounded-2xl shadow-2xl border border-gray-200 bg-white overflow-hidden"
-      style={{ height: "420px" }}
+    <section
+      className="fixed inset-x-3 top-20 bottom-20 z-[70] grid grid-rows-[96px_minmax(0,1fr)_78px] overflow-hidden rounded-lg border border-white/60 bg-white shadow-2xl sm:inset-x-auto sm:top-auto sm:right-5 sm:bottom-24 sm:h-[min(720px,calc(100dvh-7.5rem))] sm:min-h-[560px] sm:w-[min(calc(100vw-2.5rem),460px)]"
+      aria-label="다유 챗봇"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-brand-600 text-white shrink-0">
-        <div className="flex items-center gap-2">
-          <Bot className="w-5 h-5" />
-          <span className="font-semibold text-sm">무장애 여행 도우미</span>
-        </div>
-        <button
-          onClick={onClose}
-          className="p-1 rounded-lg hover:bg-brand-700 transition-colors"
-          aria-label="채팅창 닫기"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 bg-gray-50">
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`max-w-[78%] px-3 py-2 rounded-2xl text-sm whitespace-pre-line leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-brand-600 text-white rounded-br-sm"
-                  : "bg-white text-gray-800 border border-gray-200 rounded-bl-sm"
-              }`}
-            >
-              {msg.text}
+      <header className="from-hero-sky-from to-hero-sky-to text-ink relative overflow-hidden bg-gradient-to-b px-5 py-4">
+        <div className="pointer-events-none absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/40 blur-2xl" />
+        <div className="bg-mint-soft/30 pointer-events-none absolute -bottom-12 left-8 h-28 w-28 rounded-full blur-2xl" />
+        <div className="relative flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-white/60 ring-1 ring-white/70">
+              <Bot className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <span className="text-ink mb-1 inline-flex items-center gap-1 rounded-full bg-white/60 px-2 py-0.5 text-[11px] font-bold ring-1 ring-white/70">
+                <Sparkles className="h-3 w-3" aria-hidden="true" />
+                다유
+              </span>
+              <strong className="block text-base leading-tight font-extrabold">
+                무장애 여행 상담
+              </strong>
+              <span className="text-slate mt-1 flex items-center gap-1.5 text-xs">
+                <span className="bg-mint-deep h-1.5 w-1.5 rounded-full" />
+                대전 접근성 정보 확인 중
+              </span>
             </div>
           </div>
-        ))}
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate hover:text-ink grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors hover:bg-white/60"
+            aria-label="채팅창 닫기"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+
+      <div
+        className="from-brand-50/50 via-surface-soft min-h-0 space-y-4 overflow-y-auto bg-gradient-to-b to-white px-4 py-4 sm:px-5"
+        aria-live="polite"
+      >
+        {messages.map((message) =>
+          message.role === "user" ? (
+            <div key={message.id} className="flex justify-end">
+              <div className="bg-mint-soft/40 text-ink max-w-[82%] rounded-lg rounded-br-md px-4 py-3 text-sm leading-relaxed font-medium">
+                {message.text}
+              </div>
+            </div>
+          ) : (
+            <AssistantMessage
+              key={message.id}
+              response={message.content}
+              disabled={isLoading}
+              onChipClick={sendMessage}
+            />
+          )
+        )}
+        {isLoading ? (
+          <div className="flex items-end gap-2.5">
+            <div className="bg-mint-soft text-ink grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xs font-bold">
+              다
+            </div>
+            <div className="border-hairline flex gap-1 rounded-lg rounded-bl-md border bg-white px-4 py-3">
+              <span className="bg-brand-500 h-2 w-2 animate-bounce rounded-full [animation-delay:-0.2s]" />
+              <span className="bg-brand-500 h-2 w-2 animate-bounce rounded-full [animation-delay:-0.1s]" />
+              <span className="bg-brand-500 h-2 w-2 animate-bounce rounded-full" />
+            </div>
+          </div>
+        ) : null}
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-200 bg-white shrink-0">
+      <form
+        className="border-hairline flex items-center gap-2.5 border-t bg-white/95 px-4 py-3 backdrop-blur sm:px-5"
+        onSubmit={handleSubmit}
+      >
         <input
           type="text"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
+          onChange={(event) => setInput(event.target.value)}
           placeholder="메시지를 입력하세요..."
-          className="flex-1 text-sm px-3 py-2 rounded-xl border border-gray-200 outline-none focus:border-brand-400 transition-colors"
+          aria-label="질문 입력"
+          disabled={isLoading}
+          className="border-hairline bg-surface-soft placeholder:text-stone focus:border-brand-400 min-w-0 flex-1 rounded-lg border px-4 py-3 text-sm transition-colors outline-none focus:bg-white disabled:opacity-60"
         />
         <button
-          onClick={send}
-          disabled={!input.trim()}
-          className="p-2 bg-brand-600 text-white rounded-xl hover:bg-brand-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          type="submit"
+          disabled={isLoading || !input.trim()}
+          className="bg-mint text-ink hover:bg-mint-deep grid h-12 w-12 shrink-0 place-items-center rounded-full shadow-lg transition-all hover:scale-105 disabled:scale-100 disabled:opacity-40"
           aria-label="전송"
         >
-          <Send className="w-4 h-4" />
+          <Send className="h-5 w-5" aria-hidden="true" />
         </button>
+      </form>
+    </section>
+  );
+}
+
+function AssistantMessage({
+  response,
+  disabled,
+  onChipClick
+}: {
+  response: ChatResponse;
+  disabled: boolean;
+  onChipClick: (message: string) => Promise<void>;
+}) {
+  return (
+    <div className="flex items-end gap-2.5">
+      <div className="bg-mint-soft text-ink grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xs font-bold">
+        다
+      </div>
+      <div className="border-hairline text-ink max-w-[calc(100%-3rem)] rounded-lg rounded-bl-md border bg-white px-4 py-3 text-sm leading-relaxed">
+        <span
+          className={`mb-2 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${confidenceTone[response.confidence]}`}
+        >
+          <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+          {confidenceLabels[response.confidence]}
+        </span>
+        <p className="text-ink text-[15px] leading-7 whitespace-pre-line">{response.message}</p>
+
+        {response.debug ? (
+          <div className="border-navy-100 bg-navy-50/70 text-ink mt-4 rounded-lg border p-3 text-xs">
+            <strong className="text-navy-700 block text-xs font-extrabold">질문분류 JSON</strong>
+            <pre className="text-ink ring-navy-100 mt-3 max-h-60 overflow-auto rounded-lg bg-white p-3 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap ring-1">
+              {JSON.stringify(response.debug.analysis, null, 2)}
+            </pre>
+            {response.debug.searchTerms.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {response.debug.searchTerms.map((term) => (
+                  <span
+                    key={term}
+                    className="text-navy-600 ring-navy-100 rounded-full bg-white px-2 py-1 text-[11px] font-semibold ring-1"
+                  >
+                    {term}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {response.card ? (
+          <div className="border-brand-100 from-brand-50 mt-4 rounded-lg border bg-gradient-to-br to-white p-4">
+            <strong className="text-brand-800 flex items-center gap-2 text-sm">
+              <MapPin className="h-4 w-4" aria-hidden="true" />
+              {response.card.title}
+            </strong>
+            <ul className="text-slate mt-3 list-disc space-y-1.5 pl-4">
+              {response.card.rows.map((row) => (
+                <li key={row}>{row}</li>
+              ))}
+            </ul>
+            <span className="border-brand-200 text-steel mt-3 block border-t border-dashed pt-3 text-xs leading-relaxed">
+              {response.card.source}
+            </span>
+          </div>
+        ) : null}
+
+        {response.sources.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {response.sources.map((source) => (
+              <span
+                key={source}
+                className="bg-navy-50 text-navy-600 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+              >
+                {source}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {response.chips.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {response.chips.map((chip) => (
+              <button
+                type="button"
+                key={chip}
+                disabled={disabled}
+                onClick={() => void onChipClick(chip)}
+                className="border-brand-200 text-brand-700 hover:border-brand-400 hover:bg-brand-50 rounded-full border bg-white px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );
