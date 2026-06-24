@@ -2,41 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
-import { PLACES, PLACE_COLORS, type Place } from "@/data/placesData";
-
-// ── Minimal Kakao Maps type declarations ───────────────────
-interface KakaoLatLng { getLat(): number; getLng(): number; }
-interface KakaoMapInstance { setLevel(n: number): void; getLevel(): number; addControl(ctrl: object, pos: number): void; }
-interface KakaoOverlay { setMap(m: KakaoMapInstance | null): void; }
-
-declare global {
-  interface Window {
-    kakao: {
-      maps: {
-        load(fn: () => void): void;
-        Map: new (el: HTMLElement, opts: { center: KakaoLatLng; level: number }) => KakaoMapInstance;
-        LatLng: new (lat: number, lng: number) => KakaoLatLng;
-        CustomOverlay: new (opts: {
-          position: KakaoLatLng;
-          content: HTMLElement;
-          yAnchor?: number;
-          xAnchor?: number;
-          zIndex?: number;
-        }) => KakaoOverlay;
-        Polyline: new (opts: {
-          path: KakaoLatLng[];
-          strokeWeight?: number;
-          strokeColor?: string;
-          strokeOpacity?: number;
-          strokeStyle?: string;
-        }) => KakaoOverlay;
-        ZoomControl: new () => object;
-        ControlPosition: { TOPRIGHT: number };
-        event: { addListener(t: object, type: string, fn: () => void): void };
-      };
-    };
-  }
-}
+import { PLACES, type Place } from "@/data/placesData";
 
 // ── Constants ──────────────────────────────────────────────
 const MAP_CENTER = { lat: 36.387, lng: 127.443 };
@@ -44,7 +10,7 @@ const MAP_LEVEL = 8;
 export const MY_LOCATION = { lat: 36.3511, lng: 127.3786 };
 
 // ── Marker colors cycling through PLACES ──────────────────
-const MARKER_COLORS = PLACES.map(p => PLACE_COLORS[p.colorKey].color);
+const MARKER_COLORS = PLACES.map((p) => p.color);
 
 // ── Search place type (searchKeyword2 API) ─────────────────
 export interface SearchPlace {
@@ -83,17 +49,18 @@ function renderPin(container: HTMLDivElement, place: Place, selected: boolean, i
   const size = selected ? 36 : 28;
   const triSize = Math.round(size / 3);
   const dotSize = Math.round(size / 3.5);
+  const pinColor = place.color;
   const ring = selected
-    ? `box-shadow:0 0 0 6px ${PLACE_COLORS[place.colorKey].color}30,0 2px 8px rgba(0,0,0,0.35);`
+    ? `box-shadow:0 0 0 6px ${pinColor}30,0 2px 8px rgba(0,0,0,0.35);`
     : isNav
       ? "box-shadow:0 0 0 6px #2563eb30,0 2px 8px rgba(0,0,0,0.35);"
       : "box-shadow:0 2px 6px rgba(0,0,0,0.28);";
   container.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;cursor:pointer;${selected || isNav ? "transform:scale(1.15);" : ""}transition:transform 0.15s;">
-      <div style="width:${size}px;height:${size}px;border-radius:50%;background:${PLACE_COLORS[place.colorKey].color};border:3px solid white;${ring}display:flex;align-items:center;justify-content:center;">
+      <div style="width:${size}px;height:${size}px;border-radius:50%;background:${pinColor};border:3px solid white;${ring}display:flex;align-items:center;justify-content:center;">
         <div style="width:${dotSize}px;height:${dotSize}px;background:white;border-radius:50%;"></div>
       </div>
-      <div style="width:0;height:0;border-left:${triSize}px solid transparent;border-right:${triSize}px solid transparent;border-top:${triSize}px solid ${PLACE_COLORS[place.colorKey].color};margin-top:-1px;"></div>
+      <div style="width:0;height:0;border-left:${triSize}px solid transparent;border-right:${triSize}px solid transparent;border-top:${triSize}px solid ${pinColor};margin-top:-1px;"></div>
     </div>
   `;
 }
@@ -157,11 +124,11 @@ export default function KakaoMap({
   onSelectSearchPlace,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<KakaoMapInstance | null>(null);
+  const mapRef = useRef<kakao.maps.Map | null>(null);
   const markerElemsRef = useRef(new Map<number, HTMLDivElement>());
-  const polylineRef = useRef<KakaoOverlay | null>(null);
+  const polylineRef = useRef<kakao.maps.Polyline | kakao.maps.CustomOverlay | null>(null);
   /* const tourismOverlaysRef = useRef<KakaoOverlay[]>([]); */
-  const searchOverlaysRef = useRef<KakaoOverlay[]>([]);
+  const searchOverlaysRef = useRef<kakao.maps.CustomOverlay[]>([]);
   const searchMarkerElemsRef = useRef(new Map<string, HTMLDivElement>());
   const [mapInitCount, setMapInitCount] = useState(0);
 
@@ -304,7 +271,7 @@ export default function KakaoMap({
   return (
     <>
       <Script
-        src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY}&autoload=false`}
+        src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY}&autoload=false`}
         strategy="afterInteractive"
         onReady={() => window.kakao.maps.load(initMap)}
       />

@@ -2,14 +2,27 @@
   "name": "Dadaeyu",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:setup": "node scripts/setup-db.mjs",
+    "db:seed": "node scripts/seed-supabase.mjs",
+    "db:test": "node scripts/test-supabase.mjs",
+    "db:auth:phase1": "node scripts/apply-auth-phase.mjs 1",
+    "db:auth:phase2": "node scripts/apply-auth-phase.mjs 2",
+    "db:auth:phase3": "node scripts/apply-auth-phase.mjs 3",
+    "db:auth:all": "node scripts/apply-auth-phase.mjs all",
+    "db:verify-auth": "node scripts/verify-auth-phase.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "embla-carousel-react": "^8.6.0",

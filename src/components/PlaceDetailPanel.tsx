@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Star, Heart, Route, Navigation, Flag, MessageCircle, Plus, Check } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { PLACE_DETAILS, ACCESSIBILITY_LABELS, type Place } from "@/data/placesData";
+import { useRouter, usePathname } from "next/navigation";
+import { ACCESSIBILITY_LABELS, type Place } from "@/data/placesData";
 import { useCourseContext } from "@/context/CourseContext";
+import { usePlaces } from "@/context/PlacesContext";
+import { useOptionalAuth } from "@/context/AuthContext";
+import { isFavorited, toggleFavorite } from "@/lib/supabase/favorites";
+import { createPlaceReport } from "@/lib/supabase/reports";
 
 export default function PlaceDetailPanel({
   place,
@@ -17,11 +21,66 @@ export default function PlaceDetailPanel({
 }) {
   const [favorited, setFavorited] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [reportContent, setReportContent] = useState("");
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const detail = PLACE_DETAILS[place.id];
+  const { placeDetails } = usePlaces();
+  const auth = useOptionalAuth();
+  const pathname = usePathname();
+  const detail = placeDetails[place.id] ?? {
+    description: "", tags: [], address: "", hours: "", phone: "", reviews: [],
+  };
   const { myCourses, addPlaceToCourse } = useCourseContext();
   const router = useRouter();
+
+  useEffect(() => {
+    if (!auth?.user) {
+      setFavorited(false);
+      return;
+    }
+    isFavorited(auth.user.id, "place", place.id)
+      .then(setFavorited)
+      .catch(() => setFavorited(false));
+  }, [auth?.user, place.id]);
+
+  const handleFavorite = async () => {
+    if (!auth?.user) {
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    try {
+      const added = await toggleFavorite(auth.user.id, "place", place.id);
+      setFavorited(added);
+      setToast(added ? "즐겨찾기에 추가했어요" : "즐겨찾기를 해제했어요");
+      setTimeout(() => setToast(null), 2500);
+    } catch {
+      setToast("즐겨찾기 처리에 실패했어요");
+      setTimeout(() => setToast(null), 2500);
+    }
+  };
+
+  const handleSubmitReport = async () => {
+    if (!auth?.user) {
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    if (!reportContent.trim()) return;
+    try {
+      await createPlaceReport({
+        user_id: auth.user.id,
+        place_id: place.id,
+        target_name: place.name,
+        content: reportContent.trim(),
+      });
+      setReportContent("");
+      setShowReport(false);
+      setToast("제보가 접수됐어요");
+      setTimeout(() => setToast(null), 2500);
+    } catch {
+      setToast("제보 접수에 실패했어요");
+      setTimeout(() => setToast(null), 2500);
+    }
+  };
 
   const handleAddToCourse = (courseId: number, courseTitle: string) => {
     addPlaceToCourse(courseId, place.name);
@@ -82,7 +141,7 @@ export default function PlaceDetailPanel({
 
         {/* Action buttons */}
         <div className="grid grid-cols-3 gap-2">
-          <button onClick={() => setFavorited(v => !v)}
+          <button type="button" onClick={handleFavorite}
             className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-xs font-medium transition-colors ${favorited ? "bg-red-50 border-red-300 text-red-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
             <Heart className={`w-4 h-4 ${favorited ? "fill-red-500 text-red-500" : ""}`} />
             즐겨찾기
@@ -201,14 +260,16 @@ export default function PlaceDetailPanel({
             <div className="border border-gray-200 rounded-xl p-3 space-y-2">
               <p className="text-xs font-semibold text-gray-700">정보 제보</p>
               <textarea
+                value={reportContent}
+                onChange={(e) => setReportContent(e.target.value)}
                 placeholder="잘못된 정보나 개선 사항을 알려주세요..."
                 className="w-full text-xs border border-gray-200 rounded-lg p-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500"
                 rows={3}
               />
               <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowReport(false)}
+                <button type="button" onClick={() => setShowReport(false)}
                   className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 border border-gray-200 rounded-lg">취소</button>
-                <button onClick={() => setShowReport(false)}
+                <button type="button" onClick={handleSubmitReport}
                   className="text-xs text-white bg-brand-600 hover:bg-brand-700 px-3 py-1.5 rounded-lg transition-colors">제출</button>
               </div>
             </div>

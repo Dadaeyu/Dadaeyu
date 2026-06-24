@@ -53,7 +53,7 @@ export default function Home() {
           <p className="text-white/80 mb-5 text-sm md:text-base">장애물 없이 즐기는 무장애 여행 가이드, 다대유</p>
           <Link
             href="/map"
-            className="inline-flex items-center gap-2 bg-white text-navy-700 px-6 py-3 rounded-xl font-bold hover:bg-gold-50 hover:text-navy-800 transition-colors shadow-md"
+            className="inline-flex items-center gap-2 bg-fixed-white text-navy-700 px-6 py-3 rounded-xl font-bold hover:bg-gold-50 hover:text-navy-800 transition-colors shadow-md"
           >
             <MapPin className="w-5 h-5" />
             지금 둘러보기

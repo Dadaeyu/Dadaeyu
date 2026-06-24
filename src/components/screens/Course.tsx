@@ -9,7 +9,7 @@ import { Plus, Sparkles, Heart, Share2, SlidersHorizontal, ChevronDown, Star, X,
 import { Filters, DEFAULT_FILTERS, FilterFields } from "@/components/PlaceFilters";
 import { useCourseContext, type MyCourse, type CourseDay, type CoursePlace } from "@/context/CourseContext";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import { PLACES } from "@/data/placesData";
+import { usePlaces } from "@/context/PlacesContext";
 
 type AuthorType = "admin" | "user";
 interface SharedCourse {
@@ -382,6 +382,7 @@ const PLACE_COORDS: Record<string, { cx: number; cy: number; color: string }> = 
 };
 
 function CourseDetail({ id }: { id: string }) {
+  const { places: PLACES } = usePlaces();
   const isNew = id === "new";
   const numId = Number(id);
   const router = useRouter();

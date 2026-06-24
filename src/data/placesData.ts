@@ -9,18 +9,19 @@ export interface PlaceDetail {
   reviews: Review[];
 }
 export interface Place {
-  id: number; name: string; cx: number; cy: number;
+  id: number; name: string; lat: number; lng: number;
+  cx: number; cy: number;
   color: string; bg: string; category: string;
   rating: number; accessibility: string[]; distance: string;
   emoji: string; hot: boolean;
 }
 
 export const PLACES: Place[] = [
-  { id: 1, name: "대전 엑스포 과학공원", cx: 557, cy: 165, color: "#7c3aed", bg: "#ede9fe", category: "과학", rating: 4.8, accessibility: ["시각", "보행", "청각"], distance: "2.3km", emoji: "🔬", hot: true },
-  { id: 2, name: "성심당", cx: 440, cy: 315, color: "#dc2626", bg: "#fee2e2", category: "빵지순례", rating: 4.9, accessibility: ["보행", "고령자"], distance: "1.5km", emoji: "🥐", hot: true },
-  { id: 3, name: "한밭수목원", cx: 337, cy: 237, color: "#16a34a", bg: "#dcfce7", category: "자연힐링", rating: 4.7, accessibility: ["시각", "보행", "영유아"], distance: "3.2km", emoji: "🌿", hot: true },
-  { id: 4, name: "유성온천", cx: 175, cy: 360, color: "#d97706", bg: "#fef3c7", category: "문화예술", rating: 4.5, accessibility: ["보행", "고령자"], distance: "5.1km", emoji: "♨️", hot: false },
-  { id: 5, name: "대청호 오백리길", cx: 800, cy: 435, color: "#2563eb", bg: "#dbeafe", category: "자연힐링", rating: 4.6, accessibility: ["보행"], distance: "12.4km", emoji: "🏞️", hot: true },
+  { id: 1, name: "대전 엑스포 과학공원", lat: 36.374256, lng: 127.388766, cx: 557, cy: 165, color: "#7c3aed", bg: "#ede9fe", category: "과학", rating: 4.8, accessibility: ["시각", "보행", "청각"], distance: "2.3km", emoji: "🔬", hot: true },
+  { id: 2, name: "성심당", lat: 36.327646, lng: 127.432423, cx: 440, cy: 315, color: "#dc2626", bg: "#fee2e2", category: "빵지순례", rating: 4.9, accessibility: ["보행", "고령자"], distance: "1.5km", emoji: "🥐", hot: true },
+  { id: 3, name: "한밭수목원", lat: 36.362097, lng: 127.380364, cx: 337, cy: 237, color: "#16a34a", bg: "#dcfce7", category: "자연힐링", rating: 4.7, accessibility: ["시각", "보행", "영유아"], distance: "3.2km", emoji: "🌿", hot: true },
+  { id: 4, name: "유성온천", lat: 36.362578, lng: 127.341172, cx: 175, cy: 360, color: "#d97706", bg: "#fef3c7", category: "문화예술", rating: 4.5, accessibility: ["보행", "고령자"], distance: "5.1km", emoji: "♨️", hot: false },
+  { id: 5, name: "대청호 오백리길", lat: 36.471667, lng: 127.493889, cx: 800, cy: 435, color: "#2563eb", bg: "#dbeafe", category: "자연힐링", rating: 4.6, accessibility: ["보행"], distance: "12.4km", emoji: "🏞️", hot: true },
 ];
 
 export const PLACE_DETAILS: Record<number, PlaceDetail> = {

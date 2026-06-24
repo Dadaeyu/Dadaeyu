@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, MapPin, Route, Flag, Calendar,
@@ -8,7 +8,7 @@ import {
   TrendingUp, ShieldCheck, Star, ToggleLeft, ToggleRight,
   AlertCircle, FileText, ChevronRight,
 } from "lucide-react";
-import { PLACES } from "@/data/placesData";
+import { usePlaces } from "@/context/PlacesContext";
 
 // ── 사이드바 메뉴 ─────────────────────────────────────────
 const SECTIONS = [
@@ -71,10 +71,36 @@ const reportBadge = (s: ReportStatus) =>
   :                  "bg-gray-100 text-gray-500";
 
 // ── 레이아웃 ─────────────────────────────────────────────
+function resolveAdminSection(
+  section: string | string[] | undefined
+): string {
+  if (Array.isArray(section)) return section[0] ?? "dashboard";
+  if (typeof section === "string" && section.length > 0) return section;
+  return "dashboard";
+}
+
+const VALID_SECTIONS = new Set(SECTIONS.map((s) => s.key));
+
 export default function Admin() {
   const params = useParams();
-  const section = typeof params.section === "string" ? params.section : "dashboard";
+  const rawSection = params.section as string | string[] | undefined;
+  const section = resolveAdminSection(rawSection);
   const router = useRouter();
+
+  if (!VALID_SECTIONS.has(section)) {
+    return (
+      <div className="py-16 text-center text-gray-500">
+        <p className="font-semibold text-gray-700 mb-2">알 수 없는 관리 메뉴입니다.</p>
+        <button
+          type="button"
+          onClick={() => router.push("/admin")}
+          className="text-sm text-indigo-600 hover:underline"
+        >
+          대시보드로 돌아가기
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -326,7 +352,8 @@ function UserManagement() {
 
 // ── 3. 장소 관리 ─────────────────────────────────────────
 function PlaceManagement() {
-  const [places, setPlaces] = useState(PLACES);
+  const { places: initialPlaces } = usePlaces();
+  const [places, setPlaces] = useState(initialPlaces);
   const [query, setQuery] = useState("");
 
   const filtered = places.filter(p =>
@@ -510,14 +537,58 @@ function CourseManagement() {
 }
 
 // ── 5. 제보 확인 ─────────────────────────────────────────
+const DB_TO_ADMIN_STATUS: Record<string, ReportStatus> = {
+  pending: "대기",
+  reviewing: "검토중",
+  approved: "반영됨",
+  rejected: "반려",
+};
+
+const ADMIN_TO_DB_STATUS: Record<ReportStatus, string> = {
+  대기: "pending",
+  검토중: "reviewing",
+  반영됨: "approved",
+  반려: "rejected",
+};
+
 function ReportManagement() {
-  const [reports, setReports] = useState<AdminReport[]>(INIT_REPORTS);
+  const [reports, setReports] = useState<AdminReport[]>([]);
   const [filter, setFilter] = useState<ReportStatus | "전체">("전체");
+  const [loading, setLoading] = useState(true);
 
-  const filtered = filter === "전체" ? reports : reports.filter(r => r.status === filter);
+  useEffect(() => {
+    fetch("/api/admin/reports")
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: { reports: { id: number; target_name: string; content: string; status: string; created_at: string; user_id: string }[] }) => {
+        setReports(
+          data.reports.map((r) => ({
+            id: r.id,
+            target: r.target_name,
+            user: r.user_id.slice(0, 8),
+            content: r.content,
+            date: new Date(r.created_at).toLocaleDateString("ko-KR"),
+            status: DB_TO_ADMIN_STATUS[r.status] ?? "대기",
+          }))
+        );
+      })
+      .catch(() => setReports(INIT_REPORTS))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const setStatus = (id: number, status: ReportStatus) =>
-    setReports(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+  const filtered = filter === "전체" ? reports : reports.filter((r) => r.status === filter);
+
+  const setStatus = async (id: number, status: ReportStatus) => {
+    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+    try {
+      await fetch("/api/admin/reports", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: ADMIN_TO_DB_STATUS[status] }),
+      });
+    } catch {
+      // UI는 낙관적 업데이트
+    }
+  };
 
   const counts: Record<string, number> = {
     전체: reports.length,
@@ -553,7 +624,8 @@ function ReportManagement() {
       </div>
 
       <div className="space-y-3">
-        {filtered.map(r => (
+        {loading && <p className="text-sm text-gray-400 text-center py-6">불러오는 중...</p>}
+        {!loading && filtered.map(r => (
           <div key={r.id} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
@@ -601,7 +673,7 @@ function ReportManagement() {
             </div>
           </div>
         ))}
-        {filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <p className="text-center text-sm text-gray-400 py-10">해당하는 제보가 없어요</p>
         )}
       </div>

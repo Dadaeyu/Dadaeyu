@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Plus, Heart, MessageCircle, Eye, ArrowLeft, Image, X, Megaphone, Calendar, ChevronDown, HelpCircle, Pin, MapPin, Route } from "lucide-react";
-import { PLACES, type Place } from "@/data/placesData";
+import { type Place } from "@/data/placesData";
+import { usePlaces } from "@/context/PlacesContext";
 import { useCourseContext, type MyCourse } from "@/context/CourseContext";
 
 const posts = [
@@ -232,6 +233,7 @@ export default function Community() {
 
 // ── 글쓰기 화면 ──────────────────────────────────────────
 function CommunityWrite() {
+  const { places: PLACES } = usePlaces();
   const router = useRouter();
   const [type, setType] = useState<"review" | "tip" | "question">("review");
   const [title, setTitle] = useState("");
@@ -459,15 +461,14 @@ function CommunityWrite() {
   );
 }
 
-// ── 게시글 상세 ──────────────────────────────────────────
-const POST_ATTACHMENTS: Record<string, { places: Place[]; courses: { id: number; title: string }[] }> = {
-  "1": {
-    places: PLACES.filter(p => p.id === 2),
-    courses: [{ id: 10, title: "내 여행 계획" }],
-  },
-};
-
 function CommunityDetail({ id }: { id: string }) {
+  const { places: PLACES } = usePlaces();
+  const postAttachments: Record<string, { places: Place[]; courses: { id: number; title: string }[] }> = {
+    "1": {
+      places: PLACES.filter(p => p.id === 2),
+      courses: [{ id: 10, title: "내 여행 계획" }],
+    },
+  };
   const router = useRouter();
   const [liked, setLiked] = useState(false);
   const [comment, setComment] = useState("");
@@ -485,7 +486,7 @@ function CommunityDetail({ id }: { id: string }) {
     likes: 24,
   };
 
-  const attachments = POST_ATTACHMENTS[id] ?? { places: [], courses: [] };
+  const attachments = postAttachments[id] ?? { places: [], courses: [] };
 
   const handleCommentSubmit = () => {
     if (!comment.trim()) return;

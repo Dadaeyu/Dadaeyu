@@ -43,3 +43,6 @@ next-env.d.ts
 # claude
 CLAUDE.md
 AGENTS.md
+
+# local dev notes (not committed)
+/dev-notes/
