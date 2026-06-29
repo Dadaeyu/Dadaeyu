@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -26,7 +26,10 @@ import {
   Star,
   AlertCircle,
   FileText,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft,
+  ChevronsRight,
+  ChevronsLeft
 } from "lucide-react";
 import { PLACES } from "@/data/placesData";
 import { Button } from "@/components/ui/Button";
@@ -598,9 +601,251 @@ function UserManagement() {
 }
 
 // ── 3. 장소 관리 ─────────────────────────────────────────
+const DB_TABS = [
+  { key: "place", label: "tb_place", desc: "장소 기본" },
+  { key: "detail", label: "tb_place_detail", desc: "상세 정보" },
+  { key: "barrierfree", label: "tb_place_barrierfree", desc: "무장애 정보" }
+] as const;
+type DbTabKey = (typeof DB_TABS)[number]["key"];
+
+// ── 각 테이블의 컬럼 헤더 (Supabase 실제 스키마 기준 하드코딩) ──
+const PLACE_COLUMNS = [
+  "contentid",
+  "title",
+  "addr1",
+  "addr2",
+  "mapx",
+  "mapy",
+  "contenttypeid",
+  "lclsSystm1",
+  "lclsSystm2",
+  "lclsSystm3",
+  "firstimage",
+  "createdtime",
+  "modifiedtime",
+  "registtime",
+  "updatetime",
+  "delete_yn",
+  "deletetime"
+] as const;
+
+const PLACE_DETAIL_COLUMNS = [
+  "contentid",
+  "contenttypeid",
+  "homepage",
+  "tel",
+  "overview",
+  "accomcount",
+  "chkbabycarriage",
+  "expagerange",
+  "infocenter",
+  "opendate",
+  "parking",
+  "restdate",
+  "useseason",
+  "usetime",
+  "accomcountculture",
+  "chkbabycarriageculture",
+  "discountinfo",
+  "infocenterculture",
+  "parkingculture",
+  "parkingfee",
+  "restdateculture",
+  "usefee",
+  "usetimeculture",
+  "scale",
+  "spendtime",
+  "agelimit",
+  "discountinfofestival",
+  "eventenddate",
+  "eventhomepage",
+  "eventplace",
+  "eventstartdate",
+  "placeinfo",
+  "playtime",
+  "program",
+  "spendtimefestival",
+  "usetimefestival",
+  "distance",
+  "infocentertourcourse",
+  "schedule",
+  "taketime",
+  "theme",
+  "accomcountleports",
+  "chkbabycarriageleports",
+  "expagerangeleports",
+  "infocenterleports",
+  "openperiod",
+  "parkingfeeleports",
+  "parkingleports",
+  "restdateleports",
+  "scaleleports",
+  "usefeeleports",
+  "usetimeleports",
+  "accomcountlodging",
+  "checkintime",
+  "checkouttime",
+  "infocenterlodging",
+  "parkinglodging",
+  "pickup",
+  "roomcount",
+  "reservationlodging",
+  "reservationurl",
+  "roomtype",
+  "scalelodging",
+  "chkbabycarriageshopping",
+  "infocentershopping",
+  "opendateshopping",
+  "opentime",
+  "parkingshopping",
+  "restdateshopping",
+  "restroom",
+  "saleitem",
+  "saleitemcost",
+  "scaleshopping",
+  "shopguide",
+  "discountinfofood",
+  "firstmenu",
+  "infocenterfood",
+  "opendatefood",
+  "opentimefood",
+  "parkingfood",
+  "restdatefood",
+  "scalefood",
+  "seat",
+  "treatmenu",
+  "createdtime",
+  "modifiedtime",
+  "registtime",
+  "updatetime",
+  "delete_yn",
+  "deletetime"
+] as const;
+
+const PLACE_BF_COLUMNS = [
+  "contentid",
+  "braileblock",
+  "helpdog",
+  "guidehuman",
+  "audioguide",
+  "bigprint",
+  "brailepromotion",
+  "guidesystem",
+  "blindhandicapetc",
+  "signguide",
+  "videoguide",
+  "hearingroom",
+  "hearinghandicapetc",
+  "parking",
+  "publictransport",
+  "route",
+  "wheelchair",
+  "exit",
+  "elevator",
+  "restroom",
+  "handicapetc",
+  "stroller",
+  "lactationroom",
+  "babysparechair",
+  "infantsfamilyetc",
+  "registtime",
+  "updatetime",
+  "delete_yn",
+  "deletetime"
+] as const;
+
+// ── 테이블 공통 페이지네이션 (<< < 1 2 … 10 > >>) ──────────
+// page 는 0-based. << 맨 앞, < 이전 묶음, 숫자 페이지, > 다음 묶음, >> 맨 뒤.
+const PAGE_WINDOW = 10; // 한 번에 보여줄 페이지 번호 개수
+
+function TablePagination({
+  page,
+  totalPages,
+  total,
+  pageSize,
+  disabled,
+  onChange
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  pageSize: number;
+  disabled: boolean;
+  onChange: (targetPage: number) => void;
+}) {
+  const windowStart = Math.floor(page / PAGE_WINDOW) * PAGE_WINDOW;
+  const windowEnd = Math.min(windowStart + PAGE_WINDOW, totalPages);
+  const pages: number[] = [];
+  for (let i = windowStart; i < windowEnd; i += 1) pages.push(i);
+
+  const from = page * pageSize + 1;
+  const to = Math.min((page + 1) * pageSize, total);
+
+  const navBtn =
+    "border-hairline text-steel hover:bg-surface-soft flex h-7 w-7 items-center justify-center rounded-full border transition-colors disabled:opacity-40 disabled:hover:bg-transparent";
+
+  return (
+    <div className="border-hairline-soft flex items-center justify-between gap-3 border-t px-4 py-3">
+      <span className="text-stone text-xs">
+        {from}–{to} / {total}
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onChange(0)}
+          disabled={disabled || page <= 0}
+          aria-label="맨 앞"
+          className={navBtn}
+        >
+          <ChevronsLeft className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => onChange(Math.max(0, windowStart - PAGE_WINDOW))}
+          disabled={disabled || windowStart <= 0}
+          aria-label="이전 페이지들"
+          className={navBtn}
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+        {pages.map((p) => (
+          <button
+            key={p}
+            onClick={() => onChange(p)}
+            disabled={disabled}
+            aria-current={p === page ? "page" : undefined}
+            className={`flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold transition-colors disabled:opacity-40 ${
+              p === page
+                ? "bg-navy-600 text-white"
+                : "border-hairline text-steel hover:bg-surface-soft border"
+            }`}
+          >
+            {p + 1}
+          </button>
+        ))}
+        <button
+          onClick={() => onChange(windowStart + PAGE_WINDOW)}
+          disabled={disabled || windowEnd >= totalPages}
+          aria-label="다음 페이지들"
+          className={navBtn}
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => onChange(totalPages - 1)}
+          disabled={disabled || page >= totalPages - 1}
+          aria-label="맨 뒤"
+          className={navBtn}
+        >
+          <ChevronsRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PlaceManagement() {
   const [places, setPlaces] = useState(PLACES);
   const [query, setQuery] = useState("");
+  const [dbTab, setDbTab] = useState<DbTabKey>("place");
 
   const filtered = places.filter((p) => p.name.includes(query) || p.category.includes(query));
 
@@ -709,6 +954,650 @@ function PlaceManagement() {
           <p className="text-stone py-8 text-center text-sm">검색 결과가 없어요</p>
         )}
       </div>
+
+      {/* Supabase 테이블 탭 */}
+      <div className="pt-4">
+        <div className="border-hairline-soft flex gap-1 overflow-x-auto border-b">
+          {DB_TABS.map(({ key, label, desc }) => {
+            const active = dbTab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setDbTab(key)}
+                className={`flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+                  active
+                    ? "border-navy-600 text-navy-700"
+                    : "text-steel hover:text-ink border-transparent"
+                }`}
+              >
+                <Database className={`h-3.5 w-3.5 ${active ? "text-navy-600" : "text-stone"}`} />
+                {label}
+                <span className="text-stone text-xs font-normal">{desc}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="pt-2">
+          {dbTab === "place" && <DbPlaceTable />}
+          {dbTab === "detail" && <DbPlaceDetailTable />}
+          {dbTab === "barrierfree" && <DbBarrierFreeTable />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 3-1. Supabase tb_place 조회 테이블 (페이징) ──────────
+const DB_PLACE_PAGE_SIZE = 10;
+
+function DbPlaceTable() {
+  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(0); // 0-based
+  const [total, setTotal] = useState(0);
+
+  // 동기화 상태
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [syncError, setSyncError] = useState("");
+
+  // targetPage(0-based) 페이지를 10개씩 조회
+  const fetchRows = async (targetPage = 0) => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      setStatus("error");
+      setError(".env에 NEXT_PUBLIC_SUPABASE_URL이 설정되지 않았습니다.");
+      return;
+    }
+
+    setStatus("loading");
+    setError("");
+    try {
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      const from = targetPage * DB_PLACE_PAGE_SIZE;
+      const to = from + DB_PLACE_PAGE_SIZE - 1;
+      const { data, error, count } = await supabase
+        .from("tb_place")
+        .select("*", { count: "exact" })
+        .order("contentid", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      setRows((data ?? []) as Record<string, unknown>[]);
+      setTotal(count ?? 0);
+      setPage(targetPage);
+      setStatus("success");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    // 마운트 시 첫 페이지 조회 (initial fetch on mount)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchRows(0);
+  }, []);
+
+  // areaBasedList2(대전, lDongRegnCd=30) 전체를 조회해 tb_place 에 upsert
+  const runSync = async () => {
+    setSyncing(true);
+    setSyncError("");
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/place?target=place", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? `동기화 실패 (HTTP ${res.status})`);
+      setSyncResult(json as SyncResult);
+      await fetchRows(0); // 동기화 후 첫 페이지부터 다시 조회
+    } catch (e: unknown) {
+      setSyncError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // 컬럼 헤더는 실제 스키마 기준으로 하드코딩 (데이터가 비어도 헤더 표시)
+  const columns = PLACE_COLUMNS;
+  const totalPages = Math.max(1, Math.ceil(total / DB_PLACE_PAGE_SIZE));
+  const isLoading = status === "loading";
+
+  const renderCell = (value: unknown) => {
+    if (value === null || value === undefined) return <span className="text-stone">—</span>;
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+  };
+
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Database className="text-navy-500 h-4 w-4" />
+          <h2 className="text-ink font-bold">tb_place</h2>
+          <code className="bg-surface text-steel rounded-full px-2 py-0.5 font-mono text-xs">
+            Supabase
+          </code>
+          {status === "success" && <span className="text-stone text-sm">총 {total}건</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchRows(page)}
+            disabled={isLoading || syncing}
+            className="border-hairline text-steel hover:bg-surface-soft rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            {isLoading ? "조회 중..." : "새로고침"}
+          </button>
+          <button
+            onClick={runSync}
+            disabled={syncing}
+            className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
+          >
+            <Database className="h-3.5 w-3.5" />
+            {syncing ? "동기화 중... (시간이 걸려요)" : "TourAPI 동기화"}
+          </button>
+        </div>
+      </div>
+
+      <p className="text-stone text-xs">
+        “TourAPI 동기화”를 누르면 areaBasedList2(국문 관광정보, 대전 lDongRegnCd=30)를 전체 조회해
+        tb_place에 contentid 기준으로 insert/update 합니다. API 결과에 없는 기존 장소는 삭제
+        처리(delete_yn=Y)됩니다.
+      </p>
+
+      {/* 동기화 결과 / 에러 */}
+      {syncResult && (
+        <div className="border-brand-200 bg-brand-50 text-brand-800 rounded-lg border p-4 text-sm">
+          ✓ 동기화 완료 — 대전 관광정보 {syncResult.totalPlaces}건 중 {syncResult.fetched}건
+          저장(upsert {syncResult.upserted}), 삭제 처리 {syncResult.deleted}건, 건너뜀{" "}
+          {syncResult.skipped}건{syncResult.errorCount > 0 && `, 실패 ${syncResult.errorCount}건`}
+        </div>
+      )}
+      {syncError && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{syncError}</p>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{error}</p>
+        </div>
+      )}
+
+      {status !== "error" && (
+        <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-hairline-soft bg-surface-soft border-b">
+                  {columns.map((c) => (
+                    <th
+                      key={c}
+                      className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
+                    >
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr
+                    key={i}
+                    className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
+                  >
+                    {columns.map((c) => (
+                      <td key={c} className="text-steel px-4 py-3 whitespace-nowrap">
+                        {renderCell(row[c])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {isLoading && (
+            <p className="text-steel animate-pulse py-8 text-center text-sm">
+              Supabase에서 데이터를 불러오는 중...
+            </p>
+          )}
+          {status === "success" && rows.length === 0 && (
+            <p className="text-stone py-8 text-center text-sm">데이터가 없어요</p>
+          )}
+
+          {/* 페이지네이션 */}
+          {status === "success" && total > 0 && (
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={DB_PLACE_PAGE_SIZE}
+              disabled={isLoading}
+              onChange={fetchRows}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 3-2. Supabase tb_place_barrierfree 조회 + 동기화 ─────
+const DB_BF_PAGE_SIZE = 10;
+
+interface SyncResult {
+  totalPlaces: number;
+  fetched: number;
+  upserted: number;
+  deleted: number;
+  skipped: number;
+  errorCount: number;
+}
+
+function DbBarrierFreeTable() {
+  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(0); // 0-based
+  const [total, setTotal] = useState(0);
+
+  // 동기화 상태
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [syncError, setSyncError] = useState("");
+
+  // targetPage(0-based) 페이지를 10개씩 조회
+  const fetchRows = async (targetPage = 0) => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      setStatus("error");
+      setError(".env에 NEXT_PUBLIC_SUPABASE_URL이 설정되지 않았습니다.");
+      return;
+    }
+
+    setStatus("loading");
+    setError("");
+    try {
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      const from = targetPage * DB_BF_PAGE_SIZE;
+      const to = from + DB_BF_PAGE_SIZE - 1;
+      const { data, error, count } = await supabase
+        .from("tb_place_barrierfree")
+        .select("*", { count: "exact" })
+        .order("contentid", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      setRows((data ?? []) as Record<string, unknown>[]);
+      setTotal(count ?? 0);
+      setPage(targetPage);
+      setStatus("success");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    // 마운트 시 첫 페이지 조회 (initial fetch on mount)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchRows(0);
+  }, []);
+
+  // tb_place 전체를 detailWithTour2 로 조회해 tb_place_barrierfree 에 upsert
+  const runSync = async () => {
+    setSyncing(true);
+    setSyncError("");
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/place?target=barrierfree", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? `동기화 실패 (HTTP ${res.status})`);
+      setSyncResult(json as SyncResult);
+      await fetchRows(0); // 동기화 후 첫 페이지부터 다시 조회
+    } catch (e: unknown) {
+      setSyncError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // 컬럼 헤더는 실제 스키마 기준으로 하드코딩 (데이터가 비어도 헤더 표시)
+  const columns = PLACE_BF_COLUMNS;
+  const totalPages = Math.max(1, Math.ceil(total / DB_BF_PAGE_SIZE));
+  const isLoading = status === "loading";
+
+  const renderCell = (value: unknown) => {
+    if (value === null || value === undefined || value === "")
+      return <span className="text-stone">—</span>;
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+  };
+
+  return (
+    <div className="space-y-3 pt-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Database className="text-navy-500 h-4 w-4" />
+          <h2 className="text-ink font-bold">tb_place_barrierfree</h2>
+          <code className="bg-surface text-steel rounded-full px-2 py-0.5 font-mono text-xs">
+            무장애 정보
+          </code>
+          {status === "success" && <span className="text-stone text-sm">총 {total}건</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchRows(page)}
+            disabled={isLoading || syncing}
+            className="border-hairline text-steel hover:bg-surface-soft rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            {isLoading ? "조회 중..." : "새로고침"}
+          </button>
+          <button
+            onClick={runSync}
+            disabled={syncing}
+            className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
+          >
+            <Database className="h-3.5 w-3.5" />
+            {syncing ? "동기화 중... (시간이 걸려요)" : "TourAPI 동기화"}
+          </button>
+        </div>
+      </div>
+
+      <p className="text-stone text-xs">
+        “TourAPI 동기화”를 누르면 tb_place의 모든 contentid로 detailWithTour2를 조회해
+        tb_place_barrierfree에 insert/update 합니다. (무장애 정보가 없는 장소는 건너뛰고, 기존에
+        저장돼 있었다면 삭제 처리됩니다)
+      </p>
+
+      {/* 동기화 결과 / 에러 */}
+      {syncResult && (
+        <div className="border-brand-200 bg-brand-50 text-brand-800 rounded-lg border p-4 text-sm">
+          ✓ 동기화 완료 — 대상 {syncResult.totalPlaces}건 중 무장애 정보 {syncResult.fetched}건
+          저장(upsert {syncResult.upserted}), 삭제 처리 {syncResult.deleted}건, 정보 없음{" "}
+          {syncResult.skipped}건{syncResult.errorCount > 0 && `, 실패 ${syncResult.errorCount}건`}
+        </div>
+      )}
+      {syncError && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{syncError}</p>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{error}</p>
+        </div>
+      )}
+
+      {status !== "error" && (
+        <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-hairline-soft bg-surface-soft border-b">
+                  {columns.map((c) => (
+                    <th
+                      key={c}
+                      className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
+                    >
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr
+                    key={i}
+                    className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
+                  >
+                    {columns.map((c) => (
+                      <td
+                        key={c}
+                        className="text-steel max-w-xs truncate px-4 py-3 whitespace-nowrap"
+                        title={typeof row[c] === "string" ? (row[c] as string) : undefined}
+                      >
+                        {renderCell(row[c])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {isLoading && (
+            <p className="text-steel animate-pulse py-8 text-center text-sm">
+              Supabase에서 데이터를 불러오는 중...
+            </p>
+          )}
+          {status === "success" && rows.length === 0 && (
+            <p className="text-stone py-8 text-center text-sm">
+              데이터가 없어요. “TourAPI 동기화”를 눌러 채워보세요.
+            </p>
+          )}
+
+          {/* 페이지네이션 */}
+          {status === "success" && total > 0 && (
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={DB_BF_PAGE_SIZE}
+              disabled={isLoading}
+              onChange={fetchRows}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 3-3. Supabase tb_place_detail 조회 + 동기화 ──────────
+const DB_DETAIL_PAGE_SIZE = 10;
+
+function DbPlaceDetailTable() {
+  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(0); // 0-based
+  const [total, setTotal] = useState(0);
+
+  // 동기화 상태
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [syncError, setSyncError] = useState("");
+
+  // targetPage(0-based) 페이지를 10개씩 조회
+  const fetchRows = async (targetPage = 0) => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      setStatus("error");
+      setError(".env에 NEXT_PUBLIC_SUPABASE_URL이 설정되지 않았습니다.");
+      return;
+    }
+
+    setStatus("loading");
+    setError("");
+    try {
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      const from = targetPage * DB_DETAIL_PAGE_SIZE;
+      const to = from + DB_DETAIL_PAGE_SIZE - 1;
+      const { data, error, count } = await supabase
+        .from("tb_place_detail")
+        .select("*", { count: "exact" })
+        .order("contentid", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      setRows((data ?? []) as Record<string, unknown>[]);
+      setTotal(count ?? 0);
+      setPage(targetPage);
+      setStatus("success");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    // 마운트 시 첫 페이지 조회 (initial fetch on mount)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchRows(0);
+  }, []);
+
+  // tb_place 전체를 detailCommon2 + detailIntro2 로 조회해 tb_place_detail 에 upsert
+  const runSync = async () => {
+    setSyncing(true);
+    setSyncError("");
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/place?target=detail", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? `동기화 실패 (HTTP ${res.status})`);
+      setSyncResult(json as SyncResult);
+      await fetchRows(0); // 동기화 후 첫 페이지부터 다시 조회
+    } catch (e: unknown) {
+      setSyncError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // 컬럼 헤더는 실제 스키마 기준으로 하드코딩 (데이터가 비어도 헤더 표시)
+  const columns = PLACE_DETAIL_COLUMNS;
+  const totalPages = Math.max(1, Math.ceil(total / DB_DETAIL_PAGE_SIZE));
+  const isLoading = status === "loading";
+
+  const renderCell = (value: unknown) => {
+    if (value === null || value === undefined || value === "")
+      return <span className="text-stone">—</span>;
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+  };
+
+  return (
+    <div className="space-y-3 pt-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Database className="text-navy-500 h-4 w-4" />
+          <h2 className="text-ink font-bold">tb_place_detail</h2>
+          <code className="bg-surface text-steel rounded-full px-2 py-0.5 font-mono text-xs">
+            상세 정보
+          </code>
+          {status === "success" && <span className="text-stone text-sm">총 {total}건</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchRows(page)}
+            disabled={isLoading || syncing}
+            className="border-hairline text-steel hover:bg-surface-soft rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            {isLoading ? "조회 중..." : "새로고침"}
+          </button>
+          <button
+            onClick={runSync}
+            disabled={syncing}
+            className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
+          >
+            <Database className="h-3.5 w-3.5" />
+            {syncing ? "동기화 중... (시간이 걸려요)" : "TourAPI 동기화"}
+          </button>
+        </div>
+      </div>
+
+      <p className="text-stone text-xs">
+        “TourAPI 동기화”를 누르면 tb_place의 모든 contentid로 detailCommon2(공통정보) +
+        detailIntro2(소개정보)를 조회해 tb_place_detail에 insert/update 합니다. 상세정보가 조회되지
+        않은 기존 행은 삭제 처리됩니다.
+      </p>
+
+      {/* 동기화 결과 / 에러 */}
+      {syncResult && (
+        <div className="border-brand-200 bg-brand-50 text-brand-800 rounded-lg border p-4 text-sm">
+          ✓ 동기화 완료 — 대상 {syncResult.totalPlaces}건 중 {syncResult.fetched}건 저장(upsert{" "}
+          {syncResult.upserted}), 삭제 처리 {syncResult.deleted}건, 정보 없음 {syncResult.skipped}건
+          {syncResult.errorCount > 0 && `, 실패 ${syncResult.errorCount}건`}
+        </div>
+      )}
+      {syncError && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{syncError}</p>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{error}</p>
+        </div>
+      )}
+
+      {status !== "error" && (
+        <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-hairline-soft bg-surface-soft border-b">
+                  {columns.map((c) => (
+                    <th
+                      key={c}
+                      className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
+                    >
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr
+                    key={i}
+                    className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
+                  >
+                    {columns.map((c) => (
+                      <td
+                        key={c}
+                        className="text-steel max-w-xs truncate px-4 py-3 whitespace-nowrap"
+                        title={typeof row[c] === "string" ? (row[c] as string) : undefined}
+                      >
+                        {renderCell(row[c])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {isLoading && (
+            <p className="text-steel animate-pulse py-8 text-center text-sm">
+              Supabase에서 데이터를 불러오는 중...
+            </p>
+          )}
+          {status === "success" && rows.length === 0 && (
+            <p className="text-stone py-8 text-center text-sm">
+              데이터가 없어요. “TourAPI 동기화”를 눌러 채워보세요.
+            </p>
+          )}
+
+          {/* 페이지네이션 */}
+          {status === "success" && total > 0 && (
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={DB_DETAIL_PAGE_SIZE}
+              disabled={isLoading}
+              onChange={fetchRows}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
