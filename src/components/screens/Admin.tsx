@@ -610,6 +610,7 @@ type DbTabKey = (typeof DB_TABS)[number]["key"];
 
 // ── 각 테이블의 컬럼 헤더 (Supabase 실제 스키마 기준 하드코딩) ──
 const PLACE_COLUMNS = [
+  "place_id",
   "contentid",
   "title",
   "addr1",
@@ -630,6 +631,7 @@ const PLACE_COLUMNS = [
 ] as const;
 
 const PLACE_DETAIL_COLUMNS = [
+  "place_id",
   "contentid",
   "contenttypeid",
   "homepage",
@@ -723,6 +725,7 @@ const PLACE_DETAIL_COLUMNS = [
 ] as const;
 
 const PLACE_BF_COLUMNS = [
+  "place_id",
   "contentid",
   "braileblock",
   "helpdog",
@@ -1021,7 +1024,7 @@ function DbPlaceTable() {
       const { data, error, count } = await supabase
         .from("tb_place")
         .select("*", { count: "exact" })
-        .order("contentid", { ascending: true })
+        .order("place_id", { ascending: true })
         .range(from, to);
       if (error) throw error;
       setRows((data ?? []) as Record<string, unknown>[]);
@@ -1094,13 +1097,13 @@ function DbPlaceTable() {
             className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
           >
             <Database className="h-3.5 w-3.5" />
-            {syncing ? "동기화 중... (시간이 걸려요)" : "TourAPI 동기화"}
+            {syncing ? "동기화 중... (시간이 걸려요)" : "API 동기화"}
           </button>
         </div>
       </div>
 
       <p className="text-stone text-xs">
-        “TourAPI 동기화”를 누르면 areaBasedList2(국문 관광정보, 대전 lDongRegnCd=30)를 전체 조회해
+        “API 동기화”를 누르면 areaBasedList2(국문 관광정보, 대전 lDongRegnCd=30)를 전체 조회해
         tb_place에 contentid 기준으로 insert/update 합니다. API 결과에 없는 기존 장소는 삭제
         처리(delete_yn=Y)됩니다.
       </p>
@@ -1227,7 +1230,7 @@ function DbBarrierFreeTable() {
       const { data, error, count } = await supabase
         .from("tb_place_barrierfree")
         .select("*", { count: "exact" })
-        .order("contentid", { ascending: true })
+        .order("place_id", { ascending: true })
         .range(from, to);
       if (error) throw error;
       setRows((data ?? []) as Record<string, unknown>[]);
@@ -1301,13 +1304,13 @@ function DbBarrierFreeTable() {
             className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
           >
             <Database className="h-3.5 w-3.5" />
-            {syncing ? "동기화 중... (시간이 걸려요)" : "TourAPI 동기화"}
+            {syncing ? "동기화 중... (시간이 걸려요)" : "API 동기화"}
           </button>
         </div>
       </div>
 
       <p className="text-stone text-xs">
-        “TourAPI 동기화”를 누르면 tb_place의 모든 contentid로 detailWithTour2를 조회해
+        “API 동기화”를 누르면 tb_place의 모든 contentid로 detailWithTour2를 조회해
         tb_place_barrierfree에 insert/update 합니다. (무장애 정보가 없는 장소는 건너뛰고, 기존에
         저장돼 있었다면 삭제 처리됩니다)
       </p>
@@ -1377,7 +1380,7 @@ function DbBarrierFreeTable() {
           )}
           {status === "success" && rows.length === 0 && (
             <p className="text-stone py-8 text-center text-sm">
-              데이터가 없어요. “TourAPI 동기화”를 눌러 채워보세요.
+              데이터가 없어요. “API 동기화”를 눌러 채워보세요.
             </p>
           )}
 
@@ -1431,7 +1434,7 @@ function DbPlaceDetailTable() {
       const { data, error, count } = await supabase
         .from("tb_place_detail")
         .select("*", { count: "exact" })
-        .order("contentid", { ascending: true })
+        .order("place_id", { ascending: true })
         .range(from, to);
       if (error) throw error;
       setRows((data ?? []) as Record<string, unknown>[]);
@@ -1505,13 +1508,13 @@ function DbPlaceDetailTable() {
             className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
           >
             <Database className="h-3.5 w-3.5" />
-            {syncing ? "동기화 중... (시간이 걸려요)" : "TourAPI 동기화"}
+            {syncing ? "동기화 중... (시간이 걸려요)" : "API 동기화"}
           </button>
         </div>
       </div>
 
       <p className="text-stone text-xs">
-        “TourAPI 동기화”를 누르면 tb_place의 모든 contentid로 detailCommon2(공통정보) +
+        “API 동기화”를 누르면 tb_place의 모든 contentid로 detailCommon2(공통정보) +
         detailIntro2(소개정보)를 조회해 tb_place_detail에 insert/update 합니다. 상세정보가 조회되지
         않은 기존 행은 삭제 처리됩니다.
       </p>
@@ -1581,7 +1584,7 @@ function DbPlaceDetailTable() {
           )}
           {status === "success" && rows.length === 0 && (
             <p className="text-stone py-8 text-center text-sm">
-              데이터가 없어요. “TourAPI 동기화”를 눌러 채워보세요.
+              데이터가 없어요. “API 동기화”를 눌러 채워보세요.
             </p>
           )}
 

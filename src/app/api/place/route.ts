@@ -16,31 +16,19 @@ const BF_FETCH_CONCURRENCY = 8; // detailWithTour2 동시 호출 수
 const DETAIL_FETCH_CONCURRENCY = 6; // detailCommon2/detailIntro2 동시 호출 수
 
 // ── 테이블별 컬럼 매핑 ──────────────────────────────────────
-// areaBasedList2 응답에서 tb_place 로 매핑할 후보 컬럼 (tb_place 가 비어 있을 때 fallback)
+// areaBasedList2 응답에서 tb_place 로 매핑할 컬럼 (하드코딩 — DB 컬럼 조회 안 함)
 const PLACE_FIELD = [
   "contentid",
-  "contenttypeid",
   "title",
   "addr1",
   "addr2",
-  "zipcode",
-  "areacode",
-  "sigungucode",
-  "cat1",
-  "cat2",
-  "cat3",
-  "tel",
   "mapx",
   "mapy",
-  "mlevel",
-  "firstimage",
-  "firstimage2",
-  "cpyrhtDivCd",
-  "lDongRegnCd",
-  "lDongSignguCd",
+  "contenttypeid",
   "lclsSystm1",
   "lclsSystm2",
   "lclsSystm3",
+  "firstimage",
   "createdtime",
   "modifiedtime"
 ] as const;
@@ -222,24 +210,68 @@ type SyncOutcome =
   | { ok: true; result: SyncResult }
   | { ok: false; status: number; error: string; partial?: Record<string, unknown> };
 
+// 테이블에 이미 존재하는 모든 키 값 집합 (삭제된 행 포함) — insert/update 분류용.
+// keyColumn 기본은 contentid, detail 처럼 PK(place_id) 기준으로 분류할 때 지정한다.
+async function fetchKnownIds(
+  supabase: SupabaseClient,
+  table: string,
+  keyColumn = "contentid"
+): Promise<Set<number> | { error: string }> {
+  const { data, error } = await supabase.from(table).select(keyColumn);
+  if (error) return { error: `${table} 기존 ${keyColumn} 조회 실패: ${error.message}` };
+  return new Set(
+    (data ?? [])
+      .map((r) => (r as unknown as Record<string, number | null>)[keyColumn])
+      .filter((v): v is number => v != null)
+  );
+}
+
+// 신규(knownIds 에 없는 키)는 insert, 기존은 update 한다.
+//  - insert: updatetime 을 넣지 않는다(생성 시각은 registtime default now() 가 담당).
+//  - update: updatetime 을 now 로 갱신한다. delete_yn / deletetime 은 payload 에 없어 보존된다
+//            (소프트 삭제된 행도 값만 갱신되고 삭제 상태는 유지).
+// conflictKey: 분류·upsert 충돌 기준 컬럼(기본 contentid, detail 은 PK place_id).
+async function insertOrUpdate(
+  supabase: SupabaseClient,
+  table: string,
+  rows: Record<string, unknown>[],
+  knownIds: Set<number>,
+  now: string,
+  conflictKey = "contentid"
+): Promise<{ upserted: number; error?: string }> {
+  const toInsert = rows.filter((r) => !knownIds.has(r[conflictKey] as number));
+  const toUpdate = rows
+    .filter((r) => knownIds.has(r[conflictKey] as number))
+    .map((r) => ({ ...r, updatetime: now }));
+
+  let upserted = 0;
+  for (let i = 0; i < toInsert.length; i += UPSERT_CHUNK) {
+    const chunk = toInsert.slice(i, i + UPSERT_CHUNK);
+    const { error } = await supabase.from(table).insert(chunk);
+    if (error) return { upserted, error: `insert 실패: ${error.message}` };
+    upserted += chunk.length;
+  }
+  for (let i = 0; i < toUpdate.length; i += UPSERT_CHUNK) {
+    const chunk = toUpdate.slice(i, i + UPSERT_CHUNK);
+    const { error } = await supabase.from(table).upsert(chunk, { onConflict: conflictKey });
+    if (error) return { upserted, error: `upsert 실패: ${error.message}` };
+    upserted += chunk.length;
+  }
+  return { upserted };
+}
+
 // ── 1. tb_place 동기화 (areaBasedList2 → tb_place) ──────────
 async function syncPlace(supabase: SupabaseClient): Promise<SyncOutcome> {
-  // tb_place 의 실제 컬럼 파악 (비어 있으면 알려진 필드 목록으로 fallback)
-  const { data: sample, error: sampleErr } = await supabase.from("tb_place").select("*").limit(1);
-  if (sampleErr) {
-    return { ok: false, status: 502, error: `tb_place 컬럼 조회 실패: ${sampleErr.message}` };
-  }
-  const tableColumns = new Set<string>(
-    sample && sample.length > 0 ? Object.keys(sample[0]) : PLACE_FIELD
-  );
-  const mapFields = [...tableColumns].filter((c) => c !== "contentid" && c !== "updatetime");
-  const hasUpdatetime = tableColumns.has("updatetime");
+  // tb_place 매핑 컬럼은 하드코딩된 PLACE_FIELD 사용 (DB 컬럼 조회 안 함).
+  // PLACE_FIELD 는 contentid / updatetime 을 포함하지 않으므로 그대로 매핑 컬럼으로 쓴다.
+  const mapFields = [...PLACE_FIELD];
 
-  // 기존(활성) contentid 목록 — API 결과에 없는 행을 삭제 처리하기 위함
+  // 기존 contentid 목록 (삭제된 행 포함) — 두 용도로 쓴다.
+  //  - knownIds: 이미 존재하는 contentid (insert / update 분류용)
+  //  - existingIds: 활성 행만 (API 결과에 없는 행을 삭제 처리하기 위함)
   const { data: existingRows, error: existingErr } = await supabase
     .from("tb_place")
-    .select("contentid")
-    .or("delete_yn.is.null,delete_yn.eq.N");
+    .select("contentid, delete_yn");
   if (existingErr) {
     return {
       ok: false,
@@ -247,8 +279,16 @@ async function syncPlace(supabase: SupabaseClient): Promise<SyncOutcome> {
       error: `tb_place 기존 목록 조회 실패: ${existingErr.message}`
     };
   }
-  const existingIds = (existingRows ?? [])
-    .map((r) => (r as { contentid: number | null }).contentid)
+  const existingRowList = (existingRows ?? []) as {
+    contentid: number | null;
+    delete_yn: string | null;
+  }[];
+  const knownIds = new Set<number>(
+    existingRowList.map((r) => r.contentid).filter((v): v is number => v != null)
+  );
+  const existingIds = existingRowList
+    .filter((r) => r.delete_yn == null || r.delete_yn === "N")
+    .map((r) => r.contentid)
     .filter((v): v is number => v != null);
 
   // areaBasedList2 (대전, lDongRegnCd=30) 전체 페이지 조회
@@ -283,33 +323,30 @@ async function syncPlace(supabase: SupabaseClient): Promise<SyncOutcome> {
         }
         fetched += 1;
         const row: Record<string, unknown> = { contentid: Number(contentid) };
-        for (const f of mapFields) if (f in item) row[f] = str(item[f]);
-        if (hasUpdatetime) row.updatetime = now;
+        // API 응답 키는 카멜케이스(lclsSystm1 등)지만, DB 컬럼은 소문자로 접혀 저장됨.
+        // 읽기는 원본 키로, 쓰기는 소문자 키로 매핑한다.
+        for (const f of mapFields) if (f in item) row[f.toLowerCase()] = str(item[f]);
         rows.push(row);
       }
     } catch (e) {
-      errors.push({ page: pageNo, message: e instanceof Error ? e.message : String(e) });
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`[syncPlace] areaBasedList2 실패 (pageNo=${pageNo}): ${message}`);
+      errors.push({ page: pageNo, message });
     }
     pageNo += 1;
   }
 
-  // tb_place 로 upsert (contentid 충돌 시 update — 기타 로컬 컬럼은 보존)
-  let upserted = 0;
-  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
-    const chunk = rows.slice(i, i + UPSERT_CHUNK);
-    const { error: upsertErr } = await supabase
-      .from("tb_place")
-      .upsert(chunk, { onConflict: "contentid" });
-    if (upsertErr) {
-      return {
-        ok: false,
-        status: 502,
-        error: `upsert 실패: ${upsertErr.message}`,
-        partial: { totalPlaces: rows.length, fetched, upserted, skipped }
-      };
-    }
-    upserted += chunk.length;
+  // 신규는 insert(updatetime 미설정), 기존은 update(updatetime 갱신, delete_yn/deletetime 보존).
+  const io = await insertOrUpdate(supabase, "tb_place", rows, knownIds, now);
+  if (io.error) {
+    return {
+      ok: false,
+      status: 502,
+      error: io.error,
+      partial: { totalPlaces: rows.length, fetched, upserted: io.upserted, skipped }
+    };
   }
+  const upserted = io.upserted;
 
   // API 결과에 없는 기존 행 삭제 처리 (delete_yn=Y, deletetime 갱신).
   // 페이지 오류가 있으면 목록이 불완전할 수 있어 삭제를 건너뛴다.
@@ -350,14 +387,15 @@ async function syncPlace(supabase: SupabaseClient): Promise<SyncOutcome> {
 }
 
 // 활성 tb_place contentid 목록 조회 (소프트 삭제 제외). 컬럼 지정 가능.
+// onlyWithContentid=true 면 contentid 가 null 인 행은 DB 단계에서 제외한다.
 async function fetchActivePlaces<T>(
   supabase: SupabaseClient,
-  columns: string
+  columns: string,
+  onlyWithContentid = false
 ): Promise<{ data: T[] } | { error: string }> {
-  const { data, error } = await supabase
-    .from("tb_place")
-    .select(columns)
-    .or("delete_yn.is.null,delete_yn.eq.N");
+  let query = supabase.from("tb_place").select(columns).or("delete_yn.is.null,delete_yn.eq.N");
+  if (onlyWithContentid) query = query.not("contentid", "is", null);
+  const { data, error } = await query;
   if (error) return { error: `tb_place 조회 실패: ${error.message}` };
   return { data: (data ?? []) as T[] };
 }
@@ -395,9 +433,15 @@ async function softDeleteMissing(
 
 // ── 2. tb_place_barrierfree 동기화 (detailWithTour2) ────────
 async function syncBarrierfree(supabase: SupabaseClient): Promise<SyncOutcome> {
-  const places = await fetchActivePlaces<{ contentid: number }>(supabase, "contentid");
+  // place_id 는 tb_place 에서 가져와 그대로 tb_place_barrierfree 에 넣는다(barrierfree 의 PK).
+  const places = await fetchActivePlaces<{
+    place_id: number | null;
+    contentid: number | null;
+  }>(supabase, "place_id, contentid", true);
   if ("error" in places) return { ok: false, status: 502, error: places.error };
-  const ids = places.data.map((p) => p.contentid).filter((v): v is number => v != null);
+  const targets = places.data.filter(
+    (p): p is { place_id: number; contentid: number } => p.contentid != null && p.place_id != null
+  );
 
   let fetched = 0;
   let skipped = 0;
@@ -405,10 +449,10 @@ async function syncBarrierfree(supabase: SupabaseClient): Promise<SyncOutcome> {
   const rows: Record<string, unknown>[] = [];
   const now = new Date().toISOString();
 
-  for (let i = 0; i < ids.length; i += BF_FETCH_CONCURRENCY) {
-    const batch = ids.slice(i, i + BF_FETCH_CONCURRENCY);
+  for (let i = 0; i < targets.length; i += BF_FETCH_CONCURRENCY) {
+    const batch = targets.slice(i, i + BF_FETCH_CONCURRENCY);
     await Promise.all(
-      batch.map(async (contentid) => {
+      batch.map(async ({ place_id, contentid }) => {
         try {
           const res = await withRetry(() =>
             brfrTourInfoApi.detailWithTour<TourResponse>({
@@ -424,35 +468,43 @@ async function syncBarrierfree(supabase: SupabaseClient): Promise<SyncOutcome> {
             return;
           }
           fetched += 1;
-          const row: Record<string, unknown> = { contentid, updatetime: now };
+          const row: Record<string, unknown> = { place_id, contentid };
           for (const field of BF_FIELDS) {
             const value = item[field];
             row[field] = typeof value === "string" ? value : "";
           }
           rows.push(row);
         } catch (e) {
-          errors.push({ contentid, message: e instanceof Error ? e.message : String(e) });
+          const message = e instanceof Error ? e.message : String(e);
+          console.error(
+            `[syncBarrierfree] detailWithTour2 실패 (contentid=${contentid}): ${message}`
+          );
+          errors.push({ contentid, message });
         }
       })
     );
   }
 
-  let upserted = 0;
-  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
-    const chunk = rows.slice(i, i + UPSERT_CHUNK);
-    const { error: upsertErr } = await supabase
-      .from("tb_place_barrierfree")
-      .upsert(chunk, { onConflict: "contentid" });
-    if (upsertErr) {
-      return {
-        ok: false,
-        status: 502,
-        error: `upsert 실패: ${upsertErr.message}`,
-        partial: { totalPlaces: ids.length, fetched, upserted, skipped }
-      };
-    }
-    upserted += chunk.length;
+  // barrierfree 는 PK(place_id) 기준으로 분류·upsert 한다(contentid 에 unique 제약이 없음).
+  const known = await fetchKnownIds(supabase, "tb_place_barrierfree", "place_id");
+  if ("error" in known) {
+    return {
+      ok: false,
+      status: 502,
+      error: known.error,
+      partial: { totalPlaces: targets.length, fetched, upserted: 0, skipped }
+    };
   }
+  const io = await insertOrUpdate(supabase, "tb_place_barrierfree", rows, known, now, "place_id");
+  if (io.error) {
+    return {
+      ok: false,
+      status: 502,
+      error: io.error,
+      partial: { totalPlaces: targets.length, fetched, upserted: io.upserted, skipped }
+    };
+  }
+  const upserted = io.upserted;
 
   const confirmedIds = new Set(rows.map((r) => r.contentid as number));
   const erroredIds = new Set(errors.map((e) => e.contentid));
@@ -468,14 +520,14 @@ async function syncBarrierfree(supabase: SupabaseClient): Promise<SyncOutcome> {
       ok: false,
       status: 502,
       error: del.error,
-      partial: { totalPlaces: ids.length, fetched, upserted, skipped }
+      partial: { totalPlaces: targets.length, fetched, upserted, skipped }
     };
   }
 
   return {
     ok: true,
     result: {
-      totalPlaces: ids.length,
+      totalPlaces: targets.length,
       fetched,
       upserted,
       deleted: del.deleted,
@@ -488,13 +540,16 @@ async function syncBarrierfree(supabase: SupabaseClient): Promise<SyncOutcome> {
 
 // ── 3. tb_place_detail 동기화 (detailCommon2 + detailIntro2) ─
 async function syncDetail(supabase: SupabaseClient): Promise<SyncOutcome> {
+  // place_id 는 tb_place 에서 가져와 그대로 tb_place_detail 에 넣는다(detail 의 PK).
   const places = await fetchActivePlaces<{
+    place_id: number | null;
     contentid: number | null;
     contenttypeid: string | null;
-  }>(supabase, "contentid, contenttypeid");
+  }>(supabase, "place_id, contentid, contenttypeid", true);
   if ("error" in places) return { ok: false, status: 502, error: places.error };
   const targets = places.data.filter(
-    (p): p is { contentid: number; contenttypeid: string | null } => p.contentid != null
+    (p): p is { place_id: number; contentid: number; contenttypeid: string | null } =>
+      p.contentid != null && p.place_id != null
   );
 
   let fetched = 0;
@@ -506,7 +561,7 @@ async function syncDetail(supabase: SupabaseClient): Promise<SyncOutcome> {
   for (let i = 0; i < targets.length; i += DETAIL_FETCH_CONCURRENCY) {
     const batch = targets.slice(i, i + DETAIL_FETCH_CONCURRENCY);
     await Promise.all(
-      batch.map(async ({ contentid, contenttypeid }) => {
+      batch.map(async ({ place_id, contentid, contenttypeid }) => {
         try {
           const commonRes = await withRetry(() =>
             korTourInfoApi.detailCommon<TourResponse>({
@@ -533,33 +588,41 @@ async function syncDetail(supabase: SupabaseClient): Promise<SyncOutcome> {
           }
 
           fetched += 1;
-          const row: Record<string, unknown> = { contentid, updatetime: now };
+          const row: Record<string, unknown> = { place_id, contentid };
           for (const f of COMMON_FIELDS) row[f] = str(common[f]);
           for (const f of INTRO_FIELDS) row[f] = str(intro?.[f]);
           rows.push(row);
         } catch (e) {
-          errors.push({ contentid, message: e instanceof Error ? e.message : String(e) });
+          const message = e instanceof Error ? e.message : String(e);
+          console.error(
+            `[syncDetail] detailCommon2/detailIntro2 실패 (contentid=${contentid}): ${message}`
+          );
+          errors.push({ contentid, message });
         }
       })
     );
   }
 
-  let upserted = 0;
-  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
-    const chunk = rows.slice(i, i + UPSERT_CHUNK);
-    const { error: upsertErr } = await supabase
-      .from("tb_place_detail")
-      .upsert(chunk, { onConflict: "contentid" });
-    if (upsertErr) {
-      return {
-        ok: false,
-        status: 502,
-        error: `upsert 실패: ${upsertErr.message}`,
-        partial: { totalPlaces: targets.length, fetched, upserted, skipped }
-      };
-    }
-    upserted += chunk.length;
+  // detail 은 PK(place_id) 기준으로 분류·upsert 한다(contentid 에 unique 제약이 없음).
+  const known = await fetchKnownIds(supabase, "tb_place_detail", "place_id");
+  if ("error" in known) {
+    return {
+      ok: false,
+      status: 502,
+      error: known.error,
+      partial: { totalPlaces: targets.length, fetched, upserted: 0, skipped }
+    };
   }
+  const io = await insertOrUpdate(supabase, "tb_place_detail", rows, known, now, "place_id");
+  if (io.error) {
+    return {
+      ok: false,
+      status: 502,
+      error: io.error,
+      partial: { totalPlaces: targets.length, fetched, upserted: io.upserted, skipped }
+    };
+  }
+  const upserted = io.upserted;
 
   const confirmedIds = new Set(rows.map((r) => r.contentid as number));
   const erroredIds = new Set(errors.map((e) => e.contentid));
