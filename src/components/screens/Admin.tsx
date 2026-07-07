@@ -719,9 +719,7 @@ const PLACE_DETAIL_COLUMNS = [
   "createdtime",
   "modifiedtime",
   "registtime",
-  "updatetime",
-  "delete_yn",
-  "deletetime"
+  "updatetime"
 ] as const;
 
 const PLACE_BF_COLUMNS = [
@@ -752,9 +750,7 @@ const PLACE_BF_COLUMNS = [
   "babysparechair",
   "infantsfamilyetc",
   "registtime",
-  "updatetime",
-  "delete_yn",
-  "deletetime"
+  "updatetime"
 ] as const;
 
 // ── 테이블 공통 페이지네이션 (<< < 1 2 … 10 > >>) ──────────
