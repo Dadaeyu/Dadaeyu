@@ -17,6 +17,7 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+// 관광지 상세 패널의 접근성 정보 아코디언 (보행/시각/청각/영유아 카테고리별 상세 항목)
 export default function AccessibilitySection({
   groups
 }: {

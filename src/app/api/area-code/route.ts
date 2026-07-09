@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 
+// 필터 패널의 "구" 드롭다운용 지역 코드 목록 조회 (tb_area_code)
 export async function GET() {
   const { data, error } = await supabase
     .from("tb_area_code")

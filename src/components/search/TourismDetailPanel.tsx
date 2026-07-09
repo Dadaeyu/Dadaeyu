@@ -45,6 +45,7 @@ function renderWithLineBreaks(text: string) {
   return lines.flatMap((line, i) => (i === 0 ? [line] : [<br key={i} />, line]));
 }
 
+// DB(tb_tourism_places) 출처 검색 결과의 상세 패널. usePlaceSearch()의 tourismDetail을 받아 표시한다.
 export default function TourismDetailPanel({
   sp,
   detail,

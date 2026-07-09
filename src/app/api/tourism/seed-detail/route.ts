@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { XMLParser } from "fast-xml-parser";
 
-const SERVICE_KEY = "6bf19775de8488bbefbb5c248866a9a85dc8d4f0dfaaaa8198871f5ac8ba7e18";
+// tb_tourism_detail 시딩용: 공공데이터포털 관광지 상세(개요/이용시간 등)를 받아 upsert한다.
 const COMMON_API = "https://apis.data.go.kr/B551011/KorService2/detailCommon2";
 const INTRO_API = "https://apis.data.go.kr/B551011/KorService2/detailIntro2";
 
@@ -22,11 +22,12 @@ function extractXmlField(xml: string, tag: string): string | null {
 }
 
 async function fetchCommon(
-  contentId: number
+  contentId: number,
+  serviceKey: string
 ): Promise<{ overview: string | null; homepage: string | null } | null> {
   try {
     const params = new URLSearchParams({
-      serviceKey: SERVICE_KEY,
+      serviceKey,
       MobileOS: "ETC",
       MobileApp: "AppTest",
       contentId: String(contentId),
@@ -46,10 +47,14 @@ async function fetchCommon(
   }
 }
 
-async function fetchIntro(contentId: number, contentTypeId: number): Promise<KTOItem | null> {
+async function fetchIntro(
+  contentId: number,
+  contentTypeId: number,
+  serviceKey: string
+): Promise<KTOItem | null> {
   try {
     const params = new URLSearchParams({
-      serviceKey: SERVICE_KEY,
+      serviceKey,
       MobileOS: "ETC",
       MobileApp: "AppTest",
       contentId: String(contentId),
@@ -176,10 +181,10 @@ const NULL_INTRO = {
   open_date: null
 };
 
-async function fetchPlaceDetail(contentId: number, contentTypeId: number) {
+async function fetchPlaceDetail(contentId: number, contentTypeId: number, serviceKey: string) {
   const [common, introItem] = await Promise.all([
-    fetchCommon(contentId),
-    fetchIntro(contentId, contentTypeId)
+    fetchCommon(contentId, serviceKey),
+    fetchIntro(contentId, contentTypeId, serviceKey)
   ]);
 
   return {
@@ -198,6 +203,14 @@ function chunk<T>(arr: T[], n: number): T[][] {
 }
 
 export async function POST() {
+  const serviceKey = process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY;
+  if (!serviceKey) {
+    return Response.json(
+      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY가 설정되지 않았습니다." },
+      { status: 500 }
+    );
+  }
+
   const { data: places, error: fetchError } = await supabase
     .from("tb_tourism_places")
     .select("contentid, contenttypeid");
@@ -216,7 +229,7 @@ export async function POST() {
 
   for (const batch of chunk(placeList, 5)) {
     const results = await Promise.all(
-      batch.map((p) => fetchPlaceDetail(p.contentid, p.contenttypeid).catch(() => null))
+      batch.map((p) => fetchPlaceDetail(p.contentid, p.contenttypeid, serviceKey).catch(() => null))
     );
     for (const row of results) {
       if (row) rows.push(row);
@@ -243,6 +256,14 @@ export async function POST() {
 // GET /api/tourism/seed-detail?contentId=130420&contentTypeId=14
 // 한 건 테스트용 (쿼터 확인 후 사용)
 export async function GET(req: Request) {
+  const serviceKey = process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY;
+  if (!serviceKey) {
+    return Response.json(
+      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY가 설정되지 않았습니다." },
+      { status: 500 }
+    );
+  }
+
   const { searchParams } = new URL(req.url);
   const contentId = Number(searchParams.get("contentId"));
   const contentTypeId = Number(searchParams.get("contentTypeId"));
@@ -251,8 +272,8 @@ export async function GET(req: Request) {
   }
 
   const [common, introItem] = await Promise.all([
-    fetchCommon(contentId),
-    fetchIntro(contentId, contentTypeId)
+    fetchCommon(contentId, serviceKey),
+    fetchIntro(contentId, contentTypeId, serviceKey)
   ]);
 
   return Response.json({

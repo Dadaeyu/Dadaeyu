@@ -1,5 +1,6 @@
 "use client";
 
+// 장소 필터(접근성/인원수/테마/위치/일정/별점/즐겨찾기) 상태 훅과 필터 UI 필드 모음.
 import { useState } from "react";
 import { ChevronDown, Plus, Minus, Star, Heart } from "lucide-react";
 

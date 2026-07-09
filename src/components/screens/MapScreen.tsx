@@ -17,6 +17,8 @@ import { useMyLocation } from "@/hooks/useMyLocation";
 const MARKER_COLORS = PLACES.map((p) => PLACE_COLORS[p.colorKey].color);
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────
+// 지도 화면: 사이드바(검색/필터/목록) + KakaoMap. usePlaceSearch·useMyLocation 훅으로
+// DB/카카오 검색 결과와 내 위치를 지도에 반영하고, 선택한 장소의 상세 패널을 보여준다.
 export default function Map() {
   const searchParams = useSearchParams();
   const initialTheme = searchParams.get("theme");

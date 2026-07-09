@@ -1,5 +1,6 @@
 "use client";
 
+// 카카오맵 SDK 래퍼: 마커/툴팁/경로선/내 위치 표시를 관리하는 지도 컴포넌트.
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
 

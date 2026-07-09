@@ -1,3 +1,5 @@
+// 카카오 로컬 검색 API(/api/kakao-search)를 호출해 DB 검색 결과와 같은 SearchPlace 형태로 변환한다.
+
 export interface SearchPlace {
   id: string;
   name: string;

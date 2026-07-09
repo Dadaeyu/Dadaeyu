@@ -1,15 +1,18 @@
 import { supabase } from "@/lib/supabase";
 
+// tb_tourism_accessibility 시딩용: 공공데이터포털 무장애 관광정보(휠체어/점자블록 등)를 받아 upsert한다.
 const API_URL = "https://apis.data.go.kr/B551011/KorWithService2/detailWithTour2";
-const SERVICE_KEY = "6bf19775de8488bbefbb5c248866a9a85dc8d4f0dfaaaa8198871f5ac8ba7e18";
 
 const hasValue = (v: string | null | undefined) => !!(v && v.trim().length > 0);
 
 type DetailItem = Record<string, string>;
 
-async function fetchAccessibility(contentId: number): Promise<DetailItem | null> {
+async function fetchAccessibility(
+  contentId: number,
+  serviceKey: string
+): Promise<DetailItem | null> {
   const params = new URLSearchParams({
-    serviceKey: SERVICE_KEY,
+    serviceKey,
     MobileOS: "ETC",
     MobileApp: "AppTest",
     contentId: String(contentId),
@@ -98,6 +101,14 @@ function chunk<T>(arr: T[], n: number): T[][] {
 }
 
 export async function POST() {
+  const serviceKey = process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY;
+  if (!serviceKey) {
+    return Response.json(
+      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY가 설정되지 않았습니다." },
+      { status: 500 }
+    );
+  }
+
   // 1. tourism_places에서 content_id 전체 조회
   const { data: places, error: fetchError } = await supabase
     .from("tb_tourism_places")
@@ -114,7 +125,7 @@ export async function POST() {
   let failed = 0;
 
   for (const batch of chunk(contentIds, 5)) {
-    const results = await Promise.all(batch.map(fetchAccessibility));
+    const results = await Promise.all(batch.map((id) => fetchAccessibility(id, serviceKey)));
     for (const item of results) {
       if (item) rows.push(toRow(item));
       else failed++;
