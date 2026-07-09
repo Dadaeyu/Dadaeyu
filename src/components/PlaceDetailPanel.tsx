@@ -13,7 +13,7 @@ import {
   Check
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
-import { ACCESSIBILITY_LABELS, type Place } from "@/data/placesData";
+import { ACCESSIBILITY_LABELS, PLACE_COLORS, type Place } from "@/data/placesData";
 import { useCourseContext } from "@/context/CourseContext";
 import { usePlaces } from "@/context/PlacesContext";
 import { useOptionalAuth } from "@/context/AuthContext";
@@ -159,7 +159,13 @@ export default function PlaceDetailPanel({
             </div>
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <Badge tone="custom" style={{ background: place.bg, color: place.color }}>
+            <Badge
+              tone="custom"
+              style={{
+                background: PLACE_COLORS[place.colorKey].bg,
+                color: PLACE_COLORS[place.colorKey].color
+              }}
+            >
               {place.category}
             </Badge>
             <span className="text-stone text-xs">{place.distance}</span>

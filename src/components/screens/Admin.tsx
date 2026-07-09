@@ -30,7 +30,7 @@ import {
   Star,
   ShieldCheck
 } from "lucide-react";
-import { PLACES } from "@/data/placesData";
+import { PLACES, PLACE_COLORS } from "@/data/placesData";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -553,7 +553,10 @@ function PlaceManagement() {
                   <td className="px-4 py-3">
                     <span
                       className="rounded-full px-2 py-0.5 text-xs font-semibold"
-                      style={{ background: p.bg, color: p.color }}
+                      style={{
+                        background: PLACE_COLORS[p.colorKey].bg,
+                        color: PLACE_COLORS[p.colorKey].color
+                      }}
                     >
                       {p.category}
                     </span>

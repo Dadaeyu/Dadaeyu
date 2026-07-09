@@ -1,11 +1,18 @@
 import { createClient } from "./server";
 import {
   PLACES as FALLBACK_PLACES,
+  PLACE_COLORS,
   type Place,
+  type PlaceColorKey,
   type PlaceDetail,
   type Review
 } from "@/data/placesData";
 import type { DbPlace, DbPlaceReview } from "./types";
+
+function colorToKey(color: string): PlaceColorKey {
+  const entry = Object.entries(PLACE_COLORS).find(([, v]) => v.color === color);
+  return (entry?.[0] as PlaceColorKey | undefined) ?? "green";
+}
 
 function toPlace(row: DbPlace): Place {
   const fallback = FALLBACK_PLACES.find((p) => p.id === row.id);
@@ -14,10 +21,7 @@ function toPlace(row: DbPlace): Place {
     name: row.name,
     lat: Number(row.lat) || fallback?.lat || 36.3504,
     lng: Number(row.lng) || fallback?.lng || 127.3845,
-    cx: Number(row.cx),
-    cy: Number(row.cy),
-    color: row.color,
-    bg: row.bg,
+    colorKey: fallback?.colorKey ?? colorToKey(row.color),
     category: row.category,
     rating: Number(row.rating),
     accessibility: row.accessibility ?? [],
