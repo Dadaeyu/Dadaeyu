@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { COMMUNITY_LEVEL_LABELS, type UserRole, type UserStatus } from "@/lib/supabase/types";
 import { formatDate } from "./helpers";
 
@@ -18,10 +19,45 @@ type AdminUser = {
   created_at: string;
 };
 
+type SortKey = "created_at" | "nickname" | "role";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "created_at", label: "최신 가입순" },
+  { value: "nickname", label: "닉네임순" },
+  { value: "role", label: "역할순" }
+];
+
+const TABLE_COLUMNS = [
+  { key: "no", label: "No.", className: "w-12 text-center" },
+  { key: "nickname", label: "닉네임", className: "w-[7.5rem]" },
+  { key: "email", label: "이메일", className: "min-w-[10rem]" },
+  { key: "created_at", label: "가입일", className: "w-28 text-center" },
+  { key: "level", label: "등급", className: "w-24 text-center" },
+  { key: "role", label: "역할", className: "w-20 text-center" },
+  { key: "status", label: "상태", className: "w-20 text-center" },
+  { key: "actions", label: "관리", className: "w-44 text-center" }
+] as const;
+
+function sortUsers(users: AdminUser[], sortKey: SortKey): AdminUser[] {
+  const list = [...users];
+  list.sort((a, b) => {
+    if (sortKey === "nickname") {
+      return a.nickname.localeCompare(b.nickname, "ko");
+    }
+    if (sortKey === "role") {
+      if (a.role !== b.role) return a.role === "admin" ? -1 : 1;
+      return a.nickname.localeCompare(b.nickname, "ko");
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+  return list;
+}
+
 export function UsersSection() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<AdminUser | null>(null);
@@ -39,7 +75,7 @@ export function UsersSection() {
       const res = await fetch(`/api/admin/users?${params}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error ?? "회원 목록을 불러오지 못했습니다.");
+        throw new Error(j.error ?? "사용자 목록을 불러오지 못했습니다.");
       }
       const json = (await res.json()) as { users: AdminUser[] };
       setUsers(json.users ?? []);
@@ -54,6 +90,8 @@ export function UsersSection() {
     const t = setTimeout(loadUsers, 300);
     return () => clearTimeout(t);
   }, [loadUsers]);
+
+  const sortedUsers = useMemo(() => sortUsers(users, sortKey), [users, sortKey]);
 
   const patchUser = async (
     id: string,
@@ -83,7 +121,7 @@ export function UsersSection() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-ink text-xl font-bold">유저 관리</h1>
+        <h1 className="text-ink text-xl font-bold">사용자 관리</h1>
         <span className="text-stone text-sm">총 {users.length}명</span>
       </div>
 
@@ -93,89 +131,105 @@ export function UsersSection() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="relative min-w-0 flex-1">
           <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="닉네임 또는 이메일 검색"
-            className="border-hairline focus:ring-navy-400 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
+            className="border-hairline focus:ring-navy-400 w-full rounded-lg border bg-white px-4 py-2.5 pr-4 pl-9 text-sm text-[#0a0a0a] focus:ring-2 focus:outline-none"
           />
         </div>
-        <select
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value as "all" | UserRole)}
-          className="border-hairline rounded-lg border px-3 py-2.5 text-sm"
-        >
-          <option value="all">전체 역할</option>
-          <option value="user">일반</option>
-          <option value="admin">관리자</option>
-        </select>
+        <div className="flex shrink-0 gap-2">
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value as "all" | UserRole)}
+            className="select-on-light border-hairline min-w-[7.5rem] rounded-lg border px-3 py-2.5 text-sm"
+          >
+            <option value="all">전체 역할</option>
+            <option value="user">일반</option>
+            <option value="admin">관리자</option>
+          </select>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="select-on-light border-hairline min-w-[8.5rem] rounded-lg border px-3 py-2.5 text-sm"
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-hairline-soft bg-surface-soft border-b">
-                {["닉네임", "이메일", "가입일", "등급", "역할", "상태", "액션"].map((h) => (
-                  <th
-                    key={h}
-                    className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={7} className="text-stone px-4 py-8 text-center">
-                    불러오는 중…
-                  </td>
+      {loading ? (
+        <Card className="border-hairline-soft animate-pulse p-8 text-center">
+          <p className="text-stone text-sm">불러오는 중…</p>
+        </Card>
+      ) : sortedUsers.length === 0 ? (
+        <Card className="border-hairline-soft p-8 text-center">
+          <p className="text-stone text-sm">검색 결과가 없습니다.</p>
+        </Card>
+      ) : (
+        <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[52rem] table-fixed text-sm">
+              <thead>
+                <tr className="border-hairline-soft bg-surface-soft border-b">
+                  {TABLE_COLUMNS.map((col) => (
+                    <th
+                      key={col.key}
+                      className={`text-steel px-4 py-3 text-xs font-bold whitespace-nowrap ${col.className}`}
+                    >
+                      {col.label}
+                    </th>
+                  ))}
                 </tr>
-              )}
-              {!loading && users.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="text-stone px-4 py-8 text-center">
-                    검색 결과가 없습니다.
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                users.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
-                  >
-                    <td className="text-ink px-4 py-3 font-semibold">{u.nickname}</td>
-                    <td className="text-steel px-4 py-3 whitespace-nowrap">{u.email ?? "—"}</td>
-                    <td className="text-stone px-4 py-3 whitespace-nowrap">
+              </thead>
+              <tbody className="divide-hairline-soft divide-y">
+                {sortedUsers.map((u, index) => (
+                  <tr key={u.id} className="hover:bg-surface-soft/60 transition-colors">
+                    <td className="text-stone px-4 py-3.5 text-center align-middle tabular-nums">
+                      {index + 1}
+                    </td>
+                    <td className="text-ink px-4 py-3.5 align-middle font-semibold">
+                      <span className="block truncate" title={u.nickname}>
+                        {u.nickname}
+                      </span>
+                    </td>
+                    <td className="text-steel px-4 py-3.5 align-middle">
+                      <span className="block truncate" title={u.email ?? undefined}>
+                        {u.email ?? "—"}
+                      </span>
+                    </td>
+                    <td className="text-stone px-4 py-3.5 text-center align-middle whitespace-nowrap tabular-nums">
                       {formatDate(u.created_at)}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="bg-surface text-steel rounded-full px-2 py-0.5 text-xs font-semibold">
+                    <td className="px-4 py-3.5 text-center align-middle">
+                      <span className="bg-surface text-steel inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap">
                         {COMMUNITY_LEVEL_LABELS[u.community_level] ?? `Lv.${u.community_level}`}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5 text-center align-middle">
                       <Badge tone={u.role === "admin" ? "brand" : "neutral"}>
                         {u.role === "admin" ? "관리자" : "일반"}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5 text-center align-middle">
                       <Badge tone={u.status === "active" ? "brand" : "error"}>
                         {u.status === "active" ? "정상" : "정지"}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1.5">
+                    <td className="px-4 py-3.5 text-center align-middle">
+                      <div className="flex items-center justify-center gap-1.5">
                         <Button
                           size="sm"
                           variant="ghost"
                           disabled={saving}
+                          className="h-8 px-2.5 text-xs whitespace-nowrap"
                           onClick={() =>
                             patchUser(u.id, {
                               role: u.role === "admin" ? "user" : "admin"
@@ -189,6 +243,7 @@ export function UsersSection() {
                             size="sm"
                             variant="ghost"
                             disabled={saving}
+                            className="h-8 px-2.5 text-xs whitespace-nowrap"
                             onClick={() => {
                               setSuspendTarget(u);
                               setSuspendReason("");
@@ -201,6 +256,7 @@ export function UsersSection() {
                             size="sm"
                             variant="ghost"
                             disabled={saving}
+                            className="h-8 px-2.5 text-xs whitespace-nowrap"
                             onClick={() => patchUser(u.id, { status: "active" })}
                           >
                             해제
@@ -210,10 +266,11 @@ export function UsersSection() {
                     </td>
                   </tr>
                 ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {suspendTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -228,7 +285,7 @@ export function UsersSection() {
               onChange={(e) => setSuspendReason(e.target.value)}
               rows={3}
               placeholder="정지 사유를 입력하세요"
-              className="border-hairline mb-4 w-full rounded-lg border p-3 text-sm"
+              className="border-hairline mb-4 w-full rounded-lg border bg-white p-3 text-sm text-[#0a0a0a]"
             />
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setSuspendTarget(null)} disabled={saving}>

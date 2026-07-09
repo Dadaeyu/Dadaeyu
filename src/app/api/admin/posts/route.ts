@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/supabase/require-admin";
+import { applyIlikeSearch, parseListParams } from "@/lib/admin/list-query";
 
 export const dynamic = "force-dynamic";
 
 const POST_TYPE_LABELS: Record<string, string> = {
   review: "리뷰",
   tip: "팁",
-  share: "공유"
+  share: "공유",
+  question: "질문"
 };
 
 export async function GET(request: Request) {
@@ -17,21 +19,71 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const q = (searchParams.get("q") ?? "").trim().toLowerCase();
+  const singleId = Number(searchParams.get("id"));
+  const { page, pageSize, q, from, to } = parseListParams(searchParams);
+  const typeFilter = searchParams.get("type") ?? "all";
 
   try {
     const supabase = createAdminClient();
 
-    const { data: posts, error } = await supabase
+    if (Number.isFinite(singleId) && singleId > 0) {
+      const { data, error } = await supabase
+        .from("tb_community_posts")
+        .select(
+          "id, title, content, post_type, like_count, comment_count, created_at, updated_at, author_id, attached_place_id, attached_course_id, tb_members!author_id(nickname)"
+        )
+        .eq("id", singleId)
+        .single();
+
+      if (error || !data) {
+        return NextResponse.json({ error: "게시물을 찾을 수 없습니다." }, { status: 404 });
+      }
+
+      const author = data.tb_members as { nickname: string } | { nickname: string }[] | null;
+      const nickname = Array.isArray(author) ? author[0]?.nickname : author?.nickname;
+
+      return NextResponse.json({
+        items: [
+          {
+            id: data.id,
+            title: data.title,
+            content: data.content,
+            post_type: data.post_type,
+            post_type_label: POST_TYPE_LABELS[data.post_type] ?? data.post_type,
+            author_nickname: nickname ?? "알 수 없음",
+            author_id: data.author_id,
+            like_count: data.like_count,
+            comment_count: data.comment_count,
+            created_at: data.created_at,
+            updated_at: data.updated_at,
+            attached_place_id: data.attached_place_id,
+            attached_course_id: data.attached_course_id
+          }
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 1
+      });
+    }
+
+    let query = supabase
       .from("tb_community_posts")
       .select(
-        "id, title, post_type, like_count, comment_count, created_at, author_id, tb_members(nickname)"
+        "id, title, post_type, like_count, comment_count, created_at, author_id, tb_members!author_id(nickname)",
+        { count: "exact" }
       )
       .order("created_at", { ascending: false });
 
+    if (typeFilter !== "all") {
+      query = query.eq("post_type", typeFilter);
+    }
+
+    query = applyIlikeSearch(query, "title", q);
+
+    const { data: posts, error, count } = await query.range(from, to);
     if (error) throw error;
 
-    let result = (posts ?? []).map((p) => {
+    const result = (posts ?? []).map((p) => {
       const author = p.tb_members as { nickname: string } | { nickname: string }[] | null;
       const nickname = Array.isArray(author) ? author[0]?.nickname : author?.nickname;
 
@@ -48,13 +100,12 @@ export async function GET(request: Request) {
       };
     });
 
-    if (q) {
-      result = result.filter(
-        (p) => p.title.toLowerCase().includes(q) || p.author_nickname.toLowerCase().includes(q)
-      );
-    }
-
-    return NextResponse.json({ posts: result });
+    return NextResponse.json({
+      items: result,
+      total: count ?? 0,
+      page,
+      pageSize
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to fetch posts" },

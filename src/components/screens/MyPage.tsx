@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MapPin, Star, Heart, Route, FileText, Pencil, Check, LogOut } from "lucide-react";
+import { MapPin, Star, Heart, Route, FileText, Pencil, Check } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { fetchFavorites } from "@/lib/supabase/favorites";
 import { fetchMyCourses } from "@/lib/supabase/courses";
@@ -26,7 +25,6 @@ import {
   getNicknameSubmitError
 } from "@/lib/supabase/member";
 import NicknameField from "@/components/NicknameField";
-import ThemePreferencePicker from "@/components/ThemePreferencePicker";
 import { usePlaces } from "@/context/PlacesContext";
 
 const ACCESS_OPTIONS = [
@@ -38,9 +36,8 @@ const ACCESS_OPTIONS = [
 type TabKey = "saved" | "courses" | "posts" | "reports";
 
 export default function MyPage() {
-  const { user, member, preferences, signOut, refreshMember, loading: authLoading } = useAuth();
+  const { user, member, preferences, refreshMember, loading: authLoading } = useAuth();
   const { places } = usePlaces();
-  const router = useRouter();
 
   const [editingProfile, setEditingProfile] = useState(false);
   const [nickname, setNickname] = useState("");
@@ -153,10 +150,7 @@ export default function MyPage() {
     savePreferences(next, themes);
   };
 
-  const handleThemeChange = (next: string[]) => {
-    setThemes(next);
-    savePreferences(access, next);
-  };
+  // 선호 테마는 가입/온보딩에서만 변경 (마이페이지에서는 표시 전용)
 
   const savedPlaces = places.filter((p) => savedPlaceIds.includes(p.id));
   const levelLabel = COMMUNITY_LEVEL_LABELS[member?.community_level ?? 1] ?? "새싹";
@@ -181,17 +175,6 @@ export default function MyPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => signOut().then(() => router.push("/"))}
-          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          로그아웃
-        </button>
-      </div>
-
       {/* 프로필 */}
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
         <div className="from-navy-700 via-navy-600 to-brand-500 h-20 bg-gradient-to-br" />
@@ -343,15 +326,22 @@ export default function MyPage() {
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-5">
-          <ThemePreferencePicker
-            value={themes}
-            onChange={handleThemeChange}
-            variant="pill"
-            label="선호 테마"
-            hint="관심 있는 테마를 모두 선택해 주세요"
-            showLegacyValues
-            lockUnselected
-          />
+          <h3 className="mb-1 font-bold text-gray-800">선호 테마</h3>
+          <p className="mb-3 text-xs text-gray-400">가입/온보딩에서 선택한 테마가 표시돼요</p>
+          {themes.length === 0 ? (
+            <p className="text-stone text-sm">선택한 테마가 없어요.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {themes.map((t) => (
+                <span
+                  key={t}
+                  className="bg-brand-600 rounded-full px-3 py-1.5 text-xs font-medium text-white"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="from-navy-600 to-brand-500 shadow-navy-600/20 rounded-2xl bg-gradient-to-br p-5 text-white shadow-md">

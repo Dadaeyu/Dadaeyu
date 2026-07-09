@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Map, Route, Users, User, ShieldCheck } from "lucide-react";
 import { useOptionalAuth } from "@/context/AuthContext";
+import { cn } from "@/components/ui/utils";
 
 const navItems = [
   { path: "/", label: "홈", icon: Home },
@@ -21,37 +22,66 @@ function useIsActive() {
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
 }
 
+function desktopNavClass(active: boolean, variant: "default" | "admin" = "default") {
+  if (!active) {
+    return cn(
+      "text-steel hover:text-ink hover:bg-surface-soft font-medium",
+      variant === "admin" && "hover:bg-navy-50 hover:text-navy-700"
+    );
+  }
+
+  if (variant === "admin") {
+    return "bg-navy-600 text-white shadow-md ring-2 ring-navy-400/50 font-bold";
+  }
+
+  return "bg-brand-500 text-white shadow-md ring-2 ring-brand-400/50 font-bold";
+}
+
+function mobileNavClass(active: boolean) {
+  return cn(
+    "relative flex min-w-[3.25rem] flex-col items-center gap-0.5 rounded-xl px-2.5 py-2 transition-all",
+    active
+      ? "bg-brand-50 text-brand-700 scale-[1.02] shadow-sm ring-2 ring-brand-300/60"
+      : "text-stone hover:bg-surface-soft hover:text-brand-600"
+  );
+}
+
 export function DesktopNav() {
   const isActive = useIsActive();
   const auth = useOptionalAuth();
   const isAdmin = auth?.member?.role === "admin" && auth?.member?.status === "active";
 
   return (
-    <nav className="hidden items-center gap-1 md:flex">
-      {navItems.map(({ path, label, icon: Icon }) => (
-        <Link
-          key={path}
-          href={path}
-          className={`flex items-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-all ${
-            isActive(path) ? "text-ink bg-surface" : "text-steel hover:text-ink hover:bg-surface"
-          }`}
-        >
-          <Icon className="h-4 w-4" />
-          <span>{label}</span>
-        </Link>
-      ))}
+    <nav className="hidden items-center gap-1 md:flex" aria-label="주 메뉴">
+      {navItems.map(({ path, label, icon: Icon }) => {
+        const active = isActive(path);
+        return (
+          <Link
+            key={path}
+            href={path}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm transition-all",
+              desktopNavClass(active)
+            )}
+          >
+            <Icon className={cn("h-4 w-4 shrink-0", active && "drop-shadow-sm")} />
+            <span>{label}</span>
+          </Link>
+        );
+      })}
       {isAdmin && (
         <>
-          <div className="bg-hairline mx-1 h-5 w-px" />
+          <div className="bg-hairline mx-1 h-6 w-px" aria-hidden="true" />
           <Link
             href={adminItem.path}
-            className={`flex items-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-all ${
-              isActive(adminItem.path)
-                ? "bg-navy-50 text-navy-700"
-                : "text-stone hover:bg-navy-50 hover:text-navy-600"
-            }`}
+            aria-current={isActive(adminItem.path) ? "page" : undefined}
+            className={cn(
+              "relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm transition-all",
+              desktopNavClass(isActive(adminItem.path), "admin")
+            )}
           >
-            <adminItem.icon className="h-4 w-4" />
+            <adminItem.icon className="h-4 w-4 shrink-0" />
             <span>{adminItem.label}</span>
           </Link>
         </>
@@ -67,19 +97,32 @@ export function MobileNav() {
   const allItems = isAdmin ? [...navItems, adminItem] : navItems;
 
   return (
-    <nav className="border-hairline fixed right-0 bottom-0 left-0 z-50 border-t bg-white/95 backdrop-blur-md md:hidden">
-      <div className="flex items-center justify-around py-1.5">
+    <nav
+      className="border-hairline fixed right-0 bottom-0 left-0 z-50 border-t bg-white/95 backdrop-blur-md md:hidden"
+      aria-label="주 메뉴"
+    >
+      <div className="flex items-stretch justify-around px-1 py-1">
         {allItems.map(({ path, label, icon: Icon }) => {
           const active = isActive(path);
           return (
             <Link
               key={path}
               href={path}
-              className={`relative flex flex-col items-center gap-1 rounded-lg px-3 py-1.5 transition-colors ${active ? "text-brand-600" : "text-stone hover:text-brand-500"}`}
+              aria-current={active ? "page" : undefined}
+              className={mobileNavClass(active)}
             >
-              {active && <span className="bg-brand-500 absolute -top-0.5 h-1 w-6 rounded-full" />}
-              <Icon className="h-5 w-5" />
-              <span className="text-[11px] font-medium">{label}</span>
+              {active && (
+                <span
+                  className="bg-brand-500 absolute top-0 left-1/2 h-1 w-7 -translate-x-1/2 rounded-b-full"
+                  aria-hidden="true"
+                />
+              )}
+              <Icon className={cn("h-5 w-5", active && "stroke-[2.5px]")} />
+              <span
+                className={cn("text-[10px] leading-tight", active ? "font-bold" : "font-medium")}
+              >
+                {label}
+              </span>
             </Link>
           );
         })}

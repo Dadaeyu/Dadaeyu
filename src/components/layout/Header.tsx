@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Settings } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut, Settings } from "lucide-react";
 import { DesktopNav } from "./Navigation";
 import AccessibilitySettings from "../AccessibilitySettings";
 import { Button } from "../ui/Button";
@@ -11,8 +11,21 @@ import { useOptionalAuth } from "@/context/AuthContext";
 
 export default function Header() {
   const [showAccessibility, setShowAccessibility] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const auth = useOptionalAuth();
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    if (!auth?.signOut || loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await auth.signOut();
+      router.push("/");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   return (
     <header className="border-hairline sticky top-0 z-40 border-b bg-white/85 backdrop-blur-md">
@@ -48,9 +61,21 @@ export default function Header() {
         <DesktopNav />
         <div className="flex shrink-0 items-center gap-2">
           {auth?.user ? (
-            <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
-              <Link href="/mypage">마이페이지</Link>
-            </Button>
+            <>
+              <span className="text-steel hidden text-sm whitespace-nowrap md:inline">
+                <span className="text-ink font-semibold">{auth.member?.nickname ?? "회원"}</span>님
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hidden md:inline-flex"
+                disabled={loggingOut}
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4" />
+                {loggingOut ? "로그아웃 중…" : "로그아웃"}
+              </Button>
+            </>
           ) : (
             <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
               <Link href={`/login?next=${encodeURIComponent(pathname)}`}>로그인</Link>

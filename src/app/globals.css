@@ -295,44 +295,52 @@
   --color-slate: #3a3a3c;
 }
 
-/* ── 접근성: 고대비 — 텍스트 대비 강화 (테두리는 과하지 않게) */
+/* ── 접근성: 고대비 — 보조 텍스트·테두리만 살짝 강화 (브랜드·버튼 색 유지) */
 .high-contrast:not(.dark) {
-  --color-gray-500: #2a2a2a;
-  --color-gray-600: #1a1a1a;
-  --color-gray-700: #000000;
-  --color-gray-800: #000000;
+  --color-gray-500: #3a3a3a;
+  --color-gray-600: #2a2a2a;
+  --color-gray-700: #1a1a1a;
+  --color-gray-800: #0a0a0a;
   --color-gray-900: #000000;
   --color-ink: #000000;
-  --color-charcoal: #000000;
+  --color-charcoal: #0a0a0a;
   --color-slate: #1a1a1a;
-  --color-steel: #2a2a2c;
-  --color-stone: #3a3a3c;
+  --color-steel: #3a3a3c;
+  --color-stone: #4a4a4c;
   --color-mute: #404040;
-  --foreground: #000000;
-  --card-foreground: #000000;
-  --muted-foreground: #1a1a1a;
-  --secondary-foreground: #000000;
-  --accent-foreground: #000000;
+  --foreground: #0a0a0a;
+  --card-foreground: #0a0a0a;
+  --muted-foreground: #2a2a2a;
+  --secondary-foreground: #0a0a0a;
+  --accent-foreground: #0a0a0a;
+  --border: #6b6b6b;
+  --input: #6b6b6b;
+  --color-hairline: #6b6b6b;
+  --color-hairline-soft: #8a8a8a;
 }
 
 .dark.high-contrast {
-  --color-ink: #ffffff;
-  --color-charcoal: #ffffff;
-  --color-slate: #f0f0f0;
-  --color-steel: #e8e8e8;
-  --color-stone: #d8d8d8;
-  --color-mute: #d0d0d0;
-  --color-gray-500: #e8e8e8;
-  --color-gray-600: #ffffff;
-  --color-gray-700: #ffffff;
-  --color-gray-800: #ffffff;
+  --color-ink: #f5f5f5;
+  --color-charcoal: #e8e8e8;
+  --color-slate: #e0e0e0;
+  --color-steel: #d0d0d0;
+  --color-stone: #c0c0c0;
+  --color-mute: #b8b8b8;
+  --color-gray-500: #d8d8d8;
+  --color-gray-600: #e8e8e8;
+  --color-gray-700: #f0f0f0;
+  --color-gray-800: #f5f5f5;
   --color-gray-900: #ffffff;
-  --foreground: #ffffff;
-  --card-foreground: #ffffff;
-  --muted-foreground: #f0f0f0;
-  --secondary-foreground: #ffffff;
-  --accent-foreground: #ffffff;
-  --background: #000000;
+  --foreground: #f5f5f5;
+  --card-foreground: #f5f5f5;
+  --muted-foreground: #e8e8e8;
+  --secondary-foreground: #f5f5f5;
+  --accent-foreground: #f5f5f5;
+  --background: #0a0a0a;
+  --border: #8a8a8a;
+  --input: #8a8a8a;
+  --color-hairline: #9a9a9a;
+  --color-hairline-soft: #7a7a7a;
 }
 
 .dark.high-contrast :where([class*="from-hero-sky-from"]) {
@@ -346,17 +354,17 @@
   :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select) {
   border-width: 2px !important;
   border-style: solid !important;
-  border-color: currentColor !important;
+  border-color: var(--color-hairline) !important;
 }
 
 .high-contrast :focus-visible {
-  outline: 3px solid currentColor !important;
+  outline: 2px solid var(--ring) !important;
   outline-offset: 2px;
 }
 
 .high-contrast a:focus-visible {
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: 2px;
 }
 
 .dark
@@ -391,6 +399,13 @@
 .bg-fixed-white {
   background-color: var(--color-fixed-white) !important;
   color: var(--color-ink) !important;
+}
+
+/* Native <select>: 다크/고대비 테마에서도 드롭다운 옵션 가독성 유지 */
+.select-on-light,
+.select-on-light option {
+  background-color: #ffffff;
+  color: #0a0a0a;
 }
 
 @layer base {

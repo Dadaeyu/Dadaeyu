@@ -52,6 +52,18 @@ declare namespace kakao.maps {
   function load(callback: () => void): void;
 
   let readyState: number;
+
+  namespace services {
+    class Places {
+      keywordSearch(
+        keyword: string,
+        callback: (data: unknown[], status: string) => void,
+        options?: { size?: number }
+      ): void;
+    }
+
+    const Status: { OK: string };
+  }
 }
 
 interface Window {

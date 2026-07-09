@@ -6,7 +6,9 @@
  *   node scripts/apply-auth-phase.mjs 2    # phase2: user_preferences
  *   node scripts/apply-auth-phase.mjs 3    # phase3: phone, account recovery
  *   node scripts/apply-auth-phase.mjs 4    # phase4: email verify → members 생성
- *   node scripts/apply-auth-phase.mjs all  # phase1 + phase2 + phase3 + phase4
+ *   node scripts/apply-auth-phase.mjs 5    # phase5: community notices/events/faq
+ *   node scripts/apply-auth-phase.mjs 6    # phase6: community posts question type
+ *   node scripts/apply-auth-phase.mjs all  # phase1 ~ phase6
  *
  * SUPABASE_ACCESS_TOKEN 이 .env.local 에 있으면 Management API로 자동 적용.
  * 없으면 SQL 파일 내용을 출력합니다.
@@ -25,6 +27,8 @@ const PHASE_FILES = {
   2: "schema-auth-phase2.sql",
   3: "schema-auth-phase3-account.sql",
   4: "schema-auth-phase4-email-verify.sql",
+  5: "schema-community-content.sql",
+  6: "schema-community-posts-question.sql",
 };
 
 function loadEnv() {
@@ -85,10 +89,10 @@ function printManualInstructions(phases) {
 async function main() {
   const arg = process.argv[2] ?? "1";
   const phases =
-    arg === "all" ? [1, 2, 3, 4] : [Number(arg)].filter((p) => PHASE_FILES[p]);
+    arg === "all" ? [1, 2, 3, 4, 5, 6] : [Number(arg)].filter((p) => PHASE_FILES[p]);
 
   if (phases.length === 0) {
-    console.error("사용법: node scripts/apply-auth-phase.mjs [1|2|all]");
+    console.error("사용법: node scripts/apply-auth-phase.mjs [1|2|3|4|5|6|all]");
     process.exit(1);
   }
 

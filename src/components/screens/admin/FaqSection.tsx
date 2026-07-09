@@ -1,0 +1,344 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { validateFaqFields } from "@/lib/community/validation";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
+import { AdminFormShell, AdminListShell } from "./AdminListShell";
+import { AdminSearchBar } from "./AdminSearchBar";
+import { useAdminListMode } from "./useAdminListMode";
+
+type CommunityFaq = {
+  id: number;
+  question: string;
+  answer: string;
+  is_visible: boolean;
+  sort_order: number;
+};
+
+type FormState = {
+  question: string;
+  answer: string;
+  isVisible: boolean;
+  sortOrder: number;
+};
+
+const EMPTY_FORM: FormState = {
+  question: "",
+  answer: "",
+  isVisible: true,
+  sortOrder: 0
+};
+
+function faqToForm(faq: CommunityFaq): FormState {
+  return {
+    question: faq.question,
+    answer: faq.answer,
+    isVisible: faq.is_visible,
+    sortOrder: faq.sort_order
+  };
+}
+
+export function FaqSection() {
+  const {
+    mode,
+    editingId,
+    page,
+    q,
+    goList,
+    goCreate,
+    goEdit,
+    setPage,
+    setQuery,
+    setFilter,
+    filterValue
+  } = useAdminListMode();
+
+  const [items, setItems] = useState<CommunityFaq[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [searchInput, setSearchInput] = useState(q);
+
+  const visibleFilter = filterValue("visible");
+  const isEditing = mode === "edit" && editingId !== null;
+  const isCreating = mode === "create";
+
+  const loadList = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("page", String(page + 1));
+      params.set("pageSize", String(DEFAULT_PAGE_SIZE));
+      if (q) params.set("q", q);
+      if (visibleFilter !== "all") params.set("visible", visibleFilter);
+
+      const res = await fetch(`/api/admin/community-faq?${params}`);
+      const json = (await res.json().catch(() => ({}))) as {
+        items?: CommunityFaq[];
+        total?: number;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error ?? "목록을 불러오지 못했습니다.");
+      setItems(json.items ?? []);
+      setTotal(json.total ?? 0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "목록 로드 실패");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, q, visibleFilter]);
+
+  const loadForEdit = useCallback(async (id: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/community-faq?id=${id}`);
+      const json = (await res.json().catch(() => ({}))) as {
+        items?: CommunityFaq[];
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error ?? "FAQ를 불러오지 못했습니다.");
+      const faq = json.items?.[0];
+      if (!faq) throw new Error("FAQ를 찾을 수 없습니다.");
+      setForm(faqToForm(faq));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "로드 실패");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mode === "list") loadList();
+  }, [mode, loadList]);
+
+  useEffect(() => {
+    if (isEditing && editingId) loadForEdit(editingId);
+    else if (isCreating) setForm(EMPTY_FORM);
+  }, [isEditing, isCreating, editingId, loadForEdit]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput, setQuery]);
+
+  useEffect(() => {
+    setSearchInput(q);
+  }, [q]);
+
+  const submit = async () => {
+    const validationError = validateFaqFields(form.question, form.answer);
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
+    const payload = {
+      question: form.question.trim(),
+      answer: form.answer.trim(),
+      is_visible: form.isVisible,
+      sort_order: form.sortOrder
+    };
+    try {
+      const res = await fetch("/api/admin/community-faq", {
+        method: isEditing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(isEditing ? { id: editingId, ...payload } : payload)
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(json.error ?? "저장에 실패했습니다.");
+      }
+      goList();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleVisible = async (faq: CommunityFaq) => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/community-faq", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: faq.id, is_visible: !faq.is_visible })
+      });
+      if (!res.ok) throw new Error("변경 실패");
+      await loadList();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "변경 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteFaq = async (id: number) => {
+    if (!confirm("이 FAQ를 삭제할까요?")) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/community-faq?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("삭제 실패");
+      await loadList();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "삭제 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isCreating || isEditing) {
+    return (
+      <AdminFormShell
+        title={isEditing ? `FAQ 수정 (#${editingId})` : "새 FAQ 작성"}
+        subtitle="커뮤니티 FAQ 목록과 상세 답변을 관리합니다."
+        error={error}
+        formError={formError}
+        saving={saving || loading}
+        onBack={goList}
+        onSubmit={submit}
+        submitLabel={isEditing ? "수정 저장" : "등록"}
+      >
+        <input
+          value={form.question}
+          onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
+          placeholder="질문"
+          className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+        />
+        <textarea
+          value={form.answer}
+          onChange={(e) => setForm((f) => ({ ...f, answer: e.target.value }))}
+          placeholder="답변 (상세 내용)"
+          rows={8}
+          className="border-hairline w-full resize-y rounded-lg border px-3 py-2 text-sm leading-relaxed"
+        />
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="text-steel flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.isVisible}
+              onChange={(e) => setForm((f) => ({ ...f, isVisible: e.target.checked }))}
+            />
+            커뮤니티 노출
+          </label>
+          <label className="text-steel text-sm">
+            정렬
+            <input
+              type="number"
+              value={form.sortOrder}
+              onChange={(e) => setForm((f) => ({ ...f, sortOrder: Number(e.target.value) || 0 }))}
+              className="border-hairline ml-2 w-20 rounded-lg border px-2 py-1 text-sm"
+            />
+          </label>
+        </div>
+      </AdminFormShell>
+    );
+  }
+
+  return (
+    <AdminListShell
+      title="FAQ 관리"
+      subtitle="커뮤니티 FAQ 목록과 상세 답변을 관리합니다."
+      total={total}
+      page={page}
+      pageSize={DEFAULT_PAGE_SIZE}
+      loading={loading}
+      error={error}
+      onPageChange={setPage}
+      onCreateClick={goCreate}
+      createLabel="새 FAQ"
+      toolbar={
+        <>
+          <AdminSearchBar
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder="질문·답변 검색"
+          />
+          <select
+            value={visibleFilter}
+            onChange={(e) => setFilter("visible", e.target.value === "all" ? null : e.target.value)}
+            className="border-hairline rounded-lg border px-3 py-2.5 text-sm"
+          >
+            <option value="all">전체 노출</option>
+            <option value="visible">노출</option>
+            <option value="hidden">숨김</option>
+          </select>
+        </>
+      }
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-hairline-soft bg-surface-soft border-b">
+              {["ID", "질문", "노출", "정렬", "액션"].map((h) => (
+                <th
+                  key={h}
+                  className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr>
+                <td colSpan={5} className="text-stone px-4 py-8 text-center">
+                  불러오는 중…
+                </td>
+              </tr>
+            )}
+            {!loading && items.length === 0 && (
+              <tr>
+                <td colSpan={5} className="text-stone px-4 py-8 text-center">
+                  등록된 FAQ가 없습니다.
+                </td>
+              </tr>
+            )}
+            {!loading &&
+              items.map((faq) => (
+                <tr key={faq.id} className="border-hairline-soft hover:bg-surface-soft border-b">
+                  <td className="text-stone px-4 py-3">#{faq.id}</td>
+                  <td className="text-ink px-4 py-3 font-semibold">{faq.question}</td>
+                  <td className="px-4 py-3">
+                    {faq.is_visible ? (
+                      <Badge tone="brand">노출</Badge>
+                    ) : (
+                      <Badge tone="neutral">숨김</Badge>
+                    )}
+                  </td>
+                  <td className="text-stone px-4 py-3">{faq.sort_order}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => goEdit(faq.id)}>
+                        수정
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => toggleVisible(faq)}>
+                        {faq.is_visible ? "숨기기" : "노출"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600"
+                        onClick={() => deleteFaq(faq.id)}
+                      >
+                        삭제
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </AdminListShell>
+  );
+}

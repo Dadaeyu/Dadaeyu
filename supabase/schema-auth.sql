@@ -171,7 +171,7 @@ create table if not exists public.tb_course_day_places (
 create table if not exists public.tb_community_posts (
   id bigint generated always as identity primary key,
   author_id uuid not null references public.tb_members(id) on delete cascade,
-  post_type text not null check (post_type in ('review', 'tip', 'share')),
+  post_type text not null check (post_type in ('review', 'tip', 'share', 'question')),
   title text not null,
   content text not null,
   attached_place_id bigint references public.tb_places(id) on delete set null,

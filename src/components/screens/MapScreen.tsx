@@ -242,16 +242,15 @@ export default function Map() {
 
         {/* Kakao Map */}
         <KakaoMap
-          markers={searchPlaces.map(
-            (sp, i): MapMarker =>
-              sp.source === "kakao"
-                ? { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#0891b2", shape: "dot" }
-                : {
-                    id: sp.id,
-                    lat: sp.lat,
-                    lng: sp.lng,
-                    color: MARKER_COLORS[i % MARKER_COLORS.length]
-                  }
+          markers={searchPlaces.map((sp, i): MapMarker =>
+            sp.source === "kakao"
+              ? { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#0891b2", shape: "dot" }
+              : {
+                  id: sp.id,
+                  lat: sp.lat,
+                  lng: sp.lng,
+                  color: MARKER_COLORS[i % MARKER_COLORS.length]
+                }
           )}
           selectedId={searchDetailId}
           onSelect={(id) => setSearchDetailId(id)}

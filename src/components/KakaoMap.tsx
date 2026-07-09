@@ -4,22 +4,6 @@
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
 
-// ── Kakao Maps type declarations ───────────────────────────
-interface KakaoLatLng {
-  getLat(): number;
-  getLng(): number;
-}
-interface KakaoMapInstance {
-  setLevel(n: number, options?: { animate?: boolean; anchor?: KakaoLatLng }): void;
-  getLevel(): number;
-  addControl(ctrl: object, pos: number): void;
-  panTo(latlng: KakaoLatLng): void;
-  setCenter(latlng: KakaoLatLng): void;
-}
-interface KakaoOverlay {
-  setMap(m: KakaoMapInstance | null): void;
-}
-
 export interface KakaoPlaceResult {
   id: string;
   place_name: string;
@@ -29,48 +13,6 @@ export interface KakaoPlaceResult {
   road_address_name: string;
   x: string;
   y: string;
-}
-
-declare global {
-  interface Window {
-    kakao: {
-      maps: {
-        load(fn: () => void): void;
-        Map: new (
-          el: HTMLElement,
-          opts: { center: KakaoLatLng; level: number }
-        ) => KakaoMapInstance;
-        LatLng: new (lat: number, lng: number) => KakaoLatLng;
-        CustomOverlay: new (opts: {
-          position: KakaoLatLng;
-          content: HTMLElement;
-          yAnchor?: number;
-          xAnchor?: number;
-          zIndex?: number;
-        }) => KakaoOverlay;
-        Polyline: new (opts: {
-          path: KakaoLatLng[];
-          strokeWeight?: number;
-          strokeColor?: string;
-          strokeOpacity?: number;
-          strokeStyle?: string;
-        }) => KakaoOverlay;
-        ZoomControl: new () => object;
-        ControlPosition: { TOPRIGHT: number };
-        event: { addListener(t: object, type: string, fn: () => void): void };
-        services: {
-          Places: new () => {
-            keywordSearch(
-              keyword: string,
-              callback: (data: KakaoPlaceResult[], status: string) => void,
-              options?: { size?: number }
-            ): void;
-          };
-          Status: { OK: string };
-        };
-      };
-    };
-  }
 }
 
 // ── 공개 상수 ──────────────────────────────────────────────
@@ -162,12 +104,12 @@ export default function KakaoMap({
   focusMyLocationTrigger = 0
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<KakaoMapInstance | null>(null);
-  const overlaysRef = useRef<KakaoOverlay[]>([]);
+  const mapRef = useRef<kakao.maps.Map | null>(null);
+  const overlaysRef = useRef<kakao.maps.CustomOverlay[]>([]);
   const markerElemsRef = useRef(new Map<string, HTMLDivElement>());
-  const polylineRef = useRef<KakaoOverlay | null>(null);
-  const tooltipOverlayRef = useRef<KakaoOverlay | null>(null);
-  const myLocationOverlayRef = useRef<KakaoOverlay | null>(null);
+  const polylineRef = useRef<kakao.maps.Polyline | null>(null);
+  const tooltipOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
+  const myLocationOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const [mapInitCount, setMapInitCount] = useState(0);
 
   const initMap = () => {
@@ -333,7 +275,7 @@ export default function KakaoMap({
   return (
     <>
       <Script
-        src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY}&libraries=services&autoload=false`}
+        src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ?? process.env.NEXT_PUBLIC_KAKAO_MAP_KEY}&libraries=services&autoload=false`}
         strategy="afterInteractive"
         onReady={() => window.kakao.maps.load(initMap)}
       />
