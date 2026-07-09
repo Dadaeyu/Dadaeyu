@@ -13,7 +13,7 @@ async function fetchAccessibility(contentId: number): Promise<DetailItem | null>
     MobileOS: "ETC",
     MobileApp: "AppTest",
     contentId: String(contentId),
-    _type: "json",
+    _type: "json"
   });
 
   try {
@@ -86,7 +86,7 @@ function toRow(item: DetailItem) {
     has_video_guide: hasValue(item.videoguide),
 
     has_stroller: hasValue(item.stroller),
-    has_lactation_room: hasValue(item.lactationroom),
+    has_lactation_room: hasValue(item.lactationroom)
   };
 }
 
@@ -100,7 +100,7 @@ function chunk<T>(arr: T[], n: number): T[][] {
 export async function POST() {
   // 1. tourism_places에서 content_id 전체 조회
   const { data: places, error: fetchError } = await supabase
-    .from("tourism_places")
+    .from("tb_tourism_places")
     .select("content_id");
 
   if (fetchError) {
@@ -128,7 +128,7 @@ export async function POST() {
 
   // 3. upsert
   const { error: upsertError, count } = await supabase
-    .from("tourism_accessibility")
+    .from("tb_tourism_accessibility")
     .upsert(rows, { onConflict: "content_id", count: "exact" });
 
   if (upsertError) {

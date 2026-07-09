@@ -1,100 +1,7 @@
 "use client";
 
+import { useState } from "react";
 import { ChevronDown, Plus, Minus, Star, Heart } from "lucide-react";
-
-export const DISTRICTS: Record<string, string[]> = {
-  동구: [
-    "대동",
-    "용전동",
-    "판암동",
-    "삼성동",
-    "홍도동",
-    "대성동",
-    "가오동",
-    "신하동",
-    "성남동",
-    "원동",
-    "인동",
-    "소제동",
-    "천동",
-    "용운동",
-    "자양동",
-    "중동"
-  ],
-  중구: [
-    "은행동",
-    "선화동",
-    "목동",
-    "중촌동",
-    "대흥동",
-    "문화동",
-    "부사동",
-    "석교동",
-    "태평동",
-    "유천동",
-    "문창동",
-    "산성동",
-    "오류동",
-    "용두동",
-    "안영동",
-    "무수동"
-  ],
-  서구: [
-    "갈마동",
-    "월평동",
-    "둔산동",
-    "용문동",
-    "탄방동",
-    "삼천동",
-    "괴정동",
-    "가장동",
-    "내동",
-    "변동",
-    "도마동",
-    "정림동",
-    "복수동",
-    "관저동",
-    "기성동",
-    "가수원동",
-    "도안동"
-  ],
-  유성구: [
-    "진잠동",
-    "원신흥동",
-    "관평동",
-    "신성동",
-    "노은동",
-    "지족동",
-    "반석동",
-    "구즉동",
-    "봉명동",
-    "장대동",
-    "전민동",
-    "외삼동",
-    "원촌동",
-    "대정동",
-    "학하동",
-    "자운동"
-  ],
-  대덕구: [
-    "오정동",
-    "읍내동",
-    "중리동",
-    "신탄진동",
-    "덕암동",
-    "목상동",
-    "법동",
-    "송촌동",
-    "석봉동",
-    "비래동",
-    "장동",
-    "삼정동",
-    "와동",
-    "이현동",
-    "회덕동",
-    "연축동"
-  ]
-};
 
 export const THEMES = ["빵지순례", "먹거리", "과학", "자연힐링", "문화예술", "역사근대", "축제"];
 export const AGE_GROUPS = ["영유아", "어린이", "청소년", "성인", "고령자"];
@@ -103,7 +10,6 @@ export const ACCESSIBILITY = ["시각", "청각", "보행", "영유아", "임산
 export interface Filters {
   accessibility: string[];
   gu: string;
-  dong: string;
   themes: string[];
   headcount: number;
   dateFrom: string;
@@ -115,7 +21,6 @@ export interface Filters {
 export const DEFAULT_FILTERS: Filters = {
   accessibility: [],
   gu: "",
-  dong: "",
   themes: [],
   headcount: 1,
   dateFrom: "",
@@ -124,15 +29,49 @@ export const DEFAULT_FILTERS: Filters = {
   favoritesOnly: false
 };
 
+// 필터 상태 관리 훅. hotFilter처럼 화면 고유의 필터는 activeCount에 포함하지 않으므로,
+// 소비하는 쪽에서 필요 시 더해서 써야 한다.
+export function useFilters(initial?: Partial<Filters>) {
+  const [filters, setFilters] = useState<Filters>({ ...DEFAULT_FILTERS, ...initial });
+
+  const set = <K extends keyof Filters>(key: K, val: Filters[K]) =>
+    setFilters((prev) => ({ ...prev, [key]: val }));
+
+  const toggleList = (key: "themes" | "accessibility", item: string) =>
+    setFilters((prev) => {
+      const list = prev[key] as string[];
+      return {
+        ...prev,
+        [key]: list.includes(item) ? list.filter((x) => x !== item) : [...list, item]
+      };
+    });
+
+  const reset = () => setFilters(DEFAULT_FILTERS);
+
+  const activeCount = [
+    filters.accessibility.length > 0,
+    filters.gu,
+    filters.themes.length > 0,
+    filters.headcount > 1,
+    filters.dateFrom || filters.dateTo,
+    filters.minRating > 0,
+    filters.favoritesOnly
+  ].filter(Boolean).length;
+
+  return { filters, setFilters, set, toggleList, reset, activeCount };
+}
+
 export function FilterFields({
   filters,
   set,
   toggleList,
+  guOptions = [],
   compact = false
 }: {
   filters: Filters;
   set: <K extends keyof Filters>(key: K, val: Filters[K]) => void;
   toggleList: (key: "themes" | "accessibility", item: string) => void;
+  guOptions?: string[];
   compact?: boolean;
 }) {
   const xs = compact ? "text-xs" : "text-sm";
@@ -207,41 +146,26 @@ export function FilterFields({
       <div>
         <p className={`${xs} text-steel mb-1.5 font-semibold`}>위치</p>
         <div className="flex gap-1.5">
-          {[
-            {
-              val: filters.gu,
-              onChange: (v: string) => {
-                set("gu", v);
-                set("dong", "");
-              },
-              opts: Object.keys(DISTRICTS),
-              placeholder: "구 전체"
-            },
-            {
-              val: filters.dong,
-              onChange: (v: string) => set("dong", v),
-              opts: DISTRICTS[filters.gu] ?? [],
-              placeholder: "동 전체",
-              disabled: !filters.gu
-            }
-          ].map((s, i) => (
-            <div key={i} className="relative flex-1">
-              <select
-                value={s.val}
-                onChange={(e) => s.onChange(e.target.value)}
-                disabled={s.disabled}
-                className={`border-hairline w-full appearance-none rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 disabled:bg-surface disabled:text-stone bg-white pr-6 focus:ring-2 focus:outline-none`}
-              >
-                <option value="">{s.placeholder}</option>
-                {s.opts.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="text-stone pointer-events-none absolute top-1/2 right-1.5 h-3 w-3 -translate-y-1/2" />
-            </div>
-          ))}
+          <div
+            className={`border-hairline bg-surface text-steel flex items-center rounded-lg border px-2 py-1.5 ${xs} shrink-0`}
+          >
+            대전광역시
+          </div>
+          <div className="relative flex-1">
+            <select
+              value={filters.gu}
+              onChange={(e) => set("gu", e.target.value)}
+              className={`border-hairline w-full appearance-none rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 bg-white pr-6 focus:ring-2 focus:outline-none`}
+            >
+              <option value="">구 전체</option>
+              {guOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="text-stone pointer-events-none absolute top-1/2 right-1.5 h-3 w-3 -translate-y-1/2" />
+          </div>
         </div>
       </div>
 

@@ -32,7 +32,7 @@ function toRow(item: KTOItem) {
     ldongsigngucd: item.lDongSignguCd || null,
     lclssystm1: item.lclsSystm1 || null,
     lclssystm2: item.lclsSystm2 || null,
-    lclssystm3: item.lclsSystm3 || null,
+    lclssystm3: item.lclsSystm3 || null
   };
 }
 
@@ -44,7 +44,7 @@ export async function POST() {
     MobileOS: "ETC",
     MobileApp: "AppTest",
     arrange: "C",
-    lDongRegnCd: "30",
+    lDongRegnCd: "30"
   });
 
   const res = await fetch(`${API_URL}?${params}`, { cache: "no-store" });
@@ -59,12 +59,10 @@ export async function POST() {
   const raw = parsed?.response?.body?.items?.item ?? [];
   const items: KTOItem[] = Array.isArray(raw) ? raw : [raw];
 
-  const rows = items
-    .filter((item) => item.contentid && item.title)
-    .map(toRow);
+  const rows = items.filter((item) => item.contentid && item.title).map(toRow);
 
   const { error, count } = await supabase
-    .from("tourism_places")
+    .from("tb_tourism_places")
     .upsert(rows, { onConflict: "contentid", count: "exact" });
 
   if (error) {
