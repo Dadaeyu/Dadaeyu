@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
-import { genId } from "@/utils/id";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useOptionalAuth } from "@/context/AuthContext";
+import { fetchMyCourses } from "@/lib/supabase/courses";
 
 export interface CoursePlace {
   id: number;
@@ -62,14 +63,41 @@ const INITIAL_COURSES: MyCourse[] = [
 ];
 
 export function CourseProvider({ children }: { children: ReactNode }) {
+  const auth = useOptionalAuth();
   const [myCourses, setMyCourses] = useState<MyCourse[]>(INITIAL_COURSES);
+
+  useEffect(() => {
+    if (!auth?.user) return;
+    fetchMyCourses(auth.user.id)
+      .then((dbCourses) => {
+        if (dbCourses.length === 0) return;
+        setMyCourses((prev) => {
+          const dbAsMy: MyCourse[] = dbCourses.map((c) => ({
+            id: c.id,
+            title: c.title,
+            duration: c.duration_label ?? "1일",
+            isPrivate: !c.is_public,
+            rating: 0,
+            likes: c.like_count,
+            tags: [],
+            days: [{ day: 1, places: [] }]
+          }));
+          const merged = [...dbAsMy];
+          for (const local of prev) {
+            if (!merged.some((m) => m.id === local.id)) merged.push(local);
+          }
+          return merged;
+        });
+      })
+      .catch(() => {});
+  }, [auth?.user]);
 
   const addPlaceToCourse = (courseId: number, placeName: string) => {
     setMyCourses((prev) =>
       prev.map((course) => {
         if (course.id !== courseId) return course;
         const newPlace: CoursePlace = {
-          id: genId(),
+          id: Date.now(),
           name: placeName,
           time: "09:00",
           duration: "1시간"

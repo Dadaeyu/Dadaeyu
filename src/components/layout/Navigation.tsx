@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Map, Route, Users, User, ShieldCheck } from "lucide-react";
+import { useOptionalAuth } from "@/context/AuthContext";
 
 const navItems = [
   { path: "/", label: "홈", icon: Home },
@@ -22,6 +23,9 @@ function useIsActive() {
 
 export function DesktopNav() {
   const isActive = useIsActive();
+  const auth = useOptionalAuth();
+  const isAdmin = auth?.member?.role === "admin" && auth?.member?.status === "active";
+
   return (
     <nav className="hidden items-center gap-1 md:flex">
       {navItems.map(({ path, label, icon: Icon }) => (
@@ -36,28 +40,36 @@ export function DesktopNav() {
           <span>{label}</span>
         </Link>
       ))}
-      <div className="bg-hairline mx-1 h-5 w-px" />
-      <Link
-        href={adminItem.path}
-        className={`flex items-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-all ${
-          isActive(adminItem.path)
-            ? "bg-navy-50 text-navy-700"
-            : "text-stone hover:bg-navy-50 hover:text-navy-600"
-        }`}
-      >
-        <adminItem.icon className="h-4 w-4" />
-        <span>{adminItem.label}</span>
-      </Link>
+      {isAdmin && (
+        <>
+          <div className="bg-hairline mx-1 h-5 w-px" />
+          <Link
+            href={adminItem.path}
+            className={`flex items-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-all ${
+              isActive(adminItem.path)
+                ? "bg-navy-50 text-navy-700"
+                : "text-stone hover:bg-navy-50 hover:text-navy-600"
+            }`}
+          >
+            <adminItem.icon className="h-4 w-4" />
+            <span>{adminItem.label}</span>
+          </Link>
+        </>
+      )}
     </nav>
   );
 }
 
 export function MobileNav() {
   const isActive = useIsActive();
+  const auth = useOptionalAuth();
+  const isAdmin = auth?.member?.role === "admin" && auth?.member?.status === "active";
+  const allItems = isAdmin ? [...navItems, adminItem] : navItems;
+
   return (
     <nav className="border-hairline fixed right-0 bottom-0 left-0 z-50 border-t bg-white/95 backdrop-blur-md md:hidden">
       <div className="flex items-center justify-around py-1.5">
-        {[...navItems, adminItem].map(({ path, label, icon: Icon }) => {
+        {allItems.map(({ path, label, icon: Icon }) => {
           const active = isActive(path);
           return (
             <Link

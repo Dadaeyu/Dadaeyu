@@ -52,7 +52,7 @@ export default function Home() {
   return (
     <div className="space-y-8">
       {/* Hero Section — Mintlify sky 대기 그라데이션 밴드 (hero-band-sky) */}
-      <section className="from-hero-sky-from to-hero-sky-to relative overflow-hidden rounded-lg bg-gradient-to-b p-7 md:p-9">
+      <section className="hero-band-sky from-hero-sky-from to-hero-sky-to relative overflow-hidden rounded-lg bg-gradient-to-b p-7 md:p-9">
         {/* decorative clouds */}
         <div className="pointer-events-none absolute -top-10 -right-8 h-44 w-44 rounded-full bg-white/40 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-white/50 blur-3xl" />

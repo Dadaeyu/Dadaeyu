@@ -4,16 +4,30 @@ import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
 
 // ── Kakao Maps type declarations ───────────────────────────
-interface KakaoLatLng { getLat(): number; getLng(): number; }
-interface KakaoMapInstance { setLevel(n: number, options?: { animate?: boolean; anchor?: KakaoLatLng }): void; getLevel(): number; addControl(ctrl: object, pos: number): void; panTo(latlng: KakaoLatLng): void; setCenter(latlng: KakaoLatLng): void; }
-interface KakaoOverlay { setMap(m: KakaoMapInstance | null): void; }
+interface KakaoLatLng {
+  getLat(): number;
+  getLng(): number;
+}
+interface KakaoMapInstance {
+  setLevel(n: number, options?: { animate?: boolean; anchor?: KakaoLatLng }): void;
+  getLevel(): number;
+  addControl(ctrl: object, pos: number): void;
+  panTo(latlng: KakaoLatLng): void;
+  setCenter(latlng: KakaoLatLng): void;
+}
+interface KakaoOverlay {
+  setMap(m: KakaoMapInstance | null): void;
+}
 
 declare global {
   interface Window {
     kakao: {
       maps: {
         load(fn: () => void): void;
-        Map: new (el: HTMLElement, opts: { center: KakaoLatLng; level: number }) => KakaoMapInstance;
+        Map: new (
+          el: HTMLElement,
+          opts: { center: KakaoLatLng; level: number }
+        ) => KakaoMapInstance;
         LatLng: new (lat: number, lng: number) => KakaoLatLng;
         CustomOverlay: new (opts: {
           position: KakaoLatLng;
@@ -100,7 +114,7 @@ export default function KakaoMap({
   onDeselect,
   navTarget = null,
   center = MAP_CENTER,
-  level = MAP_LEVEL,
+  level = MAP_LEVEL
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<KakaoMapInstance | null>(null);
@@ -114,7 +128,7 @@ export default function KakaoMap({
     const K = window.kakao.maps;
     const map = new K.Map(containerRef.current, {
       center: new K.LatLng(center.lat, center.lng),
-      level,
+      level
     });
     mapRef.current = map;
     map.addControl(new K.ZoomControl(), K.ControlPosition.TOPRIGHT);
@@ -124,12 +138,12 @@ export default function KakaoMap({
       content: createMyLocationEl(),
       yAnchor: 0.5,
       xAnchor: 0.5,
-      zIndex: 1,
+      zIndex: 1
     });
     myOverlay.setMap(map);
 
     K.event.addListener(map, "click", () => onDeselect?.());
-    setMapInitCount(c => c + 1);
+    setMapInitCount((c) => c + 1);
   };
 
   // 마커 동기화
@@ -137,11 +151,11 @@ export default function KakaoMap({
     if (!mapRef.current || !window.kakao?.maps) return;
     const K = window.kakao.maps;
 
-    overlaysRef.current.forEach(o => o.setMap(null));
+    overlaysRef.current.forEach((o) => o.setMap(null));
     overlaysRef.current = [];
     markerElemsRef.current.clear();
 
-    markers.forEach(marker => {
+    markers.forEach((marker) => {
       const el = document.createElement("div");
       markerElemsRef.current.set(marker.id, el);
       renderPin(el, marker.color, marker.id === selectedId);
@@ -151,22 +165,22 @@ export default function KakaoMap({
         content: el,
         yAnchor: 1,
         xAnchor: 0.5,
-        zIndex: 3,
+        zIndex: 3
       });
       overlay.setMap(mapRef.current!);
       overlaysRef.current.push(overlay);
 
-      el.addEventListener("click", e => {
+      el.addEventListener("click", (e) => {
         e.stopPropagation();
         onSelect?.(marker.id);
       });
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapInitCount, markers, selectedId]);
 
   // 선택 상태 시각 업데이트
   useEffect(() => {
-    markers.forEach(marker => {
+    markers.forEach((marker) => {
       const el = markerElemsRef.current.get(marker.id);
       if (el) renderPin(el, marker.color, marker.id === selectedId);
     });
@@ -175,12 +189,12 @@ export default function KakaoMap({
   // [줌-투-마커] selectedId 변경 시 해당 마커로 줌인 — 필요 없으면 이 useEffect 삭제
   useEffect(() => {
     if (!selectedId || !mapRef.current || !window.kakao?.maps) return;
-    const marker = markers.find(m => m.id === selectedId);
+    const marker = markers.find((m) => m.id === selectedId);
     if (!marker) return;
     const K = window.kakao.maps;
     mapRef.current.setCenter(new K.LatLng(marker.lat, marker.lng));
     mapRef.current.setLevel(5, { animate: true });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, mapInitCount]);
 
   // 경로 폴리라인
@@ -195,12 +209,12 @@ export default function KakaoMap({
       const line = new K.Polyline({
         path: [
           new K.LatLng(MY_LOCATION.lat, MY_LOCATION.lng),
-          new K.LatLng(navTarget.lat, navTarget.lng),
+          new K.LatLng(navTarget.lat, navTarget.lng)
         ],
         strokeWeight: 4,
         strokeColor: "#2563eb",
         strokeOpacity: 0.85,
-        strokeStyle: "dash",
+        strokeStyle: "dash"
       });
       line.setMap(mapRef.current);
       polylineRef.current = line;
@@ -210,7 +224,7 @@ export default function KakaoMap({
   return (
     <>
       <Script
-        src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY}&autoload=false`}
+        src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY}&autoload=false`}
         strategy="afterInteractive"
         onReady={() => window.kakao.maps.load(initMap)}
       />

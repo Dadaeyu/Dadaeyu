@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   Star,
@@ -12,9 +12,13 @@ import {
   Plus,
   Check
 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { PLACE_DETAILS, ACCESSIBILITY_LABELS, type Place } from "@/data/placesData";
+import { useRouter, usePathname } from "next/navigation";
+import { ACCESSIBILITY_LABELS, type Place } from "@/data/placesData";
 import { useCourseContext } from "@/context/CourseContext";
+import { usePlaces } from "@/context/PlacesContext";
+import { useOptionalAuth } from "@/context/AuthContext";
+import { isFavorited, toggleFavorite } from "@/lib/supabase/favorites";
+import { createPlaceReport } from "@/lib/supabase/reports";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 
@@ -29,11 +33,79 @@ export default function PlaceDetailPanel({
 }) {
   const [favorited, setFavorited] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [reportContent, setReportContent] = useState("");
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const detail = PLACE_DETAILS[place.id];
+  const { placeDetails } = usePlaces();
+  const auth = useOptionalAuth();
+  const pathname = usePathname();
+  const detail = placeDetails[place.id] ?? {
+    description: "",
+    tags: [],
+    address: "",
+    hours: "",
+    phone: "",
+    reviews: []
+  };
   const { myCourses, addPlaceToCourse } = useCourseContext();
   const router = useRouter();
+
+  useEffect(() => {
+    if (!auth?.user) {
+      setFavorited(false);
+      return;
+    }
+    isFavorited(auth.user.id, "place", place.id)
+      .then(setFavorited)
+      .catch(() => setFavorited(false));
+  }, [auth?.user, place.id]);
+
+  const handleFavorite = async () => {
+    if (!auth?.user) {
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    try {
+      const added = await toggleFavorite(auth.user.id, "place", place.id);
+      setFavorited(added);
+      setToast(added ? "즐겨찾기에 추가했어요" : "즐겨찾기를 해제했어요");
+      setTimeout(() => setToast(null), 2500);
+    } catch {
+      setToast("즐겨찾기 처리에 실패했어요");
+      setTimeout(() => setToast(null), 2500);
+    }
+  };
+
+  const handleSubmitReport = async () => {
+    if (!auth?.user) {
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    if (!reportContent.trim()) return;
+    try {
+      await createPlaceReport({
+        user_id: auth.user.id,
+        place_id: place.id,
+        target_name: place.name,
+        content: reportContent.trim()
+      });
+      setReportContent("");
+      setShowReport(false);
+      setToast("제보가 접수됐어요");
+      setTimeout(() => setToast(null), 2500);
+    } catch {
+      setToast("제보 접수에 실패했어요");
+      setTimeout(() => setToast(null), 2500);
+    }
+  };
+
+  const handleOpenReport = () => {
+    if (!auth?.user) {
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    setShowReport(true);
+  };
 
   const handleAddToCourse = (courseId: number, courseTitle: string) => {
     addPlaceToCourse(courseId, place.name);
@@ -105,7 +177,8 @@ export default function PlaceDetailPanel({
         {/* Action buttons */}
         <div className="grid grid-cols-3 gap-2">
           <button
-            onClick={() => setFavorited((v) => !v)}
+            type="button"
+            onClick={handleFavorite}
             className={`flex flex-col items-center gap-1 rounded-full border py-2.5 text-xs font-medium transition-colors ${favorited ? "border-red-300 bg-red-50 text-red-600" : "border-hairline text-steel hover:bg-surface-soft"}`}
           >
             <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : ""}`} />
@@ -241,6 +314,8 @@ export default function PlaceDetailPanel({
             <div className="border-hairline space-y-2 rounded-lg border p-3">
               <p className="text-slate text-xs font-semibold">정보 제보</p>
               <textarea
+                value={reportContent}
+                onChange={(e) => setReportContent(e.target.value)}
                 placeholder="잘못된 정보나 개선 사항을 알려주세요..."
                 className="focus:ring-brand-500 border-hairline w-full resize-none rounded-lg border p-2 text-xs focus:ring-2 focus:outline-none"
                 rows={3}
@@ -249,7 +324,10 @@ export default function PlaceDetailPanel({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowReport(false)}
+                  onClick={() => {
+                    setShowReport(false);
+                    setReportContent("");
+                  }}
                   className="px-3 py-1.5 text-xs"
                 >
                   취소
@@ -257,7 +335,7 @@ export default function PlaceDetailPanel({
                 <Button
                   variant="accent"
                   size="sm"
-                  onClick={() => setShowReport(false)}
+                  onClick={handleSubmitReport}
                   className="px-3 py-1.5 text-xs"
                 >
                   제출
@@ -265,11 +343,7 @@ export default function PlaceDetailPanel({
               </div>
             </div>
           ) : (
-            <Button
-              variant="outline"
-              onClick={() => setShowReport(true)}
-              className="w-full py-3 text-sm"
-            >
+            <Button variant="outline" onClick={handleOpenReport} className="w-full py-3 text-sm">
               <Flag className="h-4 w-4" />
               정보 제보
             </Button>

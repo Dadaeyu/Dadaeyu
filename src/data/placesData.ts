@@ -17,6 +17,8 @@ export interface PlaceDetail {
 export interface Place {
   id: number;
   name: string;
+  lat: number;
+  lng: number;
   cx: number;
   cy: number;
   color: string;
@@ -33,6 +35,8 @@ export const PLACES: Place[] = [
   {
     id: 1,
     name: "대전 엑스포 과학공원",
+    lat: 36.374256,
+    lng: 127.388766,
     cx: 557,
     cy: 165,
     color: "#7c3aed",
@@ -47,6 +51,8 @@ export const PLACES: Place[] = [
   {
     id: 2,
     name: "성심당",
+    lat: 36.327646,
+    lng: 127.432423,
     cx: 440,
     cy: 315,
     color: "#dc2626",
@@ -61,6 +67,8 @@ export const PLACES: Place[] = [
   {
     id: 3,
     name: "한밭수목원",
+    lat: 36.362097,
+    lng: 127.380364,
     cx: 337,
     cy: 237,
     color: "#16a34a",
@@ -75,6 +83,8 @@ export const PLACES: Place[] = [
   {
     id: 4,
     name: "유성온천",
+    lat: 36.362578,
+    lng: 127.341172,
     cx: 175,
     cy: 360,
     color: "#d97706",
@@ -89,6 +99,8 @@ export const PLACES: Place[] = [
   {
     id: 5,
     name: "대청호 오백리길",
+    lat: 36.471667,
+    lng: 127.493889,
     cx: 800,
     cy: 435,
     color: "#2563eb",

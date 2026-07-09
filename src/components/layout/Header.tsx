@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Settings } from "lucide-react";
 import { DesktopNav } from "./Navigation";
 import AccessibilitySettings from "../AccessibilitySettings";
 import { Button } from "../ui/Button";
+import { useOptionalAuth } from "@/context/AuthContext";
 
-// 상단 헤더 — 로고 + 데스크톱 내비 + 접근성 설정 토글.
 export default function Header() {
   const [showAccessibility, setShowAccessibility] = useState(false);
+  const auth = useOptionalAuth();
+  const pathname = usePathname();
 
   return (
     <header className="border-hairline sticky top-0 z-40 border-b bg-white/85 backdrop-blur-md">
@@ -43,18 +46,29 @@ export default function Header() {
           </span>
         </Link>
         <DesktopNav />
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setShowAccessibility((v) => !v)}
-          aria-label="접근성 설정"
-          aria-expanded={showAccessibility}
-          className={`rounded-full ${
-            showAccessibility ? "bg-brand-50 text-brand-600" : "text-steel hover:text-brand-600"
-          }`}
-        >
-          <Settings className="h-6 w-6" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {auth?.user ? (
+            <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
+              <Link href="/mypage">마이페이지</Link>
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
+              <Link href={`/login?next=${encodeURIComponent(pathname)}`}>로그인</Link>
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowAccessibility((v) => !v)}
+            aria-label="접근성 설정"
+            aria-expanded={showAccessibility}
+            className={`rounded-full ${
+              showAccessibility ? "bg-brand-50 text-brand-600" : "text-steel hover:text-brand-600"
+            }`}
+          >
+            <Settings className="h-6 w-6" />
+          </Button>
+        </div>
         {showAccessibility && <AccessibilitySettings onClose={() => setShowAccessibility(false)} />}
       </div>
     </header>
