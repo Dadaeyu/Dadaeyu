@@ -4,10 +4,11 @@ import { createContext, useContext, useState, ReactNode } from "react";
 import { genId } from "@/utils/id";
 
 export interface CoursePlace {
-  id: number;
+  id: number; // 코스 내 행 식별용 로컬 id
   name: string;
   time: string;
   duration: string;
+  placeId?: number; // 원본 장소 id (현재 mock PLACES.id, 추후 tb_place.place_id) — tb_course_detail.place_id 로 저장
 }
 
 export interface CourseDay {
@@ -24,6 +25,8 @@ export interface MyCourse {
   likes: number;
   tags: string[];
   days: CourseDay[];
+  startDate?: string; // 시작일 (DB: startdate)
+  endDate?: string; // 종료일 (DB: enddate)
 }
 
 interface CourseContextValue {

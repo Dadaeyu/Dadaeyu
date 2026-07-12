@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { MapCanvas } from "@/components/MapCanvas";
+import KakaoMap, { type MapMarker } from "@/components/KakaoMap";
 import {
   Plus,
   Sparkles,
@@ -19,7 +19,8 @@ import {
   Check,
   Pencil,
   ShieldCheck,
-  User
+  User,
+  RotateCcw
 } from "lucide-react";
 import { Filters, DEFAULT_FILTERS, FilterFields } from "@/components/PlaceFilters";
 import {
@@ -194,11 +195,46 @@ const recommendedCourses = [
   }
 ];
 
+// 내 코스 목록(tb_course)에서 조회할 컬럼
+type DbCourse = {
+  course_id: number;
+  course_nm: string;
+  open_yn: string;
+  startdate: string | null;
+  enddate: string | null;
+};
+
 export default function Course() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : undefined;
-  const { myCourses } = useCourseContext();
   const [activeTab, setActiveTab] = useState<"shared" | "recommend" | "my">("shared");
+
+  // 내 코스 — tb_course 중 register='admin' 행만 조회 (삭제 제외)
+  const [myDbCourses, setMyDbCourses] = useState<DbCourse[]>([]);
+  const [myCoursesError, setMyCoursesError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { createClient } = await import("@/utils/supabase/client");
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("tb_course")
+          .select("course_id, course_nm, open_yn, startdate, enddate")
+          .eq("register", "admin")
+          .neq("delete_yn", "Y")
+          .order("registtime", { ascending: false });
+        if (error) throw error;
+        if (active) setMyDbCourses((data ?? []) as DbCourse[]);
+      } catch (e) {
+        if (active) setMyCoursesError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // 공유 코스 필터
   const [showSharedFilters, setShowSharedFilters] = useState(false);
@@ -539,23 +575,31 @@ export default function Course() {
           >
             <Plus className="h-5 w-5" />새 코스 만들기
           </Link>
+          {myCoursesError && (
+            <p className="text-sm text-red-500">목록 조회 실패: {myCoursesError}</p>
+          )}
+          {!myCoursesError && myDbCourses.length === 0 && (
+            <p className="text-stone py-8 text-center text-sm">아직 만든 코스가 없어요</p>
+          )}
           <div className="space-y-3">
-            {myCourses.map((course) => (
-              <Card key={course.id} asChild variant="interactive">
-                <Link href={`/course/${course.id}`} className="block">
+            {myDbCourses.map((course) => (
+              <Card key={course.course_id} asChild variant="interactive">
+                <Link href={`/course/${course.course_id}`} className="block">
                   <div className="mb-2 flex items-start justify-between">
-                    <h3 className="text-ink font-semibold">{course.title}</h3>
-                    {course.isPrivate && (
+                    <h3 className="text-ink font-semibold">{course.course_nm}</h3>
+                    {course.open_yn === "N" && (
                       <Badge tone="neutral" shape="tag">
                         비공개
                       </Badge>
                     )}
                   </div>
-                  <div className="text-steel flex gap-3 text-sm">
-                    <span>{course.duration}</span>
-                    <span>•</span>
-                    <span>{course.days.reduce((s, d) => s + d.places.length, 0)}곳</span>
-                  </div>
+                  {(course.startdate || course.enddate) && (
+                    <div className="text-steel flex gap-1 text-sm">
+                      <span>{course.startdate?.slice(0, 10) ?? ""}</span>
+                      <span>~</span>
+                      <span>{course.enddate?.slice(0, 10) ?? ""}</span>
+                    </div>
+                  )}
                 </Link>
               </Card>
             ))}
@@ -570,13 +614,22 @@ export default function Course() {
 type EditPlace = CoursePlace;
 type EditDay = CourseDay;
 
-// 장소별 지도 좌표 (Map.tsx PLACES 기준)
+// 장소별 지도 좌표 (Map.tsx PLACES 기준) — cx/cy 는 목록/뱃지 색상 등에 사용
 const PLACE_COORDS: Record<string, { cx: number; cy: number; color: string }> = {
   성심당: { cx: 440, cy: 315, color: "#dc2626" },
   "대전 엑스포 과학공원": { cx: 557, cy: 165, color: "#7c3aed" },
   한밭수목원: { cx: 337, cy: 237, color: "#16a34a" },
   유성온천: { cx: 175, cy: 360, color: "#d97706" },
   "대청호 오백리길": { cx: 800, cy: 435, color: "#2563eb" }
+};
+
+// 장소별 실제 위경도 — KakaoMap 마커용
+const PLACE_LATLNG: Record<string, { lat: number; lng: number }> = {
+  성심당: { lat: 36.3276, lng: 127.4275 },
+  "대전 엑스포 과학공원": { lat: 36.3745, lng: 127.3885 },
+  한밭수목원: { lat: 36.3689, lng: 127.3884 },
+  유성온천: { lat: 36.3543, lng: 127.3421 },
+  "대청호 오백리길": { lat: 36.4809, lng: 127.4867 }
 };
 
 function CourseDetail({ id }: { id: string }) {
@@ -624,20 +677,201 @@ function CourseDetail({ id }: { id: string }) {
   const [isEditing, setIsEditing] = useState(isNew);
   const [editTitle, setEditTitle] = useState(baseCourseData.title);
   const [editIsPrivate, setEditIsPrivate] = useState(baseCourseData.isPrivate);
+  const [editStartDate, setEditStartDate] = useState(baseCourseData.startDate ?? "");
+  const [editEndDate, setEditEndDate] = useState(baseCourseData.endDate ?? "");
   const [editDays, setEditDays] = useState<EditDay[]>(baseCourseData.days);
   const [showPlacePicker, setShowPlacePicker] = useState(false);
   const [favorited, setFavorited] = useState(false);
+  const [showErrors, setShowErrors] = useState(false); // 저장 시 필수값 검증 표시
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const courseData = isEditing
     ? { ...baseCourseData, title: editTitle, days: editDays }
     : baseCourseData;
 
   const currentPlaces = courseData.days[activeDay - 1]?.places ?? [];
-  const routePlaces = currentPlaces.map((p) => ({
-    ...(PLACE_COORDS[p.name] ?? { cx: 500, cy: 350, color: "#16a34a" }),
-    label: p.name
-  }));
+  // KakaoMap 마커 — 위경도가 있는(= PLACES 에 매칭되는) 장소만. marker.id 는 PLACES.id 로 두어
+  // selectedId ↔ selectedPlaceId 가 그대로 연결되게 한다.
+  const mapMarkers: MapMarker[] = currentPlaces.flatMap((p) => {
+    const ll = PLACE_LATLNG[p.name];
+    const found = PLACES.find((pl) => pl.name === p.name);
+    if (!ll || !found) return [];
+    return [
+      {
+        id: String(found.id),
+        lat: ll.lat,
+        lng: ll.lng,
+        color: PLACE_COORDS[p.name]?.color ?? "#16a34a"
+      }
+    ];
+  });
   const selectedPlace = PLACES.find((p) => p.id === selectedPlaceId);
+
+  // 필수값: 코스 제목(course_nm). 공유 여부(open_yn)는 기본값이 있어 항상 채워지므로 검증 불필요.
+  const titleMissing = editTitle.trim().length === 0;
+
+  const handleSave = async () => {
+    // 필수값이 없으면 저장하지 않고 안내만 표시
+    if (titleMissing) {
+      setShowErrors(true);
+      return;
+    }
+
+    // 기존(메모리) 코스 편집은 course_id 가 없으므로 DB insert 없이 메모리만 갱신.
+    // (추후 코스를 DB 에서 불러오게 되면 여기서 tb_course update 로 교체)
+    if (!isNew) {
+      updateCourse({
+        ...baseCourseData,
+        title: editTitle.trim(),
+        isPrivate: editIsPrivate,
+        days: editDays,
+        startDate: editStartDate || undefined,
+        endDate: editEndDate || undefined
+      });
+      setIsEditing(false);
+      setShowPlacePicker(false);
+      return;
+    }
+
+    // 새 코스 — tb_course / tb_course_detail 에 insert (클라이언트 직접)
+    setSaving(true);
+    setSaveError("");
+    try {
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+
+      // 1) tb_course insert → course_id 반환
+      const { data: course, error: courseErr } = await supabase
+        .from("tb_course")
+        .insert({
+          course_nm: editTitle.trim(),
+          open_yn: editIsPrivate ? "N" : "Y", // 공유 여부: 기본 N(공유 안 함)
+          startdate: editStartDate || null,
+          enddate: editEndDate || null,
+          register: "admin" // TODO: 로그인 사용자로 교체
+        })
+        .select("course_id")
+        .single();
+      if (courseErr) throw courseErr;
+
+      // 2) tb_course_detail insert — 일정(day) + 장소(place_id). placeId 있는 장소만.
+      const detailRows = editDays.flatMap((d) =>
+        d.places
+          .filter((p) => p.placeId != null)
+          .map((p) => ({
+            course_id: course.course_id,
+            day: d.day,
+            place_id: p.placeId as number,
+            starttime: null,
+            endtime: null
+          }))
+      );
+      if (detailRows.length > 0) {
+        const { error: detailErr } = await supabase.from("tb_course_detail").insert(detailRows);
+        if (detailErr) throw detailErr;
+      }
+
+      // 내 코스 목록(현재 메모리 기반)에도 반영
+      addCourse({
+        id: genId(),
+        title: editTitle.trim(),
+        duration: editDays.length > 1 ? `${editDays.length}일` : "반일",
+        isPrivate: editIsPrivate,
+        rating: 0,
+        likes: 0,
+        tags: [],
+        days: editDays,
+        startDate: editStartDate || undefined,
+        endDate: editEndDate || undefined
+      });
+      router.push("/course");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 기간(시작일/종료일) 처리 ──────────────────────────────
+  //  - 둘 다 비어 있을 때 한쪽을 고르면 다른 쪽도 같은 날로 채운다.
+  //  - 한쪽을 지우면 둘 다 지운다(→ 일정 수동 모드로 복귀).
+  const periodSet = Boolean(editStartDate && editEndDate);
+
+  // 기간(양 끝 포함)으로 day 개수를 계산
+  const dayCountFromPeriod = (start: string, end: string) => {
+    const diff = Math.floor((new Date(end).getTime() - new Date(start).getTime()) / 86_400_000);
+    return diff >= 0 ? diff + 1 : 1;
+  };
+
+  // 기간에 맞춰 day 개수를 자동 구성(기존 day 의 장소는 최대한 보존)
+  const applyPeriodDays = (start: string, end: string) => {
+    const count = dayCountFromPeriod(start, end);
+    setEditDays((prev) =>
+      Array.from({ length: count }, (_, i) => ({ day: i + 1, places: prev[i]?.places ?? [] }))
+    );
+    setActiveDay((d) => Math.min(Math.max(d, 1), count));
+  };
+
+  // 기간 삭제 → 둘 다 비우고 일정도 Day 1 하나만 남긴다(수동 모드 + '일정 추가' 버튼 복귀).
+  const clearPeriod = () => {
+    setEditStartDate("");
+    setEditEndDate("");
+    setEditDays((prev) => [{ day: 1, places: prev[0]?.places ?? [] }]);
+    setActiveDay(1);
+  };
+
+  const handleStartDateChange = (value: string) => {
+    if (!value) {
+      clearPeriod();
+      return;
+    }
+    const nextEnd = editEndDate || value; // 종료일이 비었으면 같은 날로 채움
+    setEditStartDate(value);
+    setEditEndDate(nextEnd);
+    applyPeriodDays(value, nextEnd);
+  };
+
+  const handleEndDateChange = (value: string) => {
+    if (!value) {
+      clearPeriod();
+      return;
+    }
+    const nextStart = editStartDate || value; // 시작일이 비었으면 같은 날로 채움
+    setEditStartDate(nextStart);
+    setEditEndDate(value);
+    applyPeriodDays(nextStart, value);
+  };
+
+  // 편집 취소 — 저장 없이 닫힘(신규는 목록으로, 기존은 저장값으로 복원)
+  const handleCancel = () => {
+    if (!window.confirm("편집을 취소할까요? 저장하지 않은 변경 사항은 사라집니다.")) return;
+    if (isNew) {
+      router.push("/course");
+      return;
+    }
+    setIsEditing(false);
+    setEditTitle(baseCourseData.title);
+    setEditIsPrivate(baseCourseData.isPrivate);
+    setEditStartDate(baseCourseData.startDate ?? "");
+    setEditEndDate(baseCourseData.endDate ?? "");
+    setEditDays(baseCourseData.days);
+    setShowPlacePicker(false);
+    setShowErrors(false);
+  };
+
+  // 모든 입력 항목을 새 코스 기본 상태로 초기화 — 저장 없이 즉시 적용
+  const handleReset = () => {
+    if (!window.confirm("모든 입력을 초기화할까요? 저장 없이 바로 적용됩니다.")) return;
+    setEditTitle("");
+    setEditIsPrivate(true); // 기본: 공유 안 함(open_yn N)
+    setEditStartDate("");
+    setEditEndDate("");
+    setEditDays([{ day: 1, places: [] }]);
+    setActiveDay(1);
+    setShowPlacePicker(false);
+    setShowErrors(false);
+  };
 
   return (
     <div
@@ -645,74 +879,78 @@ function CourseDetail({ id }: { id: string }) {
       style={{ height: "calc(100vh - 64px)" }}
     >
       {/* ── LEFT SIDEBAR (desktop) ── */}
-      <aside className="border-hairline hidden w-72 shrink-0 flex-col overflow-hidden border-r bg-white md:flex">
+      <aside
+        className={`border-hairline shrink-0 flex-col overflow-hidden bg-white md:flex md:w-72 md:border-r ${
+          isEditing
+            ? "absolute inset-x-0 bottom-0 z-30 flex h-[65%] rounded-t-2xl border-t shadow-2xl md:static md:inset-auto md:z-auto md:h-auto md:rounded-none md:border-t-0 md:shadow-none"
+            : "hidden"
+        }`}
+      >
         {selectedPlace && !isEditing ? (
           <PlaceDetailPanel place={selectedPlace} onBack={() => setSelectedPlaceId(null)} />
         ) : isEditing ? (
           /* ── 편집 패널 ── */
           <>
-            {/* Edit header */}
-            <div className="border-hairline-soft bg-gold-50 flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
-              <button
-                onClick={() => {
-                  if (isNew) {
-                    router.push("/course");
-                    return;
-                  }
-                  setIsEditing(false);
-                  setEditTitle(baseCourseData.title);
-                  setEditIsPrivate(baseCourseData.isPrivate);
-                  setEditDays(baseCourseData.days);
-                  setShowPlacePicker(false);
-                }}
-                className="text-steel hover:bg-surface hover:text-ink rounded-full px-2 py-1 text-xs transition-colors"
-              >
-                취소
-              </button>
-              <span className="text-gold-700 flex-1 text-center text-xs font-bold">코스 편집</span>
-              <Button
-                variant="accent"
-                size="sm"
-                onClick={() => {
-                  if (isNew) {
-                    addCourse({
-                      id: genId(),
-                      title: editTitle,
-                      duration: editDays.length > 1 ? `${editDays.length}일` : "반일",
-                      isPrivate: editIsPrivate,
-                      rating: 0,
-                      likes: 0,
-                      tags: [],
-                      days: editDays
-                    });
-                    router.push("/course");
-                  } else {
-                    updateCourse({
-                      ...baseCourseData,
-                      title: editTitle,
-                      isPrivate: editIsPrivate,
-                      days: editDays
-                    });
-                    setIsEditing(false);
-                    setShowPlacePicker(false);
-                  }
-                }}
-                className="gap-1 px-2.5 py-1 text-xs"
-              >
-                <Check className="h-3 w-3" />
-                저장
-              </Button>
+            {/* 모바일 바텀시트 핸들 */}
+            <div className="flex shrink-0 justify-center pt-2 md:hidden">
+              <span className="bg-hairline h-1 w-10 rounded-full" />
+            </div>
+
+            {/* Edit header — 타이틀 + 취소·초기화·저장 */}
+            <div className="border-hairline-soft bg-gold-50 shrink-0 space-y-2 border-b px-3 py-2.5">
+              <p className="text-gold-700 text-sm font-bold">{isNew ? "코스 추가" : "코스 편집"}</p>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancel}
+                  disabled={saving}
+                  className="flex-1 gap-1 text-xs"
+                >
+                  <X className="h-3 w-3" />
+                  취소
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReset}
+                  disabled={saving}
+                  className="flex-1 gap-1 text-xs hover:border-red-300 hover:bg-red-50 hover:text-red-500"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  초기화
+                </Button>
+                <Button
+                  variant="accent"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 gap-1 text-xs"
+                >
+                  <Check className="h-3 w-3" />
+                  {saving ? "저장 중..." : "저장"}
+                </Button>
+              </div>
+              {saveError && <p className="mt-2 text-xs text-red-500">저장 실패: {saveError}</p>}
             </div>
 
             <div className="flex-1 overflow-y-auto">
               {/* Title edit */}
               <div className="border-hairline-soft border-b px-4 py-3">
-                <p className="text-steel mb-1.5 text-xs font-semibold">코스 제목</p>
+                <p className="text-steel mb-1.5 text-xs font-semibold">
+                  코스 제목 <span className="text-red-500">*</span>
+                </p>
                 <input
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="focus:ring-brand-500 border-hairline w-full rounded-lg border px-3 py-2 text-sm font-semibold focus:ring-2 focus:outline-none"
+                  placeholder="코스 제목을 입력해 주세요"
+                  className={`focus:ring-brand-500 w-full rounded-lg border px-3 py-2 text-sm font-semibold focus:ring-2 focus:outline-none ${
+                    showErrors && titleMissing ? "border-red-400 bg-red-50" : "border-hairline"
+                  }`}
                 />
+                {showErrors && titleMissing && (
+                  <p className="mt-1 text-xs text-red-500">코스 제목은 필수 항목이에요.</p>
+                )}
               </div>
 
               {/* 공유 여부 */}
@@ -733,9 +971,38 @@ function CourseDetail({ id }: { id: string }) {
                 </button>
               </div>
 
+              {/* 기간 (시작일 / 종료일) */}
+              <div className="border-hairline-soft border-b px-4 py-3">
+                <p className="text-steel mb-1.5 text-xs font-semibold">기간</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={editStartDate}
+                    max={editEndDate || undefined}
+                    onChange={(e) => handleStartDateChange(e.target.value)}
+                    className="focus:ring-brand-500 border-hairline text-slate min-w-0 flex-1 rounded-lg border px-2 py-2 text-xs focus:ring-2 focus:outline-none"
+                  />
+                  <span className="text-stone shrink-0 text-xs">~</span>
+                  <input
+                    type="date"
+                    value={editEndDate}
+                    min={editStartDate || undefined}
+                    onChange={(e) => handleEndDateChange(e.target.value)}
+                    className="focus:ring-brand-500 border-hairline text-slate min-w-0 flex-1 rounded-lg border px-2 py-2 text-xs focus:ring-2 focus:outline-none"
+                  />
+                </div>
+              </div>
+
               {/* Day tabs + add day */}
               <div className="border-hairline-soft border-b px-4 py-3">
-                <p className="text-steel mb-1.5 text-xs font-semibold">일정</p>
+                <p className="text-steel mb-1.5 text-xs font-semibold">
+                  일정
+                  {periodSet && (
+                    <span className="text-stone ml-1 font-normal">
+                      · 기간에 맞춰 {editDays.length}일이 자동 구성돼요
+                    </span>
+                  )}
+                </p>
                 <div className="flex flex-wrap gap-1.5">
                   {editDays.map((d) => (
                     <div key={d.day} className="flex items-center gap-1">
@@ -745,7 +1012,7 @@ function CourseDetail({ id }: { id: string }) {
                       >
                         Day {d.day}
                       </button>
-                      {editDays.length > 1 && (
+                      {!periodSet && editDays.length > 1 && (
                         <button
                           onClick={() => {
                             const next = editDays
@@ -761,17 +1028,19 @@ function CourseDetail({ id }: { id: string }) {
                       )}
                     </div>
                   ))}
-                  <button
-                    onClick={() => {
-                      const newDay = editDays.length + 1;
-                      setEditDays([...editDays, { day: newDay, places: [] }]);
-                      setActiveDay(newDay);
-                    }}
-                    className="text-brand-600 border-brand-200 hover:bg-brand-50 flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors"
-                  >
-                    <Plus className="h-3 w-3" />
-                    일정 추가
-                  </button>
+                  {!periodSet && (
+                    <button
+                      onClick={() => {
+                        const newDay = editDays.length + 1;
+                        setEditDays([...editDays, { day: newDay, places: [] }]);
+                        setActiveDay(newDay);
+                      }}
+                      className="text-brand-600 border-brand-200 hover:bg-brand-50 flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors"
+                    >
+                      <Plus className="h-3 w-3" />
+                      일정 추가
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -900,7 +1169,8 @@ function CourseDetail({ id }: { id: string }) {
                                 id: genId(),
                                 name: p.name,
                                 time: "09:00",
-                                duration: "1시간"
+                                duration: "1시간",
+                                placeId: p.id // 현재 mock PLACES.id, 추후 tb_place.place_id
                               };
                               return { ...d, places: [...d.places, newPlace] };
                             })
@@ -1040,22 +1310,17 @@ function CourseDetail({ id }: { id: string }) {
         )}
       </aside>
 
-      {/* ── MAP AREA ── */}
+      {/* ── MAP AREA ── (모바일 편집 시 지도는 그대로 보이고 편집 패널이 하단 시트로 뜸) */}
       <div className="relative flex-1 overflow-hidden">
-        <MapCanvas
-          className="h-full w-full"
-          routePlaces={routePlaces}
-          onPinClick={(i) => {
-            const placeName = currentPlaces[i]?.name;
-            if (placeName) {
-              const found = PLACES.find((p) => p.name === placeName);
-              if (found) setSelectedPlaceId(found.id);
-            }
-          }}
+        <KakaoMap
+          markers={mapMarkers}
+          selectedId={selectedPlaceId != null ? String(selectedPlaceId) : null}
+          onSelect={(id) => setSelectedPlaceId(Number(id))}
+          onDeselect={() => setSelectedPlaceId(null)}
         />
 
-        {/* Mobile: back button */}
-        <div className="absolute top-3 left-3 z-10 md:hidden">
+        {/* Mobile: back button (편집 중엔 시트의 '취소'로 나가므로 숨김) */}
+        <div className={`absolute top-3 left-3 z-10 ${isEditing ? "hidden" : "md:hidden"}`}>
           <Button
             variant="outline"
             size="sm"
@@ -1067,94 +1332,85 @@ function CourseDetail({ id }: { id: string }) {
           </Button>
         </div>
 
-        {/* Mobile: bottom card */}
-        {selectedPlace ? (
-          <div className="absolute inset-0 z-20 overflow-y-auto bg-white md:hidden">
-            <PlaceDetailPanel place={selectedPlace} onBack={() => setSelectedPlaceId(null)} />
-          </div>
-        ) : (
-          <div className="border-hairline-soft absolute right-3 bottom-4 left-3 z-10 rounded-lg border bg-white p-4 shadow-xl md:hidden">
-            <h2 className="text-ink mb-2 text-sm font-bold">{courseData.title}</h2>
-            <div className="text-steel mb-3 flex items-center gap-3 text-xs">
-              <div className="flex items-center gap-1">
-                <Star className="h-3 w-3 fill-yellow-400 text-yellow-500" />
-                <span className="text-ink font-semibold">{courseData.rating}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Heart className="h-3 w-3" />
-                <span>{courseData.likes}</span>
-              </div>
+        {/* Mobile: bottom card (편집 중엔 하단 시트가 대신하므로 숨김) */}
+        {!isEditing &&
+          (selectedPlace ? (
+            <div className="absolute inset-0 z-20 overflow-y-auto bg-white md:hidden">
+              <PlaceDetailPanel place={selectedPlace} onBack={() => setSelectedPlaceId(null)} />
             </div>
-            <div className="mb-3 flex gap-2">
-              {courseData.days.map((day) => (
-                <button
-                  key={day.day}
-                  onClick={() => setActiveDay(day.day)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${activeDay === day.day ? "bg-brand-500 text-ink" : "bg-surface text-slate"}`}
-                >
-                  Day {day.day}
-                </button>
-              ))}
-            </div>
-            <div className="mb-3 flex flex-col gap-1.5">
-              {currentPlaces.map((place, index) => (
-                <div
-                  key={place.id}
-                  className="bg-surface-soft hover:bg-surface flex cursor-pointer items-center gap-2 rounded-lg p-2 transition-colors"
-                  onClick={() => {
-                    const found = PLACES.find((p) => p.name === place.name);
-                    if (found) setSelectedPlaceId(found.id);
-                  }}
-                >
-                  <div
-                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                    style={{ background: PLACE_COORDS[place.name]?.color ?? "#16a34a" }}
-                  >
-                    {index + 1}
-                  </div>
-                  <span className="text-ink truncate text-xs font-semibold">{place.name}</span>
-                  <span className="text-stone ml-auto shrink-0 text-xs">{place.time}</span>
+          ) : (
+            <div className="border-hairline-soft absolute right-3 bottom-4 left-3 z-10 rounded-lg border bg-white p-4 shadow-xl md:hidden">
+              <h2 className="text-ink mb-2 text-sm font-bold">{courseData.title}</h2>
+              <div className="text-steel mb-3 flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-1">
+                  <Star className="h-3 w-3 fill-yellow-400 text-yellow-500" />
+                  <span className="text-ink font-semibold">{courseData.rating}</span>
                 </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              {isOwned ? (
+                <div className="flex items-center gap-1">
+                  <Heart className="h-3 w-3" />
+                  <span>{courseData.likes}</span>
+                </div>
+              </div>
+              <div className="mb-3 flex gap-2">
+                {courseData.days.map((day) => (
+                  <button
+                    key={day.day}
+                    onClick={() => setActiveDay(day.day)}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${activeDay === day.day ? "bg-brand-500 text-ink" : "bg-surface text-slate"}`}
+                  >
+                    Day {day.day}
+                  </button>
+                ))}
+              </div>
+              <div className="mb-3 flex flex-col gap-1.5">
+                {currentPlaces.map((place, index) => (
+                  <div
+                    key={place.id}
+                    className="bg-surface-soft hover:bg-surface flex cursor-pointer items-center gap-2 rounded-lg p-2 transition-colors"
+                    onClick={() => {
+                      const found = PLACES.find((p) => p.name === place.name);
+                      if (found) setSelectedPlaceId(found.id);
+                    }}
+                  >
+                    <div
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                      style={{ background: PLACE_COORDS[place.name]?.color ?? "#16a34a" }}
+                    >
+                      {index + 1}
+                    </div>
+                    <span className="text-ink truncate text-xs font-semibold">{place.name}</span>
+                    <span className="text-stone ml-auto shrink-0 text-xs">{place.time}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                {isOwned ? (
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="bg-gold-500 hover:bg-gold-600 flex flex-1 items-center justify-center gap-2 rounded-full py-2 text-sm font-semibold text-white transition-colors"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    코스 편집
+                  </button>
+                ) : (
+                  <Button variant="accent" className="flex-1 py-2">
+                    내 코스에 추가
+                  </Button>
+                )}
                 <button
-                  onClick={() => setIsEditing(true)}
-                  className="bg-gold-500 hover:bg-gold-600 flex flex-1 items-center justify-center gap-2 rounded-full py-2 text-sm font-semibold text-white transition-colors"
+                  onClick={() => setFavorited((v) => !v)}
+                  className={`rounded-full border px-3 py-2 transition-colors ${favorited ? "border-red-300 bg-red-50" : "border-hairline hover:bg-surface-soft bg-white"}`}
                 >
-                  <Pencil className="h-3.5 w-3.5" />
-                  코스 편집
+                  <Heart
+                    className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-slate"}`}
+                  />
                 </button>
-              ) : (
-                <Button variant="accent" className="flex-1 py-2">
-                  내 코스에 추가
-                </Button>
-              )}
-              <button
-                onClick={() => setFavorited((v) => !v)}
-                className={`rounded-full border px-3 py-2 transition-colors ${favorited ? "border-red-300 bg-red-50" : "border-hairline hover:bg-surface-soft bg-white"}`}
-              >
-                <Heart
-                  className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-slate"}`}
-                />
-              </button>
-              <button className="border-hairline hover:bg-surface-soft rounded-full border bg-white px-3 py-2 transition-colors">
-                <Share2 className="text-slate h-4 w-4" />
-              </button>
+                <button className="border-hairline hover:bg-surface-soft rounded-full border bg-white px-3 py-2 transition-colors">
+                  <Share2 className="text-slate h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Zoom controls */}
-        <div className="absolute top-3 right-3 z-10 flex flex-col gap-1">
-          <button className="border-hairline text-slate hover:bg-surface-soft flex h-8 w-8 items-center justify-center rounded-full border bg-white text-lg leading-none font-bold">
-            +
-          </button>
-          <button className="border-hairline text-slate hover:bg-surface-soft flex h-8 w-8 items-center justify-center rounded-full border bg-white text-lg leading-none font-bold">
-            −
-          </button>
-        </div>
+          ))}
       </div>
     </div>
   );
