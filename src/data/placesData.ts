@@ -14,13 +14,28 @@ export interface PlaceDetail {
   phone: string;
   reviews: Review[];
 }
+
+export interface PlaceColor {
+  color: string;
+  bg: string;
+}
+
+export const PLACE_COLORS = {
+  violet: { color: "#7c3aed", bg: "#ede9fe" },
+  red: { color: "#dc2626", bg: "#fee2e2" },
+  green: { color: "#16a34a", bg: "#dcfce7" },
+  amber: { color: "#d97706", bg: "#fef3c7" },
+  blue: { color: "#2563eb", bg: "#dbeafe" }
+} satisfies Record<string, PlaceColor>;
+
+export type PlaceColorKey = keyof typeof PLACE_COLORS;
+
 export interface Place {
   id: number;
   name: string;
-  cx: number;
-  cy: number;
-  color: string;
-  bg: string;
+  lat: number;
+  lng: number;
+  colorKey: PlaceColorKey;
   category: string;
   rating: number;
   accessibility: string[];
@@ -33,10 +48,9 @@ export const PLACES: Place[] = [
   {
     id: 1,
     name: "대전 엑스포 과학공원",
-    cx: 557,
-    cy: 165,
-    color: "#7c3aed",
-    bg: "#ede9fe",
+    lat: 36.374,
+    lng: 127.3838,
+    colorKey: "violet",
     category: "과학",
     rating: 4.8,
     accessibility: ["시각", "보행", "청각"],
@@ -47,10 +61,9 @@ export const PLACES: Place[] = [
   {
     id: 2,
     name: "성심당",
-    cx: 440,
-    cy: 315,
-    color: "#dc2626",
-    bg: "#fee2e2",
+    lat: 36.3243,
+    lng: 127.4275,
+    colorKey: "red",
     category: "빵지순례",
     rating: 4.9,
     accessibility: ["보행", "고령자"],
@@ -61,10 +74,9 @@ export const PLACES: Place[] = [
   {
     id: 3,
     name: "한밭수목원",
-    cx: 337,
-    cy: 237,
-    color: "#16a34a",
-    bg: "#dcfce7",
+    lat: 36.3507,
+    lng: 127.377,
+    colorKey: "green",
     category: "자연힐링",
     rating: 4.7,
     accessibility: ["시각", "보행", "영유아"],
@@ -75,10 +87,9 @@ export const PLACES: Place[] = [
   {
     id: 4,
     name: "유성온천",
-    cx: 175,
-    cy: 360,
-    color: "#d97706",
-    bg: "#fef3c7",
+    lat: 36.3592,
+    lng: 127.3445,
+    colorKey: "amber",
     category: "문화예술",
     rating: 4.5,
     accessibility: ["보행", "고령자"],
@@ -89,10 +100,9 @@ export const PLACES: Place[] = [
   {
     id: 5,
     name: "대청호 오백리길",
-    cx: 800,
-    cy: 435,
-    color: "#2563eb",
-    bg: "#dbeafe",
+    lat: 36.45,
+    lng: 127.54,
+    colorKey: "blue",
     category: "자연힐링",
     rating: 4.6,
     accessibility: ["보행"],

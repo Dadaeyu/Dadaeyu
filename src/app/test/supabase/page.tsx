@@ -1,16 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
-import { cookies } from "next/headers";
 
-// 서버 컴포넌트는 매 요청마다 서버에서 조회 후 HTML로 전달됩니다.
-// 항상 최신 데이터를 보여주기 위해 캐시를 끕니다.
 export const dynamic = "force-dynamic";
 
 export default async function SupabaseServerTestPage() {
-  // 서버 컴포넌트 — 'use client'가 없습니다.
-  // createClient는 cookieStore를 받아 서버용 클라이언트를 만듭니다.
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = await createClient();
 
   const { data, error } = await supabase.from("tb_test").select("*").limit(5);
 
@@ -49,8 +43,7 @@ export default async function SupabaseServerTestPage() {
           <span className="text-steel ml-2 font-mono text-xs">src/app/supabase/page.tsx</span>
         </div>
         <pre className="text-hairline overflow-x-auto p-4 font-mono text-xs leading-relaxed">
-          {`const cookieStore = await cookies()
-const supabase = createClient(cookieStore)
+          {`const supabase = await createClient()
 
 const { data, error } = await supabase
   .from('tb_test')

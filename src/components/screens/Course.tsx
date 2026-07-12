@@ -30,12 +30,10 @@ import {
   type CoursePlace
 } from "@/context/CourseContext";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import { PLACES } from "@/data/placesData";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Tabs } from "@/components/ui/Tabs";
-import { genId } from "@/utils/id";
+import { PLACES, PLACE_COLORS } from "@/data/placesData";
+import { Button } from "../ui/Button";
+import { Card } from "../ui/Card";
+import { Badge } from "../ui/Badge";
 
 type AuthorType = "admin" | "user";
 interface SharedCourse {
@@ -312,43 +310,51 @@ export default function Course() {
   return (
     <div className="space-y-6">
       {/* Tabs */}
-      <Tabs
-        variant="segmented"
-        value={activeTab}
-        onValueChange={(k) => setActiveTab(k as typeof activeTab)}
-        items={[
-          { key: "shared", label: "공유 코스" },
-          { key: "recommend", label: "추천 코스" },
-          { key: "my", label: "내 코스" }
-        ]}
-      />
+      <div className="flex border-b border-gray-200">
+        {(["shared", "recommend", "my"] as const).map((tab) => {
+          const labels = { shared: "공유 코스", recommend: "추천 코스", my: "내 코스" };
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${
+                activeTab === tab
+                  ? "text-brand-600 border-brand-600 border-b-2"
+                  : "text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              {labels[tab]}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Shared Courses Tab */}
       {activeTab === "shared" && (
         <div className="space-y-4">
           {/* 필터 토글 헤더 */}
-          <div className="border-hairline flex items-center overflow-hidden rounded-lg border bg-white">
+          <div className="flex items-center overflow-hidden rounded-xl border border-gray-200 bg-white">
             <button
               onClick={() => setShowSharedFilters(!showSharedFilters)}
-              className="text-slate hover:bg-surface-soft flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold transition-colors"
+              className="flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
             >
               <div className="flex items-center gap-2">
-                <SlidersHorizontal className="text-steel h-4 w-4" />
+                <SlidersHorizontal className="h-4 w-4 text-gray-500" />
                 <span>필터</span>
                 {sharedFilterCount > 0 && (
-                  <span className="bg-brand-500 text-ink flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold">
+                  <span className="bg-brand-600 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white">
                     {sharedFilterCount}
                   </span>
                 )}
               </div>
               <ChevronDown
-                className={`text-stone h-4 w-4 transition-transform ${showSharedFilters ? "rotate-180" : ""}`}
+                className={`h-4 w-4 text-gray-400 transition-transform ${showSharedFilters ? "rotate-180" : ""}`}
               />
             </button>
             {sharedFilterCount > 0 && (
               <button
                 onClick={resetShared}
-                className="border-hairline shrink-0 border-l px-3 py-2.5 text-xs text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                className="shrink-0 border-l border-gray-200 px-3 py-2.5 text-xs text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
               >
                 초기화
               </button>
@@ -357,78 +363,82 @@ export default function Course() {
 
           {/* 필터 패널 */}
           {showSharedFilters && (
-            <div className="border-hairline space-y-4 rounded-lg border bg-white p-4">
+            <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
               <FilterFields filters={sharedFilters} set={setShared} toggleList={toggleSharedList} />
-              <Button
-                variant="accent"
+              <button
                 onClick={() => setShowSharedFilters(false)}
-                className="w-full"
+                className="bg-brand-600 hover:bg-brand-700 w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-colors"
               >
                 검색
-              </Button>
+              </button>
             </div>
           )}
 
           {/* 결과 수 */}
-          <p className="text-steel text-sm">
-            <span className="text-ink font-semibold">{filteredShared.length}개</span>의 코스
+          <p className="text-sm text-gray-500">
+            <span className="font-semibold text-gray-800">{filteredShared.length}개</span>의 코스
             {sharedFilterCount > 0 && "를 찾았어요"}
           </p>
 
           {/* 코스 목록 */}
           {filteredShared.length > 0 ? (
             filteredShared.map((course) => (
-              <Card key={course.id} asChild variant="interactive">
-                <Link href={`/course/${course.id}`} className="block">
-                  {/* Author row */}
-                  <div className="mb-2 flex items-center gap-1.5">
-                    {course.authorType === "admin" ? (
-                      <Badge tone="tag" className="text-[10px] font-bold">
-                        <ShieldCheck className="h-3 w-3" />
-                        관리자
-                      </Badge>
-                    ) : (
-                      <Badge tone="neutral" className="text-[10px] font-bold">
-                        <User className="h-3 w-3" />
-                        유저
-                      </Badge>
-                    )}
-                    <span className="text-steel text-xs font-medium">{course.author}</span>
-                    <span className="text-stone ml-auto text-[10px]">{course.date}</span>
+              <Link
+                key={course.id}
+                href={`/course/${course.id}`}
+                className="block rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
+              >
+                {/* Author row */}
+                <div className="mb-2 flex items-center gap-1.5">
+                  {course.authorType === "admin" ? (
+                    <span className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                      <ShieldCheck className="h-3 w-3" />
+                      관리자
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600">
+                      <User className="h-3 w-3" />
+                      유저
+                    </span>
+                  )}
+                  <span className="text-xs font-medium text-gray-500">{course.author}</span>
+                  <span className="ml-auto text-[10px] text-gray-300">{course.date}</span>
+                </div>
+                {/* Title + rating */}
+                <div className="mb-2 flex items-start justify-between">
+                  <h3 className="leading-snug font-semibold text-gray-800">{course.title}</h3>
+                  <div className="ml-2 flex shrink-0 items-center gap-1 text-sm">
+                    <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                    <span className="text-gray-700">{course.rating}</span>
                   </div>
-                  {/* Title + rating */}
-                  <div className="mb-2 flex items-start justify-between">
-                    <h3 className="text-ink leading-snug font-semibold">{course.title}</h3>
-                    <div className="ml-2 flex shrink-0 items-center gap-1 text-sm">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-500" />
-                      <span className="text-slate">{course.rating}</span>
-                    </div>
+                </div>
+                {/* Meta */}
+                <div className="mb-3 flex gap-3 text-sm text-gray-500">
+                  <span>{course.duration}</span>
+                  <span>•</span>
+                  <span>{course.places}곳</span>
+                </div>
+                {/* Themes + likes */}
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap gap-1">
+                    {course.themes.map((t) => (
+                      <span
+                        key={t}
+                        className="bg-brand-50 text-brand-700 rounded-full px-2 py-0.5 text-xs"
+                      >
+                        {t}
+                      </span>
+                    ))}
                   </div>
-                  {/* Meta */}
-                  <div className="text-steel mb-3 flex gap-3 text-sm">
-                    <span>{course.duration}</span>
-                    <span>•</span>
-                    <span>{course.places}곳</span>
+                  <div className="flex items-center gap-1 text-sm text-gray-400">
+                    <Heart className="h-3.5 w-3.5" />
+                    <span>{course.likes}</span>
                   </div>
-                  {/* Themes + likes */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-wrap gap-1">
-                      {course.themes.map((t) => (
-                        <Badge key={t} tone="brand">
-                          {t}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="text-stone flex items-center gap-1 text-sm">
-                      <Heart className="h-3.5 w-3.5" />
-                      <span>{course.likes}</span>
-                    </div>
-                  </div>
-                </Link>
-              </Card>
+                </div>
+              </Link>
             ))
           ) : (
-            <div className="text-stone py-12 text-center">
+            <div className="py-12 text-center text-gray-400">
               <X className="mx-auto mb-2 h-10 w-10 opacity-30" />
               <p className="text-sm">조건에 맞는 코스가 없어요</p>
               <button
@@ -446,28 +456,28 @@ export default function Course() {
       {activeTab === "recommend" && (
         <div className="space-y-4">
           {/* 필터 토글 헤더 */}
-          <div className="border-hairline flex items-center overflow-hidden rounded-lg border bg-white">
+          <div className="flex items-center overflow-hidden rounded-xl border border-gray-200 bg-white">
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className="text-slate hover:bg-surface-soft flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold transition-colors"
+              className="flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
             >
               <div className="flex items-center gap-2">
-                <SlidersHorizontal className="text-steel h-4 w-4" />
+                <SlidersHorizontal className="h-4 w-4 text-gray-500" />
                 <span>필터</span>
                 {activeFilterCount > 0 && (
-                  <span className="bg-brand-500 text-ink flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold">
+                  <span className="bg-brand-600 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white">
                     {activeFilterCount}
                   </span>
                 )}
               </div>
               <ChevronDown
-                className={`text-stone h-4 w-4 transition-transform ${showFilters ? "rotate-180" : ""}`}
+                className={`h-4 w-4 text-gray-400 transition-transform ${showFilters ? "rotate-180" : ""}`}
               />
             </button>
             {(activeFilterCount > 0 || showResults) && (
               <button
                 onClick={resetAll}
-                className="border-hairline shrink-0 border-l px-3 py-2.5 text-xs text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                className="shrink-0 border-l border-gray-200 px-3 py-2.5 text-xs text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
               >
                 초기화
               </button>
@@ -476,13 +486,13 @@ export default function Course() {
 
           {/* 필터 패널 */}
           {showFilters && (
-            <div className="border-hairline rounded-lg border bg-white p-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
               <FilterFields filters={filters} set={set} toggleList={toggleList} />
             </div>
           )}
 
           {/* AI 추천 배너 */}
-          <div className="bg-brand-50 flex items-center justify-between rounded-lg p-4">
+          <div className="bg-brand-50 flex items-center justify-between rounded-xl p-4">
             <div className="flex items-center gap-2">
               <Sparkles className="text-brand-600 h-5 w-5" />
               <div>
@@ -492,58 +502,61 @@ export default function Course() {
                 </p>
               </div>
             </div>
-            <Button
-              variant="accent"
-              size="sm"
+            <button
               onClick={() => setShowResults(true)}
-              className="shrink-0"
+              className="bg-brand-600 hover:bg-brand-700 shrink-0 rounded-lg px-4 py-2 text-sm text-white transition-colors"
             >
               추천받기
-            </Button>
+            </button>
           </div>
 
           {/* 결과 */}
           {showResults ? (
             <>
-              <p className="text-steel text-sm">
-                <span className="text-ink font-semibold">{filteredCourses.length}개</span>의 코스를
-                찾았어요
+              <p className="text-sm text-gray-500">
+                <span className="font-semibold text-gray-800">{filteredCourses.length}개</span>의
+                코스를 찾았어요
               </p>
               <div className="space-y-3">
                 {filteredCourses.length > 0 ? (
                   filteredCourses.map((course) => (
-                    <Card key={course.id} asChild variant="interactive">
-                      <Link href={`/course/${course.id}`} className="block">
-                        <div className="mb-2 flex items-start justify-between">
-                          <h3 className="text-ink font-semibold">{course.title}</h3>
-                          <div className="flex items-center gap-1 text-sm">
-                            <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-500" />
-                            <span className="text-slate">{course.rating}</span>
-                          </div>
+                    <Link
+                      key={course.id}
+                      href={`/course/${course.id}`}
+                      className="block rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
+                    >
+                      <div className="mb-2 flex items-start justify-between">
+                        <h3 className="font-semibold text-gray-800">{course.title}</h3>
+                        <div className="flex items-center gap-1 text-sm">
+                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                          <span className="text-gray-700">{course.rating}</span>
                         </div>
-                        <div className="text-steel mb-3 flex gap-3 text-sm">
-                          <span>{course.duration}</span>
-                          <span>•</span>
-                          <span>{course.places}곳</span>
+                      </div>
+                      <div className="mb-3 flex gap-3 text-sm text-gray-600">
+                        <span>{course.duration}</span>
+                        <span>•</span>
+                        <span>{course.places}곳</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap gap-1">
+                          {course.themes.map((t) => (
+                            <span
+                              key={t}
+                              className="bg-brand-50 text-brand-700 rounded-full px-2 py-0.5 text-xs"
+                            >
+                              {t}
+                            </span>
+                          ))}
                         </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex flex-wrap gap-1">
-                            {course.themes.map((t) => (
-                              <Badge key={t} tone="brand">
-                                {t}
-                              </Badge>
-                            ))}
-                          </div>
-                          <div className="text-steel flex items-center gap-1 text-sm">
-                            <Heart className="h-3.5 w-3.5" />
-                            <span>{course.likes}</span>
-                          </div>
+                        <div className="flex items-center gap-1 text-sm text-gray-500">
+                          <Heart className="h-3.5 w-3.5" />
+                          <span>{course.likes}</span>
                         </div>
-                      </Link>
-                    </Card>
+                      </div>
+                    </Link>
                   ))
                 ) : (
-                  <div className="text-stone py-12 text-center">
+                  <div className="py-12 text-center text-gray-400">
                     <X className="mx-auto mb-2 h-10 w-10 opacity-30" />
                     <p className="text-sm">조건에 맞는 코스가 없어요</p>
                     <button
@@ -557,10 +570,10 @@ export default function Course() {
               </div>
             </>
           ) : (
-            <div className="text-stone py-14 text-center">
+            <div className="py-14 text-center text-gray-400">
               <Sparkles className="text-brand-300 mx-auto mb-3 h-10 w-10" />
-              <p className="text-steel text-sm font-medium">원하는 조건을 설정하고</p>
-              <p className="text-stone text-sm">AI 코스 추천받기를 눌러보세요</p>
+              <p className="text-sm font-medium text-gray-500">원하는 조건을 설정하고</p>
+              <p className="text-sm text-gray-400">AI 코스 추천받기를 눌러보세요</p>
             </div>
           )}
         </div>
@@ -571,7 +584,7 @@ export default function Course() {
         <div className="space-y-4">
           <Link
             href="/course/new"
-            className="hover:border-brand-400 hover:text-brand-600 border-hairline text-steel flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed py-4 transition-colors"
+            className="hover:border-brand-400 hover:text-brand-600 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 py-4 text-gray-600 transition-colors"
           >
             <Plus className="h-5 w-5" />새 코스 만들기
           </Link>
@@ -954,16 +967,16 @@ function CourseDetail({ id }: { id: string }) {
               </div>
 
               {/* 공유 여부 */}
-              <div className="border-hairline-soft flex items-center justify-between border-b px-4 py-3">
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
                 <div>
-                  <p className="text-slate text-xs font-semibold">공유 여부</p>
-                  <p className="text-stone mt-0.5 text-xs">
+                  <p className="text-xs font-semibold text-gray-700">공유 여부</p>
+                  <p className="mt-0.5 text-xs text-gray-400">
                     {editIsPrivate ? "나만 볼 수 있어요" : "모두에게 공개돼요"}
                   </p>
                 </div>
                 <button
                   onClick={() => setEditIsPrivate((v) => !v)}
-                  className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${editIsPrivate ? "bg-hairline" : "bg-brand-500"}`}
+                  className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${editIsPrivate ? "bg-gray-200" : "bg-brand-500"}`}
                 >
                   <span
                     className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all duration-200 ${editIsPrivate ? "left-1" : "left-5"}`}
@@ -1008,7 +1021,11 @@ function CourseDetail({ id }: { id: string }) {
                     <div key={d.day} className="flex items-center gap-1">
                       <button
                         onClick={() => setActiveDay(d.day)}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${activeDay === d.day ? "bg-brand-500 text-ink" : "bg-surface text-slate hover:bg-hairline"}`}
+                        className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+                          activeDay === d.day
+                            ? "bg-brand-600 text-white"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
                       >
                         Day {d.day}
                       </button>
@@ -1021,7 +1038,7 @@ function CourseDetail({ id }: { id: string }) {
                             setEditDays(next);
                             setActiveDay(Math.min(activeDay, next.length));
                           }}
-                          className="text-stone transition-colors hover:text-red-400"
+                          className="text-gray-300 transition-colors hover:text-red-400"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -1046,12 +1063,14 @@ function CourseDetail({ id }: { id: string }) {
 
               {/* Place list (editable) */}
               <div className="space-y-1.5 px-3 py-3">
-                <p className="text-steel mb-2 px-1 text-xs font-semibold">Day {activeDay} 장소</p>
+                <p className="mb-2 px-1 text-xs font-semibold text-gray-500">
+                  Day {activeDay} 장소
+                </p>
                 {(editDays.find((d) => d.day === activeDay)?.places ?? []).map(
                   (place, idx, arr) => (
                     <div
                       key={`${place.id}-${idx}`}
-                      className="bg-surface-soft flex items-center gap-1.5 rounded-lg px-2 py-2"
+                      className="flex items-center gap-1.5 rounded-xl bg-gray-50 px-2 py-2"
                     >
                       {/* Up/down */}
                       <div className="flex shrink-0 flex-col gap-0.5">
@@ -1067,7 +1086,7 @@ function CourseDetail({ id }: { id: string }) {
                               })
                             )
                           }
-                          className="text-stone hover:text-steel transition-colors disabled:opacity-20"
+                          className="text-gray-300 transition-colors hover:text-gray-600 disabled:opacity-20"
                         >
                           <ChevronUp className="h-3.5 w-3.5" />
                         </button>
@@ -1083,7 +1102,7 @@ function CourseDetail({ id }: { id: string }) {
                               })
                             )
                           }
-                          className="text-stone hover:text-steel transition-colors disabled:opacity-20"
+                          className="text-gray-300 transition-colors hover:text-gray-600 disabled:opacity-20"
                         >
                           <ChevronDown className="h-3.5 w-3.5" />
                         </button>
@@ -1097,7 +1116,7 @@ function CourseDetail({ id }: { id: string }) {
                       </div>
                       {/* Name + time */}
                       <div className="min-w-0 flex-1">
-                        <p className="text-ink truncate text-xs font-semibold">{place.name}</p>
+                        <p className="truncate text-xs font-semibold text-gray-800">{place.name}</p>
                         <input
                           value={place.time}
                           onChange={(e) =>
@@ -1111,7 +1130,7 @@ function CourseDetail({ id }: { id: string }) {
                               })
                             )
                           }
-                          className="focus:border-brand-400 border-hairline text-steel w-14 border-b bg-transparent text-[10px] focus:outline-none"
+                          className="focus:border-brand-400 w-14 border-b border-gray-200 bg-transparent text-[10px] text-gray-500 focus:outline-none"
                         />
                       </div>
                       {/* Delete */}
@@ -1124,7 +1143,7 @@ function CourseDetail({ id }: { id: string }) {
                             })
                           )
                         }
-                        className="text-stone shrink-0 transition-colors hover:text-red-400"
+                        className="shrink-0 text-gray-300 transition-colors hover:text-red-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -1135,7 +1154,7 @@ function CourseDetail({ id }: { id: string }) {
                 {/* Add place button */}
                 <button
                   onClick={() => setShowPlacePicker(!showPlacePicker)}
-                  className="border-brand-300 text-brand-600 hover:bg-brand-50 mt-1 flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed py-2 text-xs font-semibold transition-colors"
+                  className="border-brand-300 text-brand-600 hover:bg-brand-50 mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed py-2 text-xs font-semibold transition-colors"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   장소 추가
@@ -1143,12 +1162,12 @@ function CourseDetail({ id }: { id: string }) {
 
                 {/* Place picker */}
                 {showPlacePicker && (
-                  <div className="border-hairline mt-1 overflow-hidden rounded-lg border">
-                    <div className="border-hairline-soft bg-surface-soft flex items-center justify-between border-b px-3 py-2">
-                      <p className="text-steel text-xs font-semibold">장소 선택</p>
+                  <div className="mt-1 overflow-hidden rounded-xl border border-gray-200">
+                    <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-3 py-2">
+                      <p className="text-xs font-semibold text-gray-600">장소 선택</p>
                       <button
                         onClick={() => setShowPlacePicker(false)}
-                        className="text-stone hover:text-steel"
+                        className="text-gray-400 hover:text-gray-600"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -1166,7 +1185,7 @@ function CourseDetail({ id }: { id: string }) {
                             editDays.map((d) => {
                               if (d.day !== activeDay) return d;
                               const newPlace: EditPlace = {
-                                id: genId(),
+                                id: Date.now(),
                                 name: p.name,
                                 time: "09:00",
                                 duration: "1시간",
@@ -1177,16 +1196,19 @@ function CourseDetail({ id }: { id: string }) {
                           );
                           setShowPlacePicker(false);
                         }}
-                        className="border-hairline-soft hover:bg-surface-soft flex w-full items-center justify-between border-b px-3 py-2 transition-colors last:border-0"
+                        className="flex w-full items-center justify-between border-b border-gray-50 px-3 py-2 transition-colors last:border-0 hover:bg-gray-50"
                       >
                         <div className="flex items-center gap-2">
                           <span
                             className="rounded-full px-1.5 py-0.5 text-xs font-medium"
-                            style={{ background: p.bg, color: p.color }}
+                            style={{
+                              background: PLACE_COLORS[p.colorKey].bg,
+                              color: PLACE_COLORS[p.colorKey].color
+                            }}
                           >
                             {p.category}
                           </span>
-                          <span className="text-ink text-xs font-medium">{p.name}</span>
+                          <span className="text-xs font-medium text-gray-800">{p.name}</span>
                         </div>
                         <Plus className="text-brand-500 h-3.5 w-3.5 shrink-0" />
                       </button>
@@ -1200,26 +1222,25 @@ function CourseDetail({ id }: { id: string }) {
           /* ── 보기 패널 ── */
           <>
             {/* Header */}
-            <div className="border-hairline-soft flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
-              <Button
-                variant="ghost"
-                size="icon"
+            <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2.5">
+              <button
                 onClick={() => router.push("/course")}
-                aria-label="뒤로"
-                className="text-steel rounded-full"
+                className="rounded-lg p-1.5 text-gray-600 transition-colors hover:bg-gray-100"
               >
                 <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <h2 className="text-ink flex-1 truncate text-sm font-bold">{courseData.title}</h2>
+              </button>
+              <h2 className="flex-1 truncate text-sm font-bold text-gray-800">
+                {courseData.title}
+              </h2>
             </div>
 
             {/* Meta */}
             {!isOwned && (
-              <div className="border-hairline-soft shrink-0 border-b px-4 py-3">
-                <div className="text-steel mb-2 flex items-center gap-3 text-sm">
+              <div className="shrink-0 border-b border-gray-100 px-4 py-3">
+                <div className="mb-2 flex items-center gap-3 text-sm text-gray-600">
                   <div className="flex items-center gap-1">
-                    <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-500" />
-                    <span className="text-ink font-semibold">{courseData.rating}</span>
+                    <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                    <span className="font-semibold text-gray-800">{courseData.rating}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Heart className="h-3.5 w-3.5" />
@@ -1240,12 +1261,16 @@ function CourseDetail({ id }: { id: string }) {
             )}
 
             {/* Day tabs */}
-            <div className="border-hairline-soft flex shrink-0 flex-wrap gap-2 border-b px-4 py-3">
+            <div className="flex shrink-0 flex-wrap gap-2 border-b border-gray-100 px-4 py-3">
               {courseData.days.map((day) => (
                 <button
                   key={day.day}
                   onClick={() => setActiveDay(day.day)}
-                  className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${activeDay === day.day ? "bg-brand-500 text-ink" : "bg-surface text-slate hover:bg-hairline"}`}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                    activeDay === day.day
+                      ? "bg-brand-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
                 >
                   Day {day.day}
                 </button>
@@ -1257,7 +1282,7 @@ function CourseDetail({ id }: { id: string }) {
               {currentPlaces.map((place, index) => (
                 <div
                   key={place.id}
-                  className="bg-surface-soft hover:bg-surface flex cursor-pointer items-start gap-3 rounded-lg p-3 transition-colors"
+                  className="flex cursor-pointer items-start gap-3 rounded-xl bg-gray-50 p-3 transition-colors hover:bg-gray-100"
                   onClick={() => {
                     const f = PLACES.find((p) => p.name === place.name);
                     if (f) setSelectedPlaceId(f.id);
@@ -1270,8 +1295,8 @@ function CourseDetail({ id }: { id: string }) {
                     {index + 1}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-ink truncate text-sm font-semibold">{place.name}</p>
-                    <p className="text-steel mt-0.5 text-xs">
+                    <p className="truncate text-sm font-semibold text-gray-800">{place.name}</p>
+                    <p className="mt-0.5 text-xs text-gray-500">
                       {place.time} · {place.duration}
                     </p>
                   </div>
@@ -1280,30 +1305,30 @@ function CourseDetail({ id }: { id: string }) {
             </div>
 
             {/* Actions */}
-            <div className="border-hairline-soft flex shrink-0 gap-2 border-t px-4 py-3">
+            <div className="flex shrink-0 gap-2 border-t border-gray-100 px-4 py-3">
               {isOwned ? (
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="bg-gold-500 hover:bg-gold-600 flex flex-1 items-center justify-center gap-2 rounded-full py-2.5 text-sm font-semibold text-white transition-colors"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
                 >
                   <Pencil className="h-4 w-4" />
                   코스 편집
                 </button>
               ) : (
-                <Button variant="accent" className="flex-1">
+                <button className="bg-brand-600 hover:bg-brand-700 flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-colors">
                   내 코스에 추가
-                </Button>
+                </button>
               )}
               <button
                 onClick={() => setFavorited((v) => !v)}
-                className={`rounded-full border px-3 py-2.5 transition-colors ${favorited ? "border-red-300 bg-red-50" : "border-hairline hover:bg-surface-soft bg-white"}`}
+                className={`rounded-xl border px-3 py-2.5 transition-colors ${favorited ? "border-red-300 bg-red-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
               >
                 <Heart
-                  className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-slate"}`}
+                  className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-700"}`}
                 />
               </button>
-              <button className="border-hairline hover:bg-surface-soft rounded-full border bg-white px-3 py-2.5 transition-colors">
-                <Share2 className="text-slate h-4 w-4" />
+              <button className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50">
+                <Share2 className="h-4 w-4 text-gray-700" />
               </button>
             </div>
           </>
@@ -1325,7 +1350,7 @@ function CourseDetail({ id }: { id: string }) {
             variant="outline"
             size="sm"
             onClick={() => router.push("/course")}
-            className="bg-white shadow-sm"
+            className="flex items-center gap-1.5 rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-md transition-colors hover:bg-gray-50"
           >
             <ArrowLeft className="h-4 w-4" />
             목록

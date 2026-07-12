@@ -1,13 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
   Heart,
   MessageCircle,
-  Eye,
   ArrowLeft,
   Image,
   X,
@@ -17,7 +16,8 @@ import {
   HelpCircle,
   Pin,
   MapPin,
-  Route
+  Route,
+  Search
 } from "lucide-react";
 import { PLACES, type Place } from "@/data/placesData";
 import { useCourseContext, type MyCourse } from "@/context/CourseContext";
@@ -26,127 +26,53 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
 import { genId } from "@/utils/id";
+import { formatCommunityDate } from "@/lib/community/format";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
+import { ListPagination } from "@/components/community/ListPagination";
 
-const posts = [
-  {
-    id: 1,
-    type: "review",
-    title: "성심당 무장애 이용 후기",
-    author: "여행러버",
-    date: "2026.05.30",
-    likes: 24,
-    comments: 8,
-    views: 156
-  },
-  {
-    id: 2,
-    type: "tip",
-    title: "대전 지하철 휠체어 이용 팁",
-    author: "대전토박이",
-    date: "2026.05.29",
-    likes: 18,
-    comments: 5,
-    views: 98
-  },
-  {
-    id: 3,
-    type: "question",
-    title: "한밭수목원 시각장애인 동반 가능한가요?",
-    author: "궁금이",
-    date: "2026.05.28",
-    likes: 12,
-    comments: 15,
-    views: 234
-  }
-];
+type CommunityNoticeItem = {
+  id: number;
+  title: string;
+  pinned: boolean;
+  published_at: string;
+};
 
-const notices = [
-  { id: "n1", title: "다대유 서비스 정식 오픈 안내", date: "2026.05.31", pinned: true },
-  {
-    id: "n2",
-    title: "무장애 정보 제보 포인트 지급 정책 변경 안내",
-    date: "2026.05.25",
-    pinned: true
-  },
-  { id: "n3", title: "시스템 점검 안내 (5/28 02:00~04:00)", date: "2026.05.20", pinned: false },
-  { id: "n4", title: "커뮤니티 이용 수칙 안내", date: "2026.05.10", pinned: false }
-];
+type CommunityEventItem = {
+  id: number;
+  title: string;
+  summary: string;
+  emoji: string;
+  badge_label: string;
+  badge_color: string;
+  cover_gradient: string;
+  period_label: string;
+};
 
-const events = [
-  {
-    id: "e1",
-    title: "무장애 여행 사진 공모전",
-    period: "2026.05.01 – 06.30",
-    badge: "진행중",
-    badgeColor: "bg-brand-100 text-brand-700",
-    emoji: "📸",
-    bg: "from-brand-400 to-brand-500",
-    desc: "대전 무장애 여행 사진을 제출하고 상금을 받아가세요!"
-  },
-  {
-    id: "e2",
-    title: "접근성 관광지 탐방 투어",
-    period: "2026.06.07 – 06.08",
-    badge: "선착순",
-    badgeColor: "bg-orange-100 text-orange-700",
-    emoji: "🚌",
-    bg: "from-orange-400 to-gold-500",
-    desc: "가이드와 함께하는 무장애 관광지 탐방 1박 2일 투어"
-  },
-  {
-    id: "e3",
-    title: "여름 힐링 여행 할인 프로모션",
-    period: "2026.06.01 – 08.31",
-    badge: "D-93",
-    badgeColor: "bg-navy-100 text-navy-700",
-    emoji: "🏖️",
-    bg: "from-navy-400 to-navy-600",
-    desc: "무장애 시설 이용 시 최대 30% 할인 혜택을 드립니다."
-  },
-  {
-    id: "e4",
-    title: "보조기기 체험 행사",
-    period: "2026.06.14",
-    badge: "무료",
-    badgeColor: "bg-gold-100 text-gold-700",
-    emoji: "🦽",
-    bg: "from-gold-300 to-gold-500",
-    desc: "최신 이동 보조기기를 직접 체험해볼 수 있는 기회!"
-  }
-];
+type CommunityFaqItem = {
+  id: number;
+  question: string;
+};
 
-const faqs = [
-  {
-    id: "f1",
-    q: "무장애 여행 정보는 어떻게 제보하나요?",
-    a: "장소 상세 페이지 하단의 ‘정보 제보’ 버튼을 눌러 잘못된 정보나 추가 정보를 작성하시면 됩니다. 검토 후 반영되면 포인트가 지급돼요."
-  },
-  {
-    id: "f2",
-    q: "휠체어 대여가 가능한 장소는 어떻게 찾나요?",
-    a: "지도 메뉴의 필터에서 접근성 항목을 선택하거나, 장소 상세의 접근성 정보에서 ‘휠체어 대여’ 표시를 확인하실 수 있습니다."
-  },
-  {
-    id: "f3",
-    q: "코스를 다른 사람과 공유할 수 있나요?",
-    a: "코스 상세 화면의 공유 버튼을 통해 링크를 공유할 수 있으며, 공개로 설정한 코스는 ‘공유 코스’ 탭에 노출됩니다."
-  },
-  {
-    id: "f4",
-    q: "커뮤니티 점수는 어떻게 올리나요?",
-    a: "후기·팁 작성, 정보 제보, 받은 좋아요 등 커뮤니티 활동을 하면 점수가 쌓이고 등급이 올라갑니다."
-  },
-  {
-    id: "f5",
-    q: "접근성 설정(고대비·음성 안내)은 어디서 바꾸나요?",
-    a: "화면 우측 상단의 설정 아이콘을 누르면 스크린리더·화면확대·고대비·다크모드를 즉시 켜고 끌 수 있습니다."
-  }
-];
+type BoardPostItem = {
+  id: number;
+  title: string;
+  post_type: string;
+  post_type_label: string;
+  author_nickname: string;
+  like_count: number;
+  comment_count: number;
+  created_at: string;
+};
 
-const typeLabels: Record<string, string> = { review: "후기", tip: "팁", question: "질문" };
+const typeLabels: Record<string, string> = {
+  review: "후기",
+  tip: "팁",
+  question: "질문",
+  share: "공유"
+};
 // 게시글 타입 → Badge tone (Badge 컴포넌트용)
-const typeTone = (type: string): "brand" | "tag" | "orange" =>
-  type === "review" ? "brand" : type === "tip" ? "tag" : "orange";
+const typeTone = (type: string): "brand" | "tag" | "orange" | "neutral" =>
+  type === "review" ? "brand" : type === "tip" ? "tag" : type === "share" ? "neutral" : "orange";
 // 글쓰기 카테고리 선택 버튼의 활성 색 (배지 아닌 토글 버튼용)
 const typeBadge = (type: string) =>
   type === "review"
@@ -157,17 +83,173 @@ const typeBadge = (type: string) =>
 
 type MainTab = "board" | "notice" | "event" | "faq";
 
+async function parseJsonError(res: Response, fallback: string): Promise<string> {
+  const json = (await res.json().catch(() => ({}))) as { error?: string };
+  return json.error ?? `${fallback} (${res.status})`;
+}
+
+function CommunityContentError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="border-error/30 text-error flex flex-col gap-3 rounded-lg border bg-red-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <p>{message}</p>
+      <Button variant="outline" size="sm" onClick={onRetry} className="shrink-0">
+        다시 시도
+      </Button>
+    </div>
+  );
+}
+
 export default function Community() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = typeof params.id === "string" ? params.id : undefined;
-  const [mainTab, setMainTab] = useState<MainTab>("board");
+  const initialTab = searchParams.get("tab");
+  const [mainTab, setMainTab] = useState<MainTab>(() => {
+    if (
+      initialTab === "notice" ||
+      initialTab === "event" ||
+      initialTab === "faq" ||
+      initialTab === "board"
+    ) {
+      return initialTab;
+    }
+    return "board";
+  });
   const [filter, setFilter] = useState<"all" | "review" | "tip" | "question">("all");
-  const [openFaq, setOpenFaq] = useState<string | null>(null);
+  const [boardPosts, setBoardPosts] = useState<BoardPostItem[]>([]);
+  const [boardTotal, setBoardTotal] = useState(0);
+  const [boardPage, setBoardPage] = useState(0);
+  const [boardQuery, setBoardQuery] = useState("");
+  const [boardSearchInput, setBoardSearchInput] = useState("");
+  const [boardLoading, setBoardLoading] = useState(false);
+  const [boardError, setBoardError] = useState<string | null>(null);
+  const [notices, setNotices] = useState<CommunityNoticeItem[]>([]);
+  const [events, setEvents] = useState<CommunityEventItem[]>([]);
+  const [faqs, setFaqs] = useState<CommunityFaqItem[]>([]);
+  const [contentLoading, setContentLoading] = useState(true);
+  const [contentError, setContentError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const loadBoardPosts = useCallback(
+    async (isCancelled: () => boolean) => {
+      setBoardLoading(true);
+      setBoardError(null);
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(boardPage + 1));
+        params.set("pageSize", String(DEFAULT_PAGE_SIZE));
+        if (boardQuery.trim()) params.set("q", boardQuery.trim());
+        if (filter !== "all") params.set("type", filter);
+
+        const res = await fetch(`/api/community/posts?${params}`);
+        if (!res.ok) {
+          throw new Error(await parseJsonError(res, "게시글을 불러오지 못했습니다"));
+        }
+        const json = (await res.json()) as {
+          items?: BoardPostItem[];
+          total?: number;
+        };
+        if (isCancelled()) return;
+        setBoardPosts(json.items ?? []);
+        setBoardTotal(json.total ?? 0);
+      } catch (e) {
+        if (!isCancelled()) {
+          setBoardError(e instanceof Error ? e.message : "게시글 로드 실패");
+          setBoardPosts([]);
+          setBoardTotal(0);
+        }
+      } finally {
+        if (!isCancelled()) setBoardLoading(false);
+      }
+    },
+    [boardPage, boardQuery, filter]
+  );
+
+  const loadCommunityContent = useCallback(async (isCancelled: () => boolean) => {
+    setContentLoading(true);
+    setContentError(null);
+    try {
+      const [noticesRes, eventsRes, faqsRes] = await Promise.all([
+        fetch("/api/community/notices"),
+        fetch("/api/community/events"),
+        fetch("/api/community/faq")
+      ]);
+
+      const errors: string[] = [];
+      if (!noticesRes.ok) {
+        errors.push(await parseJsonError(noticesRes, "공지사항을 불러오지 못했습니다"));
+      }
+      if (!eventsRes.ok) {
+        errors.push(await parseJsonError(eventsRes, "이벤트를 불러오지 못했습니다"));
+      }
+      if (!faqsRes.ok) {
+        errors.push(await parseJsonError(faqsRes, "FAQ를 불러오지 못했습니다"));
+      }
+
+      if (isCancelled()) return;
+
+      if (errors.length > 0) {
+        setContentError(errors.join(" "));
+        setNotices([]);
+        setEvents([]);
+        setFaqs([]);
+        return;
+      }
+
+      const [noticesJson, eventsJson, faqsJson] = await Promise.all([
+        noticesRes.json(),
+        eventsRes.json(),
+        faqsRes.json()
+      ]);
+
+      if (isCancelled()) return;
+
+      setNotices((noticesJson as { notices?: CommunityNoticeItem[] }).notices ?? []);
+      setEvents((eventsJson as { events?: CommunityEventItem[] }).events ?? []);
+      setFaqs((faqsJson as { faqs?: CommunityFaqItem[] }).faqs ?? []);
+    } catch {
+      if (!isCancelled()) {
+        setContentError("커뮤니티 콘텐츠를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        setNotices([]);
+        setEvents([]);
+        setFaqs([]);
+      }
+    } finally {
+      if (!isCancelled()) setContentLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (id) return;
+
+    let cancelled = false;
+    loadCommunityContent(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, reloadKey, loadCommunityContent]);
+
+  useEffect(() => {
+    if (id) return;
+    const t = setTimeout(() => {
+      setBoardQuery(boardSearchInput);
+      setBoardPage(0);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [boardSearchInput, id]);
+
+  useEffect(() => {
+    if (id || mainTab !== "board") return;
+
+    let cancelled = false;
+    loadBoardPosts(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, mainTab, boardPage, boardQuery, filter, loadBoardPosts]);
 
   if (id === "new") return <CommunityWrite />;
-  if (id) return <CommunityDetail id={id} />;
-
-  const filteredPosts = filter === "all" ? posts : posts.filter((p) => p.type === filter);
+  if (id && /^\d+$/.test(id)) return <CommunityDetail id={id} />;
 
   const mainTabs: { key: MainTab; label: string }[] = [
     { key: "board", label: "게시판" },
@@ -202,11 +284,23 @@ export default function Community() {
       {/* ── 게시판 ── */}
       {mainTab === "board" && (
         <div className="space-y-4">
-          {/* Filters */}
+          <div className="relative">
+            <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <input
+              value={boardSearchInput}
+              onChange={(e) => setBoardSearchInput(e.target.value)}
+              placeholder="제목 검색"
+              className="border-hairline focus:ring-brand-500 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
+            />
+          </div>
+
           <Tabs
             variant="pill"
             value={filter}
-            onValueChange={(k) => setFilter(k as typeof filter)}
+            onValueChange={(k) => {
+              setFilter(k as typeof filter);
+              setBoardPage(0);
+            }}
             items={[
               { key: "all", label: "전체" },
               { key: "review", label: "후기" },
@@ -215,140 +309,192 @@ export default function Community() {
             ]}
           />
 
-          {/* Posts List */}
+          {boardError && (
+            <CommunityContentError
+              message={boardError}
+              onRetry={() => loadBoardPosts(() => false)}
+            />
+          )}
+
           <div className="space-y-3">
-            {filteredPosts.map((post) => (
-              <Card key={post.id} asChild variant="interactive">
-                <Link href={`/community/${post.id}`} className="block">
-                  <div className="flex items-start gap-3">
-                    <Badge tone={typeTone(post.type)} shape="tag" className="shrink-0">
-                      {typeLabels[post.type]}
-                    </Badge>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-ink mb-2 truncate font-semibold">{post.title}</h3>
-                      <div className="text-steel flex items-center gap-4 text-sm">
-                        <span>{post.author}</span>
-                        <span>{post.date}</span>
-                      </div>
-                      <div className="text-steel mt-2 flex items-center gap-4 text-sm">
-                        <div className="flex items-center gap-1">
-                          <Heart className="h-3.5 w-3.5" />
-                          <span>{post.likes}</span>
+            {boardLoading && (
+              <Card className="border-hairline-soft text-stone animate-pulse p-6 text-center text-sm">
+                불러오는 중…
+              </Card>
+            )}
+            {!boardLoading && !boardError && boardPosts.length === 0 && (
+              <Card className="border-hairline-soft p-8 text-center">
+                <p className="text-stone text-sm">게시글이 없습니다.</p>
+              </Card>
+            )}
+            {!boardLoading &&
+              boardPosts.map((post) => (
+                <Card key={post.id} asChild variant="interactive">
+                  <Link href={`/community/${post.id}`} className="block">
+                    <div className="flex items-start gap-3">
+                      <Badge tone={typeTone(post.post_type)} shape="tag" className="shrink-0">
+                        {post.post_type_label}
+                      </Badge>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-ink mb-2 truncate font-semibold">{post.title}</h3>
+                        <div className="text-steel flex items-center gap-4 text-sm">
+                          <span>{post.author_nickname}</span>
+                          <span>{formatCommunityDate(post.created_at)}</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <MessageCircle className="h-3.5 w-3.5" />
-                          <span>{post.comments}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Eye className="h-3.5 w-3.5" />
-                          <span>{post.views}</span>
+                        <div className="text-steel mt-2 flex items-center gap-4 text-sm">
+                          <div className="flex items-center gap-1">
+                            <Heart className="h-3.5 w-3.5" />
+                            <span>{post.like_count}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <MessageCircle className="h-3.5 w-3.5" />
+                            <span>{post.comment_count}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </Link>
-              </Card>
-            ))}
+                  </Link>
+                </Card>
+              ))}
           </div>
+
+          <ListPagination
+            page={boardPage}
+            total={boardTotal}
+            pageSize={DEFAULT_PAGE_SIZE}
+            disabled={boardLoading}
+            onChange={setBoardPage}
+          />
         </div>
       )}
 
       {/* ── 공지사항 ── */}
       {mainTab === "notice" && (
         <div className="space-y-3">
-          {notices.map((notice) => (
-            <Card
-              key={notice.id}
-              variant="interactive"
-              padding="none"
-              className="flex cursor-pointer items-center gap-3 px-4 py-3.5"
-            >
-              <div
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${notice.pinned ? "bg-brand-100" : "bg-surface"}`}
-              >
-                {notice.pinned ? (
-                  <Pin className="text-brand-600 fill-brand-600 h-4 w-4" />
-                ) : (
-                  <Megaphone className="text-steel h-4 w-4" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  {notice.pinned && (
-                    <span className="bg-brand-500 text-ink shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold">
-                      중요
-                    </span>
-                  )}
-                  <h3 className="text-ink truncate font-semibold">{notice.title}</h3>
-                </div>
-                <p className="text-stone mt-0.5 text-xs">{notice.date}</p>
-              </div>
-            </Card>
-          ))}
+          {contentError ? (
+            <CommunityContentError
+              message={contentError}
+              onRetry={() => setReloadKey((k) => k + 1)}
+            />
+          ) : contentLoading ? (
+            <p className="text-stone text-sm">불러오는 중…</p>
+          ) : notices.length === 0 ? (
+            <p className="text-stone text-sm">등록된 공지가 없습니다.</p>
+          ) : (
+            notices.map((notice) => (
+              <Link key={notice.id} href={`/community/notice/${notice.id}`}>
+                <Card
+                  variant="interactive"
+                  padding="none"
+                  className="flex cursor-pointer items-center gap-3 px-4 py-3.5"
+                >
+                  <div
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${notice.pinned ? "bg-brand-100" : "bg-surface"}`}
+                  >
+                    {notice.pinned ? (
+                      <Pin className="text-brand-600 fill-brand-600 h-4 w-4" />
+                    ) : (
+                      <Megaphone className="text-steel h-4 w-4" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      {notice.pinned && (
+                        <span className="bg-brand-500 text-ink shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold">
+                          중요
+                        </span>
+                      )}
+                      <h3 className="text-ink truncate font-semibold">{notice.title}</h3>
+                    </div>
+                    <p className="text-stone mt-0.5 text-xs">
+                      {formatCommunityDate(notice.published_at)}
+                    </p>
+                  </div>
+                </Card>
+              </Link>
+            ))
+          )}
         </div>
       )}
 
       {/* ── 이벤트 ── */}
       {mainTab === "event" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {events.map((ev) => (
-            <Card
-              key={ev.id}
-              variant="interactive"
-              padding="none"
-              className="cursor-pointer overflow-hidden"
-            >
-              <div className={`h-32 bg-gradient-to-br ${ev.bg} flex items-center justify-center`}>
-                <span className="text-5xl">{ev.emoji}</span>
-              </div>
-              <div className="bg-white p-4">
-                <div className="mb-1.5 flex items-center justify-between">
-                  <Badge tone="custom" className={`font-semibold ${ev.badgeColor}`}>
-                    {ev.badge}
-                  </Badge>
-                  <span className="text-stone flex items-center gap-1 text-xs">
-                    <Calendar className="h-3 w-3" />
-                    {ev.period}
-                  </span>
-                </div>
-                <p className="text-ink mb-1 leading-snug font-bold">{ev.title}</p>
-                <p className="text-steel line-clamp-2 text-sm leading-relaxed">{ev.desc}</p>
-              </div>
-            </Card>
-          ))}
+          {contentError ? (
+            <div className="sm:col-span-2">
+              <CommunityContentError
+                message={contentError}
+                onRetry={() => setReloadKey((k) => k + 1)}
+              />
+            </div>
+          ) : contentLoading ? (
+            <p className="text-stone text-sm">불러오는 중…</p>
+          ) : events.length === 0 ? (
+            <p className="text-stone text-sm">등록된 이벤트가 없습니다.</p>
+          ) : (
+            events.map((ev) => (
+              <Link key={ev.id} href={`/community/event/${ev.id}`}>
+                <Card
+                  variant="interactive"
+                  padding="none"
+                  className="cursor-pointer overflow-hidden"
+                >
+                  <div
+                    className={`flex h-32 items-center justify-center bg-gradient-to-br ${ev.cover_gradient}`}
+                  >
+                    <span className="text-5xl">{ev.emoji}</span>
+                  </div>
+                  <div className="bg-white p-4">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      {ev.badge_label ? (
+                        <Badge tone="custom" className={`font-semibold ${ev.badge_color}`}>
+                          {ev.badge_label}
+                        </Badge>
+                      ) : (
+                        <span />
+                      )}
+                      <span className="text-stone flex items-center gap-1 text-xs">
+                        <Calendar className="h-3 w-3" />
+                        {ev.period_label}
+                      </span>
+                    </div>
+                    <p className="text-ink mb-1 leading-snug font-bold">{ev.title}</p>
+                    <p className="text-steel line-clamp-2 text-sm leading-relaxed">{ev.summary}</p>
+                  </div>
+                </Card>
+              </Link>
+            ))
+          )}
         </div>
       )}
 
       {/* ── FAQ ── */}
       {mainTab === "faq" && (
         <div className="space-y-2.5">
-          {faqs.map((faq) => {
-            const open = openFaq === faq.id;
-            return (
-              <Card key={faq.id} padding="none" className="overflow-hidden">
-                <button
-                  onClick={() => setOpenFaq(open ? null : faq.id)}
-                  className="hover:bg-surface-soft flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors"
-                >
-                  <span className="bg-brand-100 text-brand-700 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs font-bold">
-                    Q
-                  </span>
-                  <span className="text-ink flex-1 text-sm font-semibold">{faq.q}</span>
-                  <ChevronDown
-                    className={`text-stone h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-                  />
-                </button>
-                {open && (
-                  <div className="flex gap-3 px-4 pt-1 pb-4">
-                    <span className="bg-surface text-steel flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs font-bold">
-                      A
+          {contentError ? (
+            <CommunityContentError
+              message={contentError}
+              onRetry={() => setReloadKey((k) => k + 1)}
+            />
+          ) : contentLoading ? (
+            <p className="text-stone text-sm">불러오는 중…</p>
+          ) : faqs.length === 0 ? (
+            <p className="text-stone text-sm">등록된 FAQ가 없습니다.</p>
+          ) : (
+            faqs.map((faq) => (
+              <Link key={faq.id} href={`/community/faq/${faq.id}`}>
+                <Card variant="interactive" padding="none" className="overflow-hidden">
+                  <div className="hover:bg-surface-soft flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors">
+                    <span className="bg-brand-100 text-brand-700 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs font-bold">
+                      Q
                     </span>
-                    <p className="text-steel flex-1 text-sm leading-relaxed">{faq.a}</p>
+                    <span className="text-ink flex-1 text-sm font-semibold">{faq.question}</span>
+                    <ChevronDown className="text-stone h-4 w-4 shrink-0 -rotate-90" />
                   </div>
-                )}
-              </Card>
-            );
-          })}
+                </Card>
+              </Link>
+            ))
+          )}
           <div className="text-stone flex items-center justify-center gap-2 pt-3 text-sm">
             <HelpCircle className="h-4 w-4" />
             <span>원하는 답변이 없나요? 게시판에 질문을 남겨주세요.</span>
@@ -365,6 +511,8 @@ function CommunityWrite() {
   const [type, setType] = useState<"review" | "tip" | "question">("review");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
   const { myCourses } = useCourseContext();
   const [attachedPlaces, setAttachedPlaces] = useState<Place[]>([]);
@@ -372,10 +520,33 @@ function CommunityWrite() {
   const [showPlacePicker, setShowPlacePicker] = useState(false);
   const [showCoursePicker, setShowCoursePicker] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!title.trim() || !content.trim()) return;
-    // 실제 등록 로직 자리
-    router.push("/community");
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch("/api/community/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          content: content.trim(),
+          post_type: type,
+          attached_place_id: attachedPlaces[0]?.id ?? null,
+          attached_course_id: attachedCourses[0]?.id ?? null
+        })
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        post?: { id: number };
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error ?? "등록에 실패했습니다.");
+      router.push(json.post?.id ? `/community/${json.post.id}` : "/community");
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "등록 실패");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleImageAdd = () => {
@@ -400,11 +571,17 @@ function CommunityWrite() {
           variant="accent"
           size="sm"
           onClick={handleSubmit}
-          disabled={!title.trim() || !content.trim()}
+          disabled={!title.trim() || !content.trim() || submitting}
         >
-          등록
+          {submitting ? "등록 중…" : "등록"}
         </Button>
       </div>
+
+      {submitError && (
+        <div className="border-error/30 text-error rounded-lg border bg-red-50 px-4 py-3 text-sm">
+          {submitError}
+        </div>
+      )}
 
       {/* 카테고리 선택 */}
       <div>
@@ -635,45 +812,97 @@ function CommunityWrite() {
 }
 
 // ── 게시글 상세 ──────────────────────────────────────────
-const POST_ATTACHMENTS: Record<
-  string,
-  { places: Place[]; courses: { id: number; title: string }[] }
-> = {
-  "1": {
-    places: PLACES.filter((p) => p.id === 2),
-    courses: [{ id: 10, title: "내 여행 계획" }]
-  }
+type PostDetail = {
+  id: number;
+  title: string;
+  content: string;
+  post_type: string;
+  post_type_label: string;
+  author_nickname: string;
+  like_count: number;
+  comment_count: number;
+  created_at: string;
+  attached_place_id: number | null;
+  attached_course_id: number | null;
+};
+
+type PostComment = {
+  id: number;
+  content: string;
+  created_at: string;
+  author_nickname: string;
 };
 
 function CommunityDetail({ id }: { id: string }) {
   const router = useRouter();
+  const { myCourses } = useCourseContext();
   const [liked, setLiked] = useState(false);
   const [comment, setComment] = useState("");
-  const [comments, setComments] = useState([
-    { id: 1, author: "댓글러", content: "유용한 정보 감사합니다!", date: "2026.05.30" },
-    { id: 2, author: "궁금이", content: "화장실도 무장애인가요?", date: "2026.05.30" }
-  ]);
+  const [post, setPost] = useState<PostDetail | null>(null);
+  const [comments, setComments] = useState<PostComment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const post = {
-    type: "review",
-    title: "성심당 무장애 이용 후기",
-    author: "여행러버",
-    date: "2026.05.30",
-    content:
-      "성심당에 다녀왔어요! 입구에 경사로가 잘 설치되어 있고, 내부 통로도 넓어서 휠체어 이용이 편했습니다. 직원분들도 친절하게 도와주셨어요. 추천합니다!",
-    likes: 24
-  };
+  const loadPost = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/community/posts/${id}`);
+      const json = (await res.json().catch(() => ({}))) as {
+        post?: PostDetail;
+        comments?: PostComment[];
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error ?? "게시글을 불러오지 못했습니다.");
+      setPost(json.post ?? null);
+      setComments(json.comments ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "로드 실패");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
-  const attachments = POST_ATTACHMENTS[id] ?? { places: [], courses: [] };
+  useEffect(() => {
+    loadPost();
+  }, [loadPost]);
+
+  const attachedPlace = post?.attached_place_id
+    ? PLACES.find((p) => p.id === post.attached_place_id)
+    : undefined;
+  const attachedCourse = post?.attached_course_id
+    ? myCourses.find((c) => c.id === post.attached_course_id)
+    : undefined;
 
   const handleCommentSubmit = () => {
     if (!comment.trim()) return;
     setComments((prev) => [
       ...prev,
-      { id: genId(), author: "나", content: comment.trim(), date: "2026.05.31" }
+      {
+        id: genId(),
+        author_nickname: "나",
+        content: comment.trim(),
+        created_at: new Date().toISOString()
+      }
     ]);
     setComment("");
   };
+
+  if (loading) {
+    return <p className="text-stone py-8 text-center text-sm">불러오는 중…</p>;
+  }
+
+  if (error || !post) {
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" onClick={() => router.push("/community")}>
+          <ArrowLeft className="h-4 w-4" />
+          목록으로
+        </Button>
+        <CommunityContentError message={error ?? "게시글을 찾을 수 없습니다."} onRetry={loadPost} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -687,8 +916,8 @@ function CommunityDetail({ id }: { id: string }) {
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <Badge tone={typeTone(post.type)} shape="tag">
-          {typeLabels[post.type]}
+        <Badge tone={typeTone(post.post_type)} shape="tag">
+          {post.post_type_label}
         </Badge>
       </div>
 
@@ -696,8 +925,8 @@ function CommunityDetail({ id }: { id: string }) {
       <div>
         <h1 className="text-ink mb-3 text-xl font-bold">{post.title}</h1>
         <div className="border-hairline-soft text-steel flex items-center gap-3 border-b pb-4 text-sm">
-          <span className="text-slate font-medium">{post.author}</span>
-          <span>{post.date}</span>
+          <span className="text-slate font-medium">{post.author_nickname}</span>
+          <span>{formatCommunityDate(post.created_at)}</span>
         </div>
       </div>
 
@@ -706,39 +935,37 @@ function CommunityDetail({ id }: { id: string }) {
       </Card>
 
       {/* 첨부된 장소 · 코스 */}
-      {(attachments.places.length > 0 || attachments.courses.length > 0) && (
+      {(attachedPlace || attachedCourse) && (
         <div className="space-y-2">
           <p className="text-stone px-1 text-xs font-semibold">첨부된 장소 · 코스</p>
-          {attachments.places.map((place) => (
+          {attachedPlace && (
             <button
-              key={place.id}
-              onClick={() => router.push(`/map?place=${place.id}`)}
+              onClick={() => router.push(`/map?place=${attachedPlace.id}`)}
               className="border-brand-100 hover:bg-brand-50 hover:border-brand-300 flex w-full items-center gap-3 rounded-full border bg-white p-3.5 text-left transition-colors"
             >
-              <span className="shrink-0 text-2xl">{place.emoji}</span>
+              <span className="shrink-0 text-2xl">{attachedPlace.emoji}</span>
               <div className="min-w-0 flex-1">
-                <p className="text-ink text-sm font-semibold">{place.name}</p>
+                <p className="text-ink text-sm font-semibold">{attachedPlace.name}</p>
                 <p className="text-brand-600 mt-0.5 text-xs">지도에서 보기</p>
               </div>
               <MapPin className="text-brand-400 h-4 w-4 shrink-0" />
             </button>
-          ))}
-          {attachments.courses.map((course) => (
+          )}
+          {attachedCourse && (
             <button
-              key={course.id}
-              onClick={() => router.push(`/course/${course.id}`)}
+              onClick={() => router.push(`/course/${attachedCourse.id}`)}
               className="border-navy-100 hover:border-navy-300 hover:bg-navy-50 flex w-full items-center gap-3 rounded-full border bg-white p-3.5 text-left transition-colors"
             >
               <div className="bg-navy-100 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
                 <Route className="text-navy-600 h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-ink text-sm font-semibold">{course.title}</p>
+                <p className="text-ink text-sm font-semibold">{attachedCourse.title}</p>
                 <p className="text-navy-600 mt-0.5 text-xs">코스 상세보기</p>
               </div>
               <ChevronDown className="text-navy-400 h-4 w-4 shrink-0 -rotate-90" />
             </button>
-          ))}
+          )}
         </div>
       )}
 
@@ -753,7 +980,7 @@ function CommunityDetail({ id }: { id: string }) {
           }`}
         >
           <Heart className={`h-4 w-4 ${liked ? "fill-red-500 text-red-500" : ""}`} />
-          <span className="text-sm">{post.likes + (liked ? 1 : 0)}</span>
+          <span className="text-sm">{post.like_count + (liked ? 1 : 0)}</span>
         </button>
       </div>
 
@@ -764,8 +991,8 @@ function CommunityDetail({ id }: { id: string }) {
           {comments.map((c) => (
             <div key={c.id} className="bg-surface-soft rounded-lg p-4">
               <div className="mb-1.5 flex items-center gap-3 text-sm">
-                <span className="text-ink font-semibold">{c.author}</span>
-                <span className="text-stone">{c.date}</span>
+                <span className="text-ink font-semibold">{c.author_nickname}</span>
+                <span className="text-stone">{formatCommunityDate(c.created_at)}</span>
               </div>
               <p className="text-slate text-sm">{c.content}</p>
             </div>

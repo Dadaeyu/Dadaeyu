@@ -21,148 +21,49 @@ import {
   X,
   Eye,
   EyeOff,
-  TrendingUp,
-  ShieldCheck,
-  Star,
   AlertCircle,
   FileText,
   ChevronRight,
   ChevronLeft,
   ChevronsRight,
-  ChevronsLeft
+  ChevronsLeft,
+  Star,
+  ShieldCheck,
+  Megaphone,
+  HelpCircle
 } from "lucide-react";
-import { PLACES } from "@/data/placesData";
+import { PLACES, PLACE_COLORS } from "@/data/placesData";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { genId } from "@/utils/id";
+import { DashboardSection } from "@/components/screens/admin/DashboardSection";
+import { UsersSection } from "@/components/screens/admin/UsersSection";
+import { PostsSection } from "@/components/screens/admin/PostsSection";
+import { ReportsSection } from "@/components/screens/admin/ReportsSection";
+import { NoticesSection } from "@/components/screens/admin/NoticesSection";
+import { CommunityNoticesSection } from "@/components/screens/admin/CommunityNoticesSection";
+import { EventsSection } from "@/components/screens/admin/EventsSection";
+import { FaqSection } from "@/components/screens/admin/FaqSection";
+import { TablePagination } from "@/components/screens/admin/TablePagination";
 
 // ── 사이드바 메뉴 ─────────────────────────────────────────
 const SECTIONS = [
   { key: "dashboard", label: "대시보드", icon: LayoutDashboard },
-  { key: "users", label: "유저 관리", icon: Users },
+  { key: "users", label: "사용자 관리", icon: Users },
+  { key: "notices", label: "팝업 관리", icon: AlertCircle },
+  { key: "community-notices", label: "공지 관리", icon: Megaphone },
+  { key: "events", label: "이벤트 관리", icon: Calendar },
+  { key: "faq", label: "FAQ 관리", icon: HelpCircle },
+  { key: "posts", label: "게시판 관리", icon: FileText },
   { key: "places", label: "장소 관리", icon: MapPin },
   { key: "courses", label: "코스 관리", icon: Route },
   { key: "reports", label: "제보 확인", icon: Flag },
-  { key: "events", label: "이벤트 관리", icon: Calendar },
   { key: "supabase", label: "Supabase", icon: Database },
   { key: "restapi", label: "Rest API", icon: Globe }
 ];
 
-// ── 목업 데이터 ───────────────────────────────────────────
-type UserStatus = "정상" | "정지";
-type UserRole = "일반" | "관리자";
-interface AdminUser {
-  id: number;
-  nickname: string;
-  email: string;
-  joined: string;
-  level: string;
-  role: UserRole;
-  status: UserStatus;
-}
-
-const INIT_USERS: AdminUser[] = [
-  {
-    id: 1,
-    nickname: "여행러버",
-    email: "travel@email.com",
-    joined: "2026.01.15",
-    level: "Lv.5",
-    role: "일반",
-    status: "정상"
-  },
-  {
-    id: 2,
-    nickname: "대전토박이",
-    email: "daejeon@email.com",
-    joined: "2026.02.20",
-    level: "Lv.3",
-    role: "일반",
-    status: "정상"
-  },
-  {
-    id: 3,
-    nickname: "빵순이여행기",
-    email: "bread@email.com",
-    joined: "2026.03.05",
-    level: "Lv.4",
-    role: "일반",
-    status: "정상"
-  },
-  {
-    id: 4,
-    nickname: "힐링여행자",
-    email: "healing@email.com",
-    joined: "2026.03.18",
-    level: "Lv.2",
-    role: "일반",
-    status: "정지"
-  },
-  {
-    id: 5,
-    nickname: "관리자",
-    email: "admin@dadaeyu.kr",
-    joined: "2025.12.01",
-    level: "관리자",
-    role: "관리자",
-    status: "정상"
-  }
-];
-
-type ReportStatus = "대기" | "검토중" | "반영됨" | "반려";
-interface AdminReport {
-  id: number;
-  target: string;
-  user: string;
-  content: string;
-  date: string;
-  status: ReportStatus;
-}
-
-const INIT_REPORTS: AdminReport[] = [
-  {
-    id: 1,
-    target: "성심당",
-    user: "여행러버",
-    content: "장애인 화장실 위치 정보 추가",
-    date: "2026.05.28",
-    status: "반영됨"
-  },
-  {
-    id: 2,
-    target: "한밭수목원",
-    user: "대전토박이",
-    content: "경사로 경사도 정보 수정 요청",
-    date: "2026.05.20",
-    status: "검토중"
-  },
-  {
-    id: 3,
-    target: "엑스포 과학공원",
-    user: "빵순이여행기",
-    content: "휠체어 대여소 운영시간 제보",
-    date: "2026.05.12",
-    status: "반영됨"
-  },
-  {
-    id: 4,
-    target: "대청호 오백리길",
-    user: "힐링여행자",
-    content: "데크로드 구간 정보 오류",
-    date: "2026.06.01",
-    status: "대기"
-  },
-  {
-    id: 5,
-    target: "유성온천",
-    user: "travel_dj",
-    content: "수중 리프트 운영 중단 제보",
-    date: "2026.06.02",
-    status: "대기"
-  }
-];
-
+// ── 목업 데이터 (장소·코스·이벤트) ─────────────────────────
 interface AdminCourse {
   id: number;
   title: string;
@@ -227,60 +128,27 @@ const INIT_COURSES: AdminCourse[] = [
   }
 ];
 
-interface AdminEvent {
-  id: string;
-  title: string;
-  period: string;
-  badge: string;
-  emoji: string;
-  visible: boolean;
+function resolveAdminSection(sectionParam: string | string[] | undefined): string {
+  if (typeof sectionParam === "string" && sectionParam.length > 0) return sectionParam;
+  if (Array.isArray(sectionParam) && sectionParam.length > 0) return sectionParam[0];
+  return "dashboard";
 }
-
-const INIT_EVENTS: AdminEvent[] = [
-  {
-    id: "e1",
-    title: "무장애 여행 사진 공모전",
-    period: "2026.05.01 – 06.30",
-    badge: "진행중",
-    emoji: "📸",
-    visible: true
-  },
-  {
-    id: "e2",
-    title: "접근성 관광지 탐방 투어",
-    period: "2026.06.07 – 06.08",
-    badge: "선착순",
-    emoji: "🚌",
-    visible: true
-  },
-  {
-    id: "e3",
-    title: "여름 힐링 여행 할인 프로모션",
-    period: "2026.06.01 – 08.31",
-    badge: "D-93",
-    emoji: "🏖️",
-    visible: true
-  },
-  {
-    id: "e4",
-    title: "보조기기 체험 행사",
-    period: "2026.06.14",
-    badge: "무료",
-    emoji: "🦽",
-    visible: false
-  }
-];
-
-// ── 공통 스타일 헬퍼 ─────────────────────────────────────
-// 제보 상태 → Badge tone
-const reportTone = (s: ReportStatus): "error" | "warn" | "brand" | "neutral" =>
-  s === "대기" ? "error" : s === "검토중" ? "warn" : s === "반영됨" ? "brand" : "neutral";
 
 // ── 레이아웃 ─────────────────────────────────────────────
 export default function Admin() {
   const params = useParams();
-  const section = typeof params.section === "string" ? params.section : "dashboard";
+  const section = resolveAdminSection(params.section as string | string[] | undefined);
   const router = useRouter();
+  const [pendingReports, setPendingReports] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/admin/stats")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.pendingReports != null) setPendingReports(data.pendingReports);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div
@@ -306,9 +174,9 @@ export default function Admin() {
             >
               <Icon className={`h-4 w-4 shrink-0 ${active ? "text-navy-600" : "text-stone"}`} />
               {label}
-              {key === "reports" && (
+              {key === "reports" && pendingReports > 0 && (
                 <span className="ml-auto rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
-                  2
+                  {pendingReports}
                 </span>
               )}
             </button>
@@ -338,263 +206,19 @@ export default function Admin() {
         </div>
 
         <div className="flex-1 overflow-auto px-4 py-6 md:px-8">
-          {section === "dashboard" && <Dashboard />}
-          {section === "users" && <UserManagement />}
+          {section === "dashboard" && <DashboardSection />}
+          {section === "users" && <UsersSection />}
+          {section === "posts" && <PostsSection />}
+          {section === "notices" && <NoticesSection />}
+          {section === "community-notices" && <CommunityNoticesSection />}
           {section === "places" && <PlaceManagement />}
           {section === "courses" && <CourseManagement />}
-          {section === "reports" && <ReportManagement />}
-          {section === "events" && <EventManagement />}
+          {section === "reports" && <ReportsSection />}
+          {section === "events" && <EventsSection />}
+          {section === "faq" && <FaqSection />}
           {section === "supabase" && <SupabaseTest />}
           {section === "restapi" && <RestApiTest />}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ── 1. 대시보드 ──────────────────────────────────────────
-function Dashboard() {
-  const stats = [
-    {
-      label: "총 회원",
-      value: "1,234",
-      delta: "+12",
-      icon: Users,
-      bg: "bg-navy-50",
-      color: "text-navy-600"
-    },
-    {
-      label: "등록 장소",
-      value: "5",
-      delta: "+0",
-      icon: MapPin,
-      bg: "bg-brand-50",
-      color: "text-brand-600"
-    },
-    {
-      label: "공개 코스",
-      value: "4",
-      delta: "+1",
-      icon: Route,
-      bg: "bg-navy-50",
-      color: "text-navy-600"
-    },
-    {
-      label: "제보 대기",
-      value: "2",
-      delta: "처리필요",
-      icon: AlertCircle,
-      bg: "bg-red-50",
-      color: "text-red-600"
-    }
-  ];
-
-  const recentReports = INIT_REPORTS.filter((r) => r.status === "대기" || r.status === "검토중");
-
-  const weeklyData = [40, 65, 52, 78, 60, 91, 84];
-  const max = Math.max(...weeklyData);
-  const days = ["월", "화", "수", "목", "금", "토", "일"];
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-ink text-xl font-bold">관리자 대시보드</h1>
-        <p className="text-stone mt-0.5 text-sm">2026년 6월 3일 기준</p>
-      </div>
-
-      {/* 요약 통계 */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {stats.map(({ label, value, delta, icon: Icon, bg, color }) => (
-          <Card key={label} padding="none" className="border-hairline-soft p-5">
-            <div className={`h-10 w-10 ${bg} mb-3 flex items-center justify-center rounded-lg`}>
-              <Icon className={`h-5 w-5 ${color}`} />
-            </div>
-            <p className="text-ink text-2xl font-bold">{value}</p>
-            <div className="mt-1 flex items-center justify-between">
-              <p className="text-steel text-sm">{label}</p>
-              <span
-                className={`text-xs font-semibold ${delta === "처리필요" ? "text-error" : "text-annotate"}`}
-              >
-                {delta}
-              </span>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* 주간 신규 가입 */}
-        <div className="border-hairline-soft rounded-lg border bg-white p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-ink font-bold">주간 신규 가입</h3>
-            <TrendingUp className="text-brand-500 h-4 w-4" />
-          </div>
-          <div className="flex h-28 items-end gap-2">
-            {weeklyData.map((v, i) => (
-              <div key={i} className="flex flex-1 flex-col items-center gap-1">
-                <div
-                  className="bg-brand-400 w-full rounded-t-md transition-all"
-                  style={{ height: `${(v / max) * 100}%` }}
-                />
-                <span className="text-stone text-[10px]">{days[i]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 처리 필요 제보 */}
-        <div className="border-hairline-soft rounded-lg border bg-white p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-ink font-bold">처리 필요 제보</h3>
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
-              {recentReports.length}건
-            </span>
-          </div>
-          <div className="space-y-3">
-            {recentReports.length === 0 && (
-              <p className="text-stone py-4 text-center text-sm">처리할 제보가 없어요 🎉</p>
-            )}
-            {recentReports.map((r) => (
-              <div
-                key={r.id}
-                className="bg-surface-soft flex items-start justify-between gap-3 rounded-lg p-3"
-              >
-                <div className="min-w-0">
-                  <p className="text-ink text-sm font-semibold">{r.target}</p>
-                  <p className="text-steel truncate text-xs">{r.content}</p>
-                  <p className="text-stone mt-0.5 text-[10px]">
-                    {r.user} · {r.date}
-                  </p>
-                </div>
-                <Badge tone={reportTone(r.status)} className="shrink-0 font-semibold">
-                  {r.status}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* 접근 권한 안내 */}
-      <div className="border-navy-100 bg-navy-50 flex items-start gap-4 rounded-lg border p-5">
-        <ShieldCheck className="text-navy-500 mt-0.5 h-8 w-8 shrink-0" />
-        <div>
-          <p className="text-navy-800 mb-1 font-bold">관리자 접근 권한</p>
-          <p className="text-navy-600 text-sm">
-            현재 계정은 슈퍼 관리자 권한을 보유하고 있습니다. 좌측 메뉴에서
-            유저·장소·코스·제보·이벤트를 관리하세요. 모든 변경사항은 즉시 서비스에 반영됩니다.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── 2. 유저 관리 ─────────────────────────────────────────
-function UserManagement() {
-  const [users, setUsers] = useState<AdminUser[]>(INIT_USERS);
-  const [query, setQuery] = useState("");
-
-  const filtered = users.filter((u) => u.nickname.includes(query) || u.email.includes(query));
-
-  const toggleStatus = (id: number) =>
-    setUsers((prev) =>
-      prev.map((u) => (u.id === id ? { ...u, status: u.status === "정상" ? "정지" : "정상" } : u))
-    );
-
-  const toggleRole = (id: number) =>
-    setUsers((prev) =>
-      prev.map((u) => (u.id === id ? { ...u, role: u.role === "일반" ? "관리자" : "일반" } : u))
-    );
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-ink text-xl font-bold">유저 관리</h1>
-        <span className="text-stone text-sm">총 {users.length}명</span>
-      </div>
-
-      <div className="relative">
-        <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="닉네임 또는 이메일 검색"
-          className="border-hairline focus:ring-navy-400 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
-        />
-      </div>
-
-      <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-hairline-soft bg-surface-soft border-b">
-                {["닉네임", "이메일", "가입일", "등급", "권한", "상태", "액션"].map((h) => (
-                  <th
-                    key={h}
-                    className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((u) => (
-                <tr
-                  key={u.id}
-                  className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
-                >
-                  <td className="text-ink px-4 py-3 font-semibold">{u.nickname}</td>
-                  <td className="text-steel px-4 py-3 whitespace-nowrap">{u.email}</td>
-                  <td className="text-stone px-4 py-3 whitespace-nowrap">{u.joined}</td>
-                  <td className="px-4 py-3">
-                    <span className="bg-surface text-steel rounded-full px-2 py-0.5 text-xs font-semibold">
-                      {u.level}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggleRole(u.id)}
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
-                        u.role === "관리자"
-                          ? "bg-navy-100 text-navy-700"
-                          : "bg-surface text-steel hover:bg-navy-50 hover:text-navy-600"
-                      }`}
-                    >
-                      {u.role}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggleStatus(u.id)}
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
-                        u.status === "정상"
-                          ? "bg-brand-100 text-brand-700 hover:bg-red-50 hover:text-red-600"
-                          : "hover:bg-brand-50 hover:text-brand-600 bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {u.status}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Button
-                      variant="ghost"
-                      size="iconSm"
-                      aria-label="수정"
-                      className="text-stone hover:bg-surface hover:text-steel rounded-full"
-                    >
-                      <Edit className="h-3.5 w-3.5" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {filtered.length === 0 && (
-          <p className="text-stone py-8 text-center text-sm">검색 결과가 없어요</p>
-        )}
       </div>
     </div>
   );
@@ -753,94 +377,6 @@ const PLACE_BF_COLUMNS = [
   "updatetime"
 ] as const;
 
-// ── 테이블 공통 페이지네이션 (<< < 1 2 … 10 > >>) ──────────
-// page 는 0-based. << 맨 앞, < 이전 묶음, 숫자 페이지, > 다음 묶음, >> 맨 뒤.
-const PAGE_WINDOW = 10; // 한 번에 보여줄 페이지 번호 개수
-
-function TablePagination({
-  page,
-  totalPages,
-  total,
-  pageSize,
-  disabled,
-  onChange
-}: {
-  page: number;
-  totalPages: number;
-  total: number;
-  pageSize: number;
-  disabled: boolean;
-  onChange: (targetPage: number) => void;
-}) {
-  const windowStart = Math.floor(page / PAGE_WINDOW) * PAGE_WINDOW;
-  const windowEnd = Math.min(windowStart + PAGE_WINDOW, totalPages);
-  const pages: number[] = [];
-  for (let i = windowStart; i < windowEnd; i += 1) pages.push(i);
-
-  const from = page * pageSize + 1;
-  const to = Math.min((page + 1) * pageSize, total);
-
-  const navBtn =
-    "border-hairline text-steel hover:bg-surface-soft flex h-7 w-7 items-center justify-center rounded-full border transition-colors disabled:opacity-40 disabled:hover:bg-transparent";
-
-  return (
-    <div className="border-hairline-soft flex items-center justify-between gap-3 border-t px-4 py-3">
-      <span className="text-stone text-xs">
-        {from}–{to} / {total}
-      </span>
-      <div className="flex items-center gap-1">
-        <button
-          onClick={() => onChange(0)}
-          disabled={disabled || page <= 0}
-          aria-label="맨 앞"
-          className={navBtn}
-        >
-          <ChevronsLeft className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={() => onChange(Math.max(0, windowStart - PAGE_WINDOW))}
-          disabled={disabled || windowStart <= 0}
-          aria-label="이전 페이지들"
-          className={navBtn}
-        >
-          <ChevronLeft className="h-3.5 w-3.5" />
-        </button>
-        {pages.map((p) => (
-          <button
-            key={p}
-            onClick={() => onChange(p)}
-            disabled={disabled}
-            aria-current={p === page ? "page" : undefined}
-            className={`flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold transition-colors disabled:opacity-40 ${
-              p === page
-                ? "bg-navy-600 text-white"
-                : "border-hairline text-steel hover:bg-surface-soft border"
-            }`}
-          >
-            {p + 1}
-          </button>
-        ))}
-        <button
-          onClick={() => onChange(windowStart + PAGE_WINDOW)}
-          disabled={disabled || windowEnd >= totalPages}
-          aria-label="다음 페이지들"
-          className={navBtn}
-        >
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={() => onChange(totalPages - 1)}
-          disabled={disabled || page >= totalPages - 1}
-          aria-label="맨 뒤"
-          className={navBtn}
-        >
-          <ChevronsRight className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function PlaceManagement() {
   const [places, setPlaces] = useState(PLACES);
   const [query, setQuery] = useState("");
@@ -900,7 +436,10 @@ function PlaceManagement() {
                   <td className="px-4 py-3">
                     <span
                       className="rounded-full px-2 py-0.5 text-xs font-semibold"
-                      style={{ background: p.bg, color: p.color }}
+                      style={{
+                        background: PLACE_COLORS[p.colorKey].bg,
+                        color: PLACE_COLORS[p.colorKey].color
+                      }}
                     >
                       {p.category}
                     </span>
@@ -1715,279 +1254,6 @@ function CourseManagement() {
         {filtered.length === 0 && (
           <p className="text-stone py-10 text-center text-sm">해당하는 코스가 없어요</p>
         )}
-      </div>
-    </div>
-  );
-}
-
-// ── 5. 제보 확인 ─────────────────────────────────────────
-function ReportManagement() {
-  const [reports, setReports] = useState<AdminReport[]>(INIT_REPORTS);
-  const [filter, setFilter] = useState<ReportStatus | "전체">("전체");
-
-  const filtered = filter === "전체" ? reports : reports.filter((r) => r.status === filter);
-
-  const setStatus = (id: number, status: ReportStatus) =>
-    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
-
-  const counts: Record<string, number> = {
-    전체: reports.length,
-    대기: reports.filter((r) => r.status === "대기").length,
-    검토중: reports.filter((r) => r.status === "검토중").length,
-    반영됨: reports.filter((r) => r.status === "반영됨").length,
-    반려: reports.filter((r) => r.status === "반려").length
-  };
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-ink text-xl font-bold">제보 내용 확인</h1>
-        <span className="text-stone text-sm">총 {reports.length}건</span>
-      </div>
-
-      {/* 상태 필터 */}
-      <div className="flex flex-wrap gap-2">
-        {(["전체", "대기", "검토중", "반영됨", "반려"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-              filter === f ? "bg-navy-600 text-white" : "bg-surface text-steel hover:bg-hairline"
-            }`}
-          >
-            {f}
-            <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${filter === f ? "bg-white/20 text-white" : "text-steel bg-white"}`}
-            >
-              {counts[f]}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-3">
-        {filtered.map((r) => (
-          <Card key={r.id} className="border-hairline-soft">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="mb-1.5 flex items-center gap-2">
-                  <span className="text-ink font-bold">{r.target}</span>
-                  <Badge tone={reportTone(r.status)} className="text-[10px] font-bold">
-                    {r.status}
-                  </Badge>
-                </div>
-                <p className="text-steel mb-1 text-sm">{r.content}</p>
-                <p className="text-stone text-xs">
-                  {r.user} · {r.date}
-                </p>
-              </div>
-
-              {/* 상태 변경 액션 */}
-              {(r.status === "대기" || r.status === "검토중") && (
-                <div className="flex shrink-0 items-center gap-1.5">
-                  {r.status === "대기" && (
-                    <button
-                      onClick={() => setStatus(r.id, "검토중")}
-                      className="border-gold-200 bg-gold-50 text-gold-700 hover:bg-gold-100 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
-                    >
-                      검토 시작
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setStatus(r.id, "반영됨")}
-                    className="bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100 flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
-                  >
-                    <Check className="h-3 w-3" />
-                    반영
-                  </button>
-                  <button
-                    onClick={() => setStatus(r.id, "반려")}
-                    className="border-hairline bg-surface-soft text-steel flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                  >
-                    <X className="h-3 w-3" />
-                    반려
-                  </button>
-                </div>
-              )}
-              {(r.status === "반영됨" || r.status === "반려") && (
-                <button
-                  onClick={() => setStatus(r.id, "대기")}
-                  className="text-stone hover:text-steel shrink-0 text-xs underline underline-offset-2"
-                >
-                  되돌리기
-                </button>
-              )}
-            </div>
-          </Card>
-        ))}
-        {filtered.length === 0 && (
-          <p className="text-stone py-10 text-center text-sm">해당하는 제보가 없어요</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── 6. 이벤트 관리 ───────────────────────────────────────
-function EventManagement() {
-  const [events, setEvents] = useState<AdminEvent[]>(INIT_EVENTS);
-  const [showForm, setShowForm] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newPeriod, setNewPeriod] = useState("");
-  const [newBadge, setNewBadge] = useState("");
-  const [newEmoji, setNewEmoji] = useState("🎉");
-
-  const toggleVisible = (id: string) =>
-    setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, visible: !e.visible } : e)));
-
-  const deleteEvent = (id: string) => setEvents((prev) => prev.filter((e) => e.id !== id));
-
-  const handleAdd = () => {
-    if (!newTitle.trim()) return;
-    setEvents((prev) => [
-      ...prev,
-      {
-        id: `e${genId()}`,
-        title: newTitle,
-        period: newPeriod,
-        badge: newBadge,
-        emoji: newEmoji,
-        visible: true
-      }
-    ]);
-    setNewTitle("");
-    setNewPeriod("");
-    setNewBadge("");
-    setNewEmoji("🎉");
-    setShowForm(false);
-  };
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-ink text-xl font-bold">이벤트 관리</h1>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          이벤트 등록
-        </button>
-      </div>
-
-      {/* 등록 폼 */}
-      {showForm && (
-        <div className="border-navy-100 bg-navy-50 space-y-3 rounded-lg border p-5">
-          <p className="text-navy-800 text-sm font-bold">새 이벤트 등록</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="text-steel mb-1 block text-xs font-semibold">이모지</label>
-              <input
-                value={newEmoji}
-                onChange={(e) => setNewEmoji(e.target.value)}
-                className="border-hairline focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-                placeholder="🎉"
-              />
-            </div>
-            <div>
-              <label className="text-steel mb-1 block text-xs font-semibold">배지</label>
-              <input
-                value={newBadge}
-                onChange={(e) => setNewBadge(e.target.value)}
-                className="border-hairline focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-                placeholder="진행중"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-steel mb-1 block text-xs font-semibold">이벤트명</label>
-              <input
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                className="border-hairline focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-                placeholder="이벤트 제목"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-steel mb-1 block text-xs font-semibold">기간</label>
-              <input
-                value={newPeriod}
-                onChange={(e) => setNewPeriod(e.target.value)}
-                className="border-hairline focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-                placeholder="2026.07.01 – 07.31"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => setShowForm(false)}
-              className="border-hairline text-steel hover:bg-surface-soft rounded-full border px-4 py-2 text-sm"
-            >
-              취소
-            </button>
-            <button
-              onClick={handleAdd}
-              disabled={!newTitle.trim()}
-              className="bg-navy-600 hover:bg-navy-700 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-40"
-            >
-              등록
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {events.map((ev) => (
-          <div
-            key={ev.id}
-            className={`flex items-center gap-4 rounded-lg border bg-white px-5 py-4 transition-opacity ${ev.visible ? "border-hairline-soft" : "border-hairline border-dashed opacity-60"}`}
-          >
-            <span className="shrink-0 text-2xl">{ev.emoji}</span>
-            <div className="min-w-0 flex-1">
-              <div className="mb-0.5 flex items-center gap-2">
-                <h3 className="text-ink truncate font-semibold">{ev.title}</h3>
-                <span className="bg-brand-100 text-brand-700 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold">
-                  {ev.badge}
-                </span>
-                {!ev.visible && (
-                  <span className="bg-surface text-steel shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold">
-                    숨김
-                  </span>
-                )}
-              </div>
-              <p className="text-stone text-xs">{ev.period}</p>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                variant="ghost"
-                size="iconSm"
-                onClick={() => toggleVisible(ev.id)}
-                title={ev.visible ? "노출 중지" : "노출 시작"}
-                aria-label="노출 여부 변경"
-                className={`rounded-full ${ev.visible ? "text-stone hover:bg-surface hover:text-steel" : "hover:bg-brand-50 hover:text-brand-500 text-stone"}`}
-              >
-                {ev.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="iconSm"
-                aria-label="수정"
-                className="text-stone hover:bg-navy-50 hover:text-navy-600 rounded-full"
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="iconSm"
-                onClick={() => deleteEvent(ev.id)}
-                aria-label="삭제"
-                className="text-stone rounded-full hover:bg-red-50 hover:text-red-500"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );

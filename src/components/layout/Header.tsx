@@ -2,14 +2,30 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Settings } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut, Settings } from "lucide-react";
 import { DesktopNav } from "./Navigation";
 import AccessibilitySettings from "../AccessibilitySettings";
 import { Button } from "../ui/Button";
+import { useOptionalAuth } from "@/context/AuthContext";
 
-// 상단 헤더 — 로고 + 데스크톱 내비 + 접근성 설정 토글.
 export default function Header() {
   const [showAccessibility, setShowAccessibility] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const auth = useOptionalAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    if (!auth?.signOut || loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await auth.signOut();
+      router.push("/");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   return (
     <header className="border-hairline sticky top-0 z-40 border-b bg-white/85 backdrop-blur-md">
@@ -43,18 +59,41 @@ export default function Header() {
           </span>
         </Link>
         <DesktopNav />
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setShowAccessibility((v) => !v)}
-          aria-label="접근성 설정"
-          aria-expanded={showAccessibility}
-          className={`rounded-full ${
-            showAccessibility ? "bg-brand-50 text-brand-600" : "text-steel hover:text-brand-600"
-          }`}
-        >
-          <Settings className="h-6 w-6" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {auth?.user ? (
+            <>
+              <span className="text-steel hidden text-sm whitespace-nowrap md:inline">
+                <span className="text-ink font-semibold">{auth.member?.nickname ?? "회원"}</span>님
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hidden md:inline-flex"
+                disabled={loggingOut}
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4" />
+                {loggingOut ? "로그아웃 중…" : "로그아웃"}
+              </Button>
+            </>
+          ) : (
+            <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
+              <Link href={`/login?next=${encodeURIComponent(pathname)}`}>로그인</Link>
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowAccessibility((v) => !v)}
+            aria-label="접근성 설정"
+            aria-expanded={showAccessibility}
+            className={`rounded-full ${
+              showAccessibility ? "bg-brand-50 text-brand-600" : "text-steel hover:text-brand-600"
+            }`}
+          >
+            <Settings className="h-6 w-6" />
+          </Button>
+        </div>
         {showAccessibility && <AccessibilitySettings onClose={() => setShowAccessibility(false)} />}
       </div>
     </header>
