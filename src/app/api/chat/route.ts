@@ -15,6 +15,7 @@ type ChatResponse = {
     rows: string[];
     source: string;
   };
+  places?: PlaceCard[];
   chips: string[];
   confidence: Confidence;
   sources: string[];
@@ -25,6 +26,21 @@ type ChatResponse = {
     searchTerms: string[];
     weather?: TourWeatherDebug;
   };
+};
+
+type PlaceCard = {
+  title: string;
+  category: string | null;
+  address: string | null;
+  tel: string | null;
+  activity: string;
+  tourDetails: string[];
+  accessibility: string[];
+  latitude: string | null;
+  longitude: string | null;
+  source: string | null;
+  tags: string[];
+  followUps: string[];
 };
 
 type DeepSeekChatResponse = {
@@ -119,7 +135,7 @@ const DEFAULT_MODEL = "deepseek-v4-flash";
 const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small";
 const DEFAULT_EMBEDDING_DIMENSIONS = 1536;
 const SUPPORTED_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
-const KNOWLEDGE_CANDIDATE_LIMIT = 100;
+const KNOWLEDGE_CANDIDATE_LIMIT = 500;
 const KNOWLEDGE_RESULT_LIMIT = 5;
 const VECTOR_CANDIDATE_LIMIT = 20;
 const VECTOR_READINESS_TTL_MS = 60_000;
@@ -154,7 +170,9 @@ const CATEGORY_ALIASES: Record<string, string[]> = {
   음식점: ["음식", "음식점", "식당", "맛집", "카페", "밥"],
   쇼핑: ["쇼핑", "시장", "백화점", "상점"],
   숙박: ["숙박", "호텔", "숙소", "레지던스"],
-  레포츠: ["레포츠", "운동", "체육", "캠핑"]
+  레포츠: ["레포츠", "운동", "체육", "캠핑"],
+  공중화장실: ["화장실", "장애인화장실", "장애인 화장실", "공중화장실", "변기"],
+  장애인주차장: ["장애인주차장", "장애인 주차장", "장애인 주차", "주차장", "주차"]
 };
 
 const ACCESSIBILITY_RULES: Record<string, { tags: string[]; fields: string[]; terms: string[] }> = {
@@ -212,21 +230,31 @@ const ACCESSIBILITY_RULES: Record<string, { tags: string[]; fields: string[]; te
 
 const systemPrompt = [
   "너는 대전 무장애 여행 앱 '다유'의 챗봇이다.",
-  "사용자에게 이동약자, 휠체어, 유모차, 고령자 관점의 여행 정보를 한국어로 짧고 실용적으로 답한다.",
+  "사용자에게 이동약자, 휠체어, 유모차, 고령자 관점의 여행 정보를 한국어로 실용적으로 답한다.",
   "말투는 자연스러운 현대 표준어를 기본으로 하되, 대전/충청권 안내원이 말하듯 다정하고 느긋한 호흡을 섞는다.",
   "사투리 표현은 단어 자체보다 말의 속도와 태도에 가깝게 쓴다. 예를 들면 '천천히 같이 봐요', '걱정부터 덜어볼게요', '한번 확인해보면 좋아요'처럼 부드럽게 안내한다.",
-  "'가능해유', '좋아유', '그려유'처럼 노골적인 방언형 어미는 가급적 쓰지 않는다.",
+  "'가능해유', '좋아유', '그려유', '있어유'처럼 노골적인 방언형 어미는 쓰지 않는다.",
   "모든 문장 끝에 '~유'를 붙이는 식의 과장된 사투리는 절대 쓰지 않는다.",
   "자연스럽게 어울릴 때만 '괜찮아요', '한번 확인해보면 좋아요', '그럴 수 있어요', '맞을 거예요' 같은 부드러운 표현을 사용한다.",
   "희화화된 방언, 억지스러운 사투리, 장난스러운 말투는 피한다.",
   "Supabase 근거 데이터가 제공되면 그 내용을 우선 사용한다.",
   "근거 데이터에 없는 내용은 확정 정보처럼 단정하지 말고 방문 전 확인이 필요한 부분을 분명히 말한다.",
+  "추천 카드에 없는 사진, 이미지, 지도 캡처, 실시간 혼잡도 같은 정보를 제공한다고 말하지 않는다.",
   "기상청 관광기후지수 데이터가 제공되면 날씨 조건을 보조 근거로 반영하되, 실시간 현장 날씨를 직접 확인한 것처럼 말하지 않는다.",
   "날씨 데이터가 제공되지 않으면 현재 날씨를 알고 있다고 말하지 않는다.",
-  "장소를 추천할 때는 접근성만 나열하지 말고, 각 장소에서 사용자가 무엇을 할 수 있는지와 왜 가볼 만한지도 함께 말한다.",
-  "추천 장소 설명은 '어떤 활동을 할 수 있는지'와 '접근성 근거'가 한 문장 안에서 자연스럽게 연결되게 쓴다.",
-  "방문 활동은 제공된 제목, 분류, 내용, 방문 활동 힌트 안에서만 말하고, 근거 없는 체험 프로그램이나 편의시설은 지어내지 않는다.",
-  "답변은 4~8문장으로 작성하고, 불확실한 시설 정보는 확인 권장으로 표현한다.",
+  "장소를 추천할 때는 접근성만 나열하지 말고, 각 장소가 어떤 곳인지, 가서 무엇을 볼 수 있는지, 누구에게 맞는지, 왜 가볼 만한지도 함께 말한다.",
+  "말풍선 답변은 긴 상세 설명이 아니라 추천 판단 요약이다. 자세한 관광정보와 접근성 목록은 아래 추천 카드에서 확인하게 한다.",
+  "추천 장소 설명은 관광지 성격과 '가서 할 수 있는 것'을 먼저 짧게 말하고, 그다음 사용자의 접근성 조건과 직접 관련된 핵심 근거만 붙인다.",
+  "추천 답변에서는 관광지 정보와 접근성 정보가 모두 보여야 하지만, 본문에는 장소별 핵심 1~2문장만 쓴다.",
+  "운영시간, 요금, 주차, 편의시설, 문의처는 본문에 길게 나열하지 말고 카드에서 확인하도록 안내한다.",
+  "예: '천연기념물센터는 자연유산 표본과 전시를 실내에서 천천히 둘러볼 수 있는 곳이고, 휠체어 접근로와 장애인 화장실 근거도 있어요.'처럼 활동과 접근성을 함께 말한다.",
+  "접근성 정보만 여러 문장 나열하고 활동 설명을 빼먹는 답변은 실패다.",
+  "장소 추천은 사용자가 더 많이 요청하지 않으면 보통 2곳만 고르고, 각 장소마다 장소 성격, 볼거리나 할 일, 접근성 핵심 근거를 한 문장으로 압축한다.",
+  "추천 질문에서 근거 후보가 2곳 이상 있으면 답변 본문에도 최소 2곳을 포함한다. 한 장소만 길게 쓰지 말고 장소별로 한 문장씩 비교한다.",
+  "사용자의 접근성 조건과 직접 관련된 근거를 먼저 말한다. 예를 들어 시각장애 질문은 점자블록, 보조견, 안내요원, 오디오 가이드 같은 근거를 우선하고, 휠체어 정보는 보조 정보로만 다룬다.",
+  "특정 장소 가능 여부 질문은 추천을 늘리지 말고 해당 장소의 가능 근거와 주의할 점을 먼저 답한다.",
+  "방문 활동은 제공된 제목, 분류, 내용, 방문 활동 힌트, 관광지 상세 정보 안에서만 말하고, 근거 없는 체험 프로그램이나 편의시설은 지어내지 않는다.",
+  "단순 확인 질문은 4~8문장으로 답하고, 추천 질문은 전체 3~4문장으로 답한다.",
   "마크다운, 굵게 표시, 번호 목록은 쓰지 말고 일반 문장으로만 답한다."
 ].join(" ");
 
@@ -345,9 +373,9 @@ function createStaticSiteFaqResponse(message: string): ChatResponse | null {
   ) {
     return createSiteGuideResponse({
       message:
-        "현재 챗봇 테스트 데이터는 한국관광공사 TourAPI의 대전 무장애 여행 데이터를 바탕으로 정리하고 있어요. 다만 운영 여부나 편의시설은 현장에서 바뀔 수 있잖아요. 그래서 중요한 방문 전에는 공식 홈페이지나 전화로 한 번 더 확인하는 흐름을 권장해요.",
+        "현재 챗봇 데이터는 한국관광공사 TourAPI 무장애 여행 정보에 대전 공중화장실, 장애인주차장, 문화관광 OpenAPI 데이터를 더해서 정리하고 있어요. 다만 운영 여부나 편의시설은 현장에서 바뀔 수 있잖아요. 그래서 중요한 방문 전에는 공식 홈페이지나 전화로 한 번 더 확인하는 흐름을 권장해요.",
       rows: [
-        "현재 원천: 한국관광공사 TourAPI 테스트 데이터",
+        "현재 원천: TourAPI, 대전교통공사, 대전광역시, 대전 서구 OpenAPI",
         "처리 방식: DB 근거를 먼저 찾고 답변 생성",
         "주의: 운영 정보는 방문 전 재확인 권장"
       ]
@@ -383,6 +411,20 @@ function normalizeStaticFaqText(value: string) {
 
 function includesAny(value: string, terms: string[]) {
   return terms.some((term) => value.includes(term));
+}
+
+function normalizeDaiyuTone(value: string) {
+  return value
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/있어유/g, "있어요")
+    .replace(/없어유/g, "없어요")
+    .replace(/좋아유/g, "좋아요")
+    .replace(/가능해유/g, "가능해요")
+    .replace(/괜찮아유/g, "괜찮아요")
+    .replace(/맞아유/g, "맞아요")
+    .replace(/해봐유/g, "해보세요")
+    .replace(/봐유/g, "봐요")
+    .replace(/예유/g, "예요");
 }
 
 function createOutOfScopeResponse(analysis: QueryAnalysis): ChatResponse {
@@ -426,7 +468,7 @@ function createNoKnowledgeResponse({
 
   return {
     message: hasNoMatchingEvidence
-      ? `현재 100개 테스트 데이터 안에서는 ${target} 접근성 근거를 찾지 못했어요. 여기서 가능 여부를 단정하면 오히려 위험할 수 있어서, 그 부분은 멈춰둘게요. 데이터가 더 들어오면 다시 한번 같이 확인해볼 수 있어요.`
+      ? `현재 테스트 데이터 안에서는 ${target} 접근성 근거를 찾지 못했어요. 여기서 가능 여부를 단정하면 오히려 위험할 수 있어서, 그 부분은 멈춰둘게요. 데이터가 더 들어오면 다시 한번 같이 확인해볼 수 있어요.`
       : "질문 분류는 완료했지만 아직 Supabase 근거 데이터가 준비되지 않아 최종 추천 답변은 만들지 않았어요. chatbot schema를 Data API에 노출하고 chunks 데이터가 들어가면, 그 근거를 조회한 뒤 차근차근 답변할게요.",
     card: {
       title: hasNoMatchingEvidence ? "확인 가능한 근거 없음" : "DB 조회 대기",
@@ -483,12 +525,13 @@ function createSuccessResponse({
   const rows = [
     knowledge.searchMode === "vector"
       ? `pgvector 유사도 검색 결과 ${evidenceCount}건 참고`
-      : `TourAPI 테스트 데이터 ${KNOWLEDGE_CANDIDATE_LIMIT}개 중 ${evidenceCount}건 참고`,
+      : knowledge.message,
     "운영 여부와 편의시설은 방문 전 재확인 권장"
   ];
 
-  if (knowledge.searchMode === "vector" && knowledge.embeddingModel) {
-    rows.push(`질문 embedding: ${knowledge.embeddingModel}`);
+  const embeddingModel = knowledge.embeddingModel || knowledge.debug?.embedding?.model;
+  if (embeddingModel && knowledge.debug?.embedding?.status === "created") {
+    rows.push(`질문 embedding: ${embeddingModel}`);
   }
 
   if (knowledge.fallbackReason) {
@@ -504,21 +547,30 @@ function createSuccessResponse({
     rows.push("AI가 근거 내용을 짧게 요약");
   }
 
+  const places = buildPlaceCards(knowledge.rows);
+  const placeFollowUpChips = places.flatMap((place) => place.followUps).slice(0, 3);
+  const responseMessage =
+    analysis.intent === "recommend_place" && places.length >= 2
+      ? createCompactRecommendationMessage({ analysis, places })
+      : message;
+
   return {
-    message,
+    message: responseMessage,
     card: {
       title: "답변 근거",
       rows,
       source:
         knowledge.searchMode === "vector"
-          ? "한국관광공사 TourAPI 기반 테스트 데이터 + pgvector"
-          : "한국관광공사 TourAPI 기반 테스트 데이터"
+          ? "대전 무장애/편의시설 공공데이터 + pgvector"
+          : "대전 무장애/편의시설 공공데이터"
     },
+    places,
     chips: [
+      ...placeFollowUpChips,
       "유모차 기준으로 다시 추천해줘",
       "문화시설만 더 추천해줘",
       "장애인 화장실 있는 곳 알려줘"
-    ],
+    ].slice(0, 6),
     confidence: "medium",
     sources: [
       `DeepSeek API (${model})`,
@@ -538,6 +590,285 @@ function createSuccessResponse({
       ...getWeatherDebugPayload(weather)
     }
   };
+}
+
+function createCompactRecommendationMessage({
+  analysis,
+  places
+}: {
+  analysis: QueryAnalysis;
+  places: PlaceCard[];
+}) {
+  const recommendedPlaces = places.slice(0, 2);
+  const location = analysis.location?.trim() || "대전";
+  const [firstPlace, secondPlace] = recommendedPlaces;
+
+  return [
+    `${location} 기준으로는 ${joinPlaceNames(firstPlace.title, secondPlace.title)} 먼저 비교해볼 만해요.`,
+    `${withTopicParticle(firstPlace.title)} ${getCompactActivityText(firstPlace)} ${getCompactAccessibilityText(firstPlace)}`,
+    `${withTopicParticle(secondPlace.title)} ${getCompactActivityText(secondPlace)} ${getCompactAccessibilityText(secondPlace)}`,
+    "관광정보와 접근성 상세는 아래 카드에서 탭으로 나눠 확인해 주세요."
+  ].join(" ");
+}
+
+function joinPlaceNames(firstTitle: string, secondTitle: string) {
+  return `${firstTitle}${getKoreanParticle(firstTitle, "과", "와")} ${secondTitle}${getKoreanParticle(secondTitle, "을", "를")}`;
+}
+
+function withTopicParticle(value: string) {
+  return `${value}${getKoreanParticle(value, "은", "는")}`;
+}
+
+function getKoreanParticle(
+  value: string,
+  withFinalConsonant: string,
+  withoutFinalConsonant: string
+) {
+  return hasFinalConsonant(value) ? withFinalConsonant : withoutFinalConsonant;
+}
+
+function hasFinalConsonant(value: string) {
+  const lastHangul = Array.from(value.trim())
+    .reverse()
+    .find((char) => {
+      const code = char.charCodeAt(0);
+      return code >= 0xac00 && code <= 0xd7a3;
+    });
+
+  if (!lastHangul) return false;
+
+  return (lastHangul.charCodeAt(0) - 0xac00) % 28 !== 0;
+}
+
+function getCompactActivityText(place: PlaceCard) {
+  const activity = place.activity.trim().replace(/[.。]$/, "");
+  return `${activity}${activity.endsWith("곳") ? "이고," : "이에요."}`;
+}
+
+function getCompactAccessibilityText(place: PlaceCard) {
+  if (!place.accessibility.length) {
+    return "접근성 세부 근거는 카드에서 더 확인해 주세요.";
+  }
+
+  const labels = place.accessibility
+    .map((item) => item.split(":")[0]?.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  return `${labels.join(", ")} 근거가 있어요.`;
+}
+
+function buildPlaceCards(rows: KnowledgeRow[]): PlaceCard[] {
+  const groupedRows = new Map<string, KnowledgeRow[]>();
+
+  for (const row of rows) {
+    const title = getRowText(row, "title") || "제목 없음";
+    const normalizedTitle = normalizeForSearch(title);
+    if (!normalizedTitle) continue;
+
+    const group = groupedRows.get(normalizedTitle) || [];
+    group.push(row);
+    groupedRows.set(normalizedTitle, group);
+  }
+
+  return Array.from(groupedRows.values())
+    .map((placeRows) => {
+      const title =
+        getFirstTextFromRows(placeRows, (row) => getRowText(row, "title")) || "제목 없음";
+      const category = getBestPlaceCategory(placeRows);
+      const address = getFirstTextFromRows(placeRows, getRowAddress);
+      const tel = getFirstTextFromRows(placeRows, getRowTel);
+      const latitude = getFirstTextFromRows(placeRows, getRowLatitude);
+      const longitude = getFirstTextFromRows(placeRows, getRowLongitude);
+      const accessibility = Array.from(
+        new Set(placeRows.flatMap((row) => buildPlaceAccessibilitySummary(row)))
+      ).slice(0, 6);
+
+      return {
+        title,
+        category,
+        address,
+        tel,
+        activity: getMergedActivityHint(placeRows),
+        tourDetails: buildPlaceTourDetails(placeRows),
+        accessibility,
+        latitude,
+        longitude,
+        source: getFirstTextFromRows(placeRows, (row) => getRowText(row, "source")),
+        tags: Array.from(new Set(placeRows.flatMap(getRowTags))).slice(0, 6),
+        followUps: buildPlaceFollowUps(title, category)
+      };
+    })
+    .slice(0, 5);
+}
+
+function getFirstTextFromRows(rows: KnowledgeRow[], getter: (row: KnowledgeRow) => string | null) {
+  for (const row of rows) {
+    const value = getter(row);
+    if (value) return value;
+  }
+  return null;
+}
+
+function getBestPlaceCategory(rows: KnowledgeRow[]) {
+  const categories = rows
+    .map((row) => getRowText(row, "category"))
+    .filter((category): category is string => Boolean(category));
+
+  return (
+    categories.find((category) => category === "관광지") ||
+    categories.find((category) => !["공중화장실", "장애인주차장"].includes(category)) ||
+    categories[0] ||
+    null
+  );
+}
+
+function getRowAddress(row: KnowledgeRow) {
+  const metadata = row.metadata || {};
+  return (
+    textMetadataValue(metadata.address) ||
+    [metadata.road_address, metadata.detail_address]
+      .map(textMetadataValue)
+      .filter(Boolean)
+      .join(" ") ||
+    null
+  );
+}
+
+function getRowTel(row: KnowledgeRow) {
+  const metadata = row.metadata || {};
+  return (
+    textMetadataValue(metadata.tel) ||
+    textMetadataValue(metadata.manage_phone) ||
+    textMetadataValue(metadata.refadNo) ||
+    null
+  );
+}
+
+function getRowLatitude(row: KnowledgeRow) {
+  const metadata = row.metadata || {};
+  return (
+    textMetadataValue(metadata.latitude) ||
+    textMetadataValue(metadata.mapy) ||
+    textMetadataValue(metadata.mapLat) ||
+    null
+  );
+}
+
+function getRowLongitude(row: KnowledgeRow) {
+  const metadata = row.metadata || {};
+  return (
+    textMetadataValue(metadata.longitude) ||
+    textMetadataValue(metadata.mapx) ||
+    textMetadataValue(metadata.mapLot) ||
+    null
+  );
+}
+
+function getMergedActivityHint(rows: KnowledgeRow[]) {
+  const title = getFirstTextFromRows(rows, (row) => getRowText(row, "title")) || "";
+  const summary = getFirstTextFromRows(rows, (row) => {
+    const value = textMetadataValue(row.metadata?.summary);
+    return isUsefulTourSummary(value, title) ? value : null;
+  });
+  const activity =
+    getFirstTextFromRows(rows, getRowActivityHint) ||
+    "방문 목적과 동선을 함께 확인해볼 수 있는 장소";
+
+  return summary ? `${summary} ${activity}` : activity;
+}
+
+function buildPlaceTourDetails(rows: KnowledgeRow[]) {
+  const details = rows.flatMap((row) => {
+    const metadata = row.metadata || {};
+    const title = getRowText(row, "title") || "";
+    const summary = textMetadataValue(metadata.summary);
+
+    return [
+      isUsefulTourSummary(summary, title) ? `개요: ${summary}` : null,
+      textMetadataValue(metadata.operating_time)
+        ? `운영시간: ${textMetadataValue(metadata.operating_time)}`
+        : null,
+      textMetadataValue(metadata.fee) ? `이용요금: ${textMetadataValue(metadata.fee)}` : null,
+      textMetadataValue(metadata.parking_facility)
+        ? `주차: ${textMetadataValue(metadata.parking_facility)}`
+        : null,
+      textMetadataValue(metadata.convenience_facility)
+        ? `편의시설: ${textMetadataValue(metadata.convenience_facility)}`
+        : null
+    ];
+  });
+
+  return Array.from(new Set(details.filter((detail): detail is string => Boolean(detail)))).slice(
+    0,
+    5
+  );
+}
+
+function isUsefulTourSummary(summary: string | null, title: string) {
+  if (!summary || summary.length < 10) return false;
+
+  const normalizedSummary = normalizeForSearch(summary);
+  const normalizedTitle = normalizeForSearch(title);
+  return Boolean(normalizedSummary && normalizedSummary !== normalizedTitle);
+}
+
+function buildPlaceAccessibilitySummary(row: KnowledgeRow) {
+  const metadata = row.metadata || {};
+  const accessibility = getRowAccessibility(row);
+  const items = Object.entries(accessibility)
+    .filter(([, value]) => value)
+    .slice(0, 4)
+    .map(([key, value]) => `${getAccessibilityLabel(key)}: ${value}`);
+
+  const structuredItems = [
+    textMetadataValue(metadata.parking_facility)
+      ? `주차: ${textMetadataValue(metadata.parking_facility)}`
+      : null,
+    textMetadataValue(metadata.convenience_facility)
+      ? `편의시설: ${textMetadataValue(metadata.convenience_facility)}`
+      : null,
+    textMetadataValue(metadata.men_disabled_bowl_num) ||
+    textMetadataValue(metadata.women_disabled_bowl_num)
+      ? `장애인 화장실: 남자 대변기 ${
+          textMetadataValue(metadata.men_disabled_bowl_num) || "0"
+        }개, 여성 대변기 ${textMetadataValue(metadata.women_disabled_bowl_num) || "0"}개`
+      : null
+  ].filter((item): item is string => Boolean(item));
+
+  return Array.from(new Set([...items, ...structuredItems])).slice(0, 4);
+}
+
+function getAccessibilityLabel(key: string) {
+  const labels: Record<string, string> = {
+    parking: "장애인 주차",
+    publictransport: "대중교통",
+    route: "접근로",
+    wheelchair: "휠체어",
+    exit: "출입통로",
+    elevator: "엘리베이터",
+    restroom: "장애인 화장실",
+    braileblock: "점자블록",
+    helpdog: "보조견",
+    guidehuman: "안내요원",
+    audioguide: "오디오 가이드",
+    stroller: "유모차",
+    lactationroom: "수유실"
+  };
+
+  return labels[key] || key;
+}
+
+function buildPlaceFollowUps(title: string, category: string | null) {
+  if (category === "공중화장실") {
+    return [`${title} 장애인 화장실 자세히 알려줘`, `${title} 위치 알려줘`];
+  }
+
+  if (category === "장애인주차장") {
+    return [`${title} 위치 자세히 알려줘`, `${title} 주변 여행지 추천해줘`];
+  }
+
+  return [`${title} 자세히 알려줘`, `${title} 휠체어 가능해?`];
 }
 
 function getSupabaseConfig() {
@@ -837,7 +1168,31 @@ function scoreKnowledgeRow({
     if (rowText.includes("실내") || rowText.includes("우천")) score += 12;
   }
 
+  if (category === "공중화장실") {
+    score += asksForToilet(searchTerms) ? 45 : -35;
+    if (analysis.intent === "recommend_place" && !asksForToilet(searchTerms)) score -= 25;
+  }
+
+  if (category === "장애인주차장") {
+    score += asksForParking(searchTerms) ? 45 : -35;
+    if (analysis.intent === "recommend_place" && !asksForParking(searchTerms)) score -= 25;
+  }
+
   return score;
+}
+
+function asksForToilet(searchTerms: string[]) {
+  const normalized = searchTerms.map(normalizeForSearch).join(" ");
+  return (
+    normalized.includes("화장실") ||
+    normalized.includes("변기") ||
+    normalized.includes("공중화장실")
+  );
+}
+
+function asksForParking(searchTerms: string[]) {
+  const normalized = searchTerms.map(normalizeForSearch).join(" ");
+  return normalized.includes("주차");
 }
 
 function scoreAccessibilityNeed({
@@ -1015,6 +1370,78 @@ function getKnowledgeSearchLabel(knowledge: KnowledgeResult) {
   return "검색 준비 전";
 }
 
+function getRequestedFacilityCategory(searchTerms: string[]) {
+  if (asksForToilet(searchTerms)) return "공중화장실";
+  if (asksForParking(searchTerms)) return "장애인주차장";
+  return null;
+}
+
+function hasCategory(rows: KnowledgeRow[], category: string) {
+  return rows.some((row) => getRowText(row, "category") === category);
+}
+
+async function enrichRowsWithMatchingTitles(
+  config: ReturnType<typeof getSupabaseConfig>,
+  rows: KnowledgeRow[]
+) {
+  const params = new URLSearchParams({
+    select: "*",
+    limit: String(KNOWLEDGE_CANDIDATE_LIMIT),
+    order: "created_at.asc"
+  });
+
+  try {
+    const response = await fetch(
+      `${config.url}/${encodeURIComponent(config.table)}?${params.toString()}`,
+      {
+        headers: getSupabaseHeaders(config, { Accept: "application/json" }),
+        cache: "no-store"
+      }
+    );
+
+    if (!response.ok) return rows;
+
+    const candidateRows = (await response.json()) as KnowledgeRow[];
+    return mergeRowsWithMatchingTitles(rows, candidateRows);
+  } catch {
+    return rows;
+  }
+}
+
+function mergeRowsWithMatchingTitles(primaryRows: KnowledgeRow[], candidateRows: KnowledgeRow[]) {
+  const primaryTitleSet = new Set(
+    primaryRows.map((row) => normalizeForSearch(getRowText(row, "title") || "")).filter(Boolean)
+  );
+  const matchingRows = candidateRows.filter((row) =>
+    primaryTitleSet.has(normalizeForSearch(getRowText(row, "title") || ""))
+  );
+  const usedKeys = new Set<string>();
+  const mergedRows: KnowledgeRow[] = [];
+
+  for (const row of primaryRows) {
+    addUniqueKnowledgeRow(mergedRows, usedKeys, row);
+
+    const normalizedTitle = normalizeForSearch(getRowText(row, "title") || "");
+    for (const matchingRow of matchingRows) {
+      if (normalizeForSearch(getRowText(matchingRow, "title") || "") !== normalizedTitle) continue;
+      addUniqueKnowledgeRow(mergedRows, usedKeys, matchingRow);
+    }
+  }
+
+  return mergedRows;
+}
+
+function addUniqueKnowledgeRow(rows: KnowledgeRow[], usedKeys: Set<string>, row: KnowledgeRow) {
+  const key =
+    row.id ||
+    getRowText(row, "source") ||
+    `${getRowText(row, "title") || ""}:${(row.content || "").slice(0, 80)}`;
+
+  if (!key || usedKeys.has(key)) return;
+  usedKeys.add(key);
+  rows.push(row);
+}
+
 function createEmbeddingDebug({
   dimensions,
   input,
@@ -1180,6 +1607,33 @@ async function fetchKnowledge(analysis: QueryAnalysis): Promise<KnowledgeResult>
 
   const vectorKnowledge = await fetchVectorKnowledge(config, analysis, searchTerms);
   if (vectorKnowledge.status === "ready") {
+    const facilityCategory = getRequestedFacilityCategory(searchTerms);
+    if (facilityCategory && !hasCategory(vectorKnowledge.rows, facilityCategory)) {
+      const facilityKnowledge = await fetchKeywordKnowledge(config, analysis, searchTerms);
+      if (
+        facilityKnowledge.status === "ready" &&
+        hasCategory(facilityKnowledge.rows, facilityCategory)
+      ) {
+        const fallbackDebug =
+          facilityKnowledge.debug ||
+          createRagDebug({
+            rows: facilityKnowledge.rows,
+            searchMode: "keyword",
+            statusMessage: facilityKnowledge.message
+          });
+
+        return {
+          ...facilityKnowledge,
+          debug: {
+            ...fallbackDebug,
+            embedding: vectorKnowledge.debug?.embedding,
+            statusMessage: `${facilityKnowledge.message} / facility fallback: vector 후보에 ${facilityCategory} 없음`
+          },
+          fallbackReason: `vector 후보에 ${facilityCategory} 없음`
+        };
+      }
+    }
+
     return vectorKnowledge;
   }
 
@@ -1336,16 +1790,25 @@ async function fetchVectorKnowledge(
       };
     }
 
+    const enrichedRows = await enrichRowsWithMatchingTitles(config, rankedRows);
+    const enrichmentCount = enrichedRows.length - rankedRows.length;
+
     return {
       status: "ready",
-      rows: rankedRows,
-      message: `pgvector ${rows.length}개 후보 중 ${rankedRows.length}건 사용`,
+      rows: enrichedRows,
+      message:
+        enrichmentCount > 0
+          ? `pgvector ${rows.length}개 후보 중 ${rankedRows.length}건 사용, 관광지 상세 ${enrichmentCount}건 보강`
+          : `pgvector ${rows.length}개 후보 중 ${rankedRows.length}건 사용`,
       searchMode: "vector",
       debug: createRagDebug({
         embedding: embeddingDebug,
-        rows: rankedRows,
+        rows: enrichedRows,
         searchMode: "vector",
-        statusMessage: `pgvector ${rows.length}개 후보 중 ${rankedRows.length}건 사용`,
+        statusMessage:
+          enrichmentCount > 0
+            ? `pgvector ${rows.length}개 후보 중 ${rankedRows.length}건 사용, 관광지 상세 ${enrichmentCount}건 보강`
+            : `pgvector ${rows.length}개 후보 중 ${rankedRows.length}건 사용`,
         vectorCandidateCount: rows.length
       }),
       embeddingModel: embedding.model
@@ -1388,7 +1851,7 @@ async function fetchKeywordKnowledge(
       `${config.url}/${encodeURIComponent(config.table)}?${params.toString()}`,
       {
         headers: getSupabaseHeaders(config, { Accept: "application/json" }),
-        next: { revalidate: 60 }
+        cache: "no-store"
       }
     );
 
@@ -1447,15 +1910,24 @@ async function fetchKeywordKnowledge(
       };
     }
 
+    const enrichedRows = mergeRowsWithMatchingTitles(rankedRows, rows);
+    const enrichmentCount = enrichedRows.length - rankedRows.length;
+
     return {
       status: "ready",
-      rows: rankedRows,
-      message: `${config.schema}.${config.table} ${rows.length}개 후보 중 ${rankedRows.length}건 사용`,
+      rows: enrichedRows,
+      message:
+        enrichmentCount > 0
+          ? `${config.schema}.${config.table} ${rows.length}개 후보 중 ${rankedRows.length}건 사용, 관광지 상세 ${enrichmentCount}건 보강`
+          : `${config.schema}.${config.table} ${rows.length}개 후보 중 ${rankedRows.length}건 사용`,
       searchMode: "keyword",
       debug: createRagDebug({
-        rows: rankedRows,
+        rows: enrichedRows,
         searchMode: "keyword",
-        statusMessage: `${config.schema}.${config.table} ${rows.length}개 후보 중 ${rankedRows.length}건 사용`
+        statusMessage:
+          enrichmentCount > 0
+            ? `${config.schema}.${config.table} ${rows.length}개 후보 중 ${rankedRows.length}건 사용, 관광지 상세 ${enrichmentCount}건 보강`
+            : `${config.schema}.${config.table} ${rows.length}개 후보 중 ${rankedRows.length}건 사용`
       })
     };
   } catch {
@@ -1538,6 +2010,9 @@ function formatKnowledgeContext(knowledge: KnowledgeResult, weather?: TourWeathe
         `${index + 1}. ${getRowText(row, "title") || "제목 없음"}`,
         getRowText(row, "category") ? `분류: ${getRowText(row, "category")}` : null,
         `방문 활동 힌트: ${getRowActivityHint(row)}`,
+        buildPlaceTourDetails([row]).length
+          ? `관광지 상세 정보: ${buildPlaceTourDetails([row]).join(" / ")}`
+          : null,
         row.content ? `내용: ${row.content}` : null,
         getRowText(row, "source") ? `출처: ${getRowText(row, "source")}` : null,
         getRowTags(row).length ? `태그: ${getRowTags(row).join(", ")}` : null
@@ -1565,17 +2040,42 @@ function getRowActivityHint(row: KnowledgeRow) {
   const category = getRowText(row, "category") || "";
   const sourceText = getRowText(row, "source") || "";
   const content = row.content || "";
+  const sourceType = textMetadataValue(row.metadata?.source_type);
   const searchableText = normalizeForSearch([title, category, sourceText, content].join(" "));
+
+  if (category === "공중화장실" || sourceType === "public_toilet") {
+    return "여행 중 가까운 역사 화장실과 장애인용 변기 수를 확인해 동선 중간 휴식 지점으로 잡을 수 있는 곳";
+  }
+
+  if (category === "장애인주차장" || sourceType === "accessible_parking") {
+    return "차량 이동 시 목적지 주변 주차 가능성을 먼저 확인하고 하차 동선을 줄이는 데 참고할 수 있는 위치 정보";
+  }
 
   if (includesAny(searchableText, ["트래블라운지", "관광안내", "안내소", "여행안내"])) {
     return "여행 정보를 확인하고, 동선이나 코스를 정리하며, 현장 안내를 받을 수 있는 곳";
+  }
+
+  if (includesAny(searchableText, ["아쿠아리움", "수족관"])) {
+    return "실내에서 해양 생물 전시를 관람하고, 날씨 영향이 적은 동선으로 쉬어갈 수 있는 곳";
+  }
+
+  if (includesAny(searchableText, ["천연기념물센터", "천연기념물", "자연유산"])) {
+    return "천연기념물과 자연유산 표본, 생태 전시를 실내에서 천천히 관람하며 대전의 자연 콘텐츠를 살펴볼 수 있는 곳";
+  }
+
+  if (includesAny(searchableText, ["한밭도서관", "도서관"])) {
+    return "자료실에서 책과 전시 자료를 살펴보고, 조용한 실내 공간에서 쉬어가며 여행 동선을 정리할 수 있는 곳";
+  }
+
+  if (includesAny(searchableText, ["과학공원", "과학관", "엑스포", "천문", "화폐박물관"])) {
+    return "과학, 전시, 체험형 콘텐츠를 둘러보며 실내외 관람 동선을 계획해볼 수 있는 곳";
   }
 
   if (includesAny(searchableText, ["수목원", "공원", "정원", "호수", "숲", "둘레길", "산책"])) {
     return "천천히 산책하고 쉬면서 자연 경관을 둘러볼 수 있는 곳";
   }
 
-  if (includesAny(searchableText, ["박물관", "미술관", "전시", "문화시설", "기념관", "도서관"])) {
+  if (includesAny(searchableText, ["박물관", "미술관", "전시", "문화시설", "기념관"])) {
     return "전시, 자료, 문화 콘텐츠를 실내에서 관람하거나 쉬어갈 수 있는 곳";
   }
 
@@ -1680,7 +2180,7 @@ export async function POST(request: Request) {
           { role: "user", content: message }
         ],
         thinking: { type: "disabled" },
-        max_tokens: 600,
+        max_tokens: 850,
         temperature: 0.3,
         stream: false
       }),
@@ -1696,7 +2196,7 @@ export async function POST(request: Request) {
     }
 
     const data = (await deepSeekResponse.json()) as DeepSeekChatResponse;
-    const answer = data.choices?.[0]?.message?.content?.trim();
+    const answer = normalizeDaiyuTone(data.choices?.[0]?.message?.content?.trim() || "");
 
     if (!answer) {
       return NextResponse.json(

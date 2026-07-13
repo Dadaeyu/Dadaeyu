@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 const DEFAULT_MODEL = "text-embedding-3-small";
 const DEFAULT_DIMENSIONS = 1536;
-const DEFAULT_LIMIT = 100;
+const DEFAULT_LIMIT = 500;
 
 function loadEnv(filePath = ".env.local") {
   const fullPath = resolve(process.cwd(), filePath);

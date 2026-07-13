@@ -9,7 +9,7 @@ const DEFAULT_AREA_CODE = "3";
 const DEFAULT_MOBILE_OS = "ETC";
 const DEFAULT_MOBILE_APP = "Dadaeyu";
 const DEFAULT_ROWS_PER_PAGE = 50;
-const DEFAULT_LIMIT = 20;
+const DEFAULT_LIMIT = 500;
 
 const CONTENT_TYPES = {
   "12": "관광지",

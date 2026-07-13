@@ -3,8 +3,12 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
+  Accessibility,
   CheckCircle2,
+  ClipboardCheck,
+  Info,
   MapPin,
+  MessageCircle,
   Mic,
   MicOff,
   Send,
@@ -23,6 +27,7 @@ type ChatResponse = {
     rows: string[];
     source: string;
   };
+  places?: PlaceRecommendation[];
   chips: string[];
   confidence: Confidence;
   sources: string[];
@@ -34,6 +39,23 @@ type ChatResponse = {
     weather?: WeatherDebug;
   };
 };
+
+type PlaceRecommendation = {
+  title: string;
+  category: string | null;
+  address: string | null;
+  tel: string | null;
+  activity: string;
+  tourDetails?: string[];
+  accessibility: string[];
+  latitude: string | null;
+  longitude: string | null;
+  source: string | null;
+  tags: string[];
+  followUps: string[];
+};
+
+type PlaceInfoTab = "tour" | "accessibility" | "check";
 
 type WeatherDebug = {
   items: Array<{
@@ -160,6 +182,7 @@ const confidenceTone: Record<Confidence, string> = {
 };
 
 const DAIYU_AVATAR_SRC = "/daiyu-avatar.png";
+const DAIYU_PROFILE_SRC = "/daiyu-profile.png";
 const TTS_VOICE_STORAGE_KEY = "daiyu-tts-voice-uri";
 
 interface Props {
@@ -179,12 +202,17 @@ export default function Chatbot({ onClose }: Props) {
   const [selectedVoiceURI, setSelectedVoiceURI] = useState(() => getStoredTtsVoiceURI());
   const [sttSupported, setSttSupported] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isConversationMode, setIsConversationMode] = useState(false);
   const [voiceInputStatus, setVoiceInputStatus] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const latestMessageRef = useRef<HTMLDivElement>(null);
   const lastAutoSpokenMessageIdRef = useRef<number | null>(null);
   const nextIdRef = useRef(1);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const conversationModeRef = useRef(false);
+  const conversationRestartTimerRef = useRef<number | null>(null);
+  const isLoadingRef = useRef(false);
+  const voiceSessionIdRef = useRef(0);
 
   function nextId() {
     nextIdRef.current += 1;
@@ -215,9 +243,18 @@ export default function Chatbot({ onClose }: Props) {
 
     return () => {
       window.clearTimeout(timerId);
+      clearConversationRestartTimer();
       recognitionRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    conversationModeRef.current = isConversationMode;
+  }, [isConversationMode]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   useEffect(() => {
     const latestMessage = messages[messages.length - 1];
@@ -249,13 +286,14 @@ export default function Chatbot({ onClose }: Props) {
   }, []);
 
   const abortVoiceInput = useCallback(() => {
+    voiceSessionIdRef.current += 1;
     recognitionRef.current?.abort();
     recognitionRef.current = null;
     setIsListening(false);
   }, []);
 
   const startSpeech = useCallback(
-    (messageId: number, text: string) => {
+    (messageId: number, text: string, onDone?: () => void) => {
       if (!isSpeechSynthesisSupported()) {
         return;
       }
@@ -269,9 +307,11 @@ export default function Chatbot({ onClose }: Props) {
       utterance.voice = selectedKoreanVoice;
       utterance.onend = () => {
         setSpeakingMessageId((current) => (current === messageId ? null : current));
+        onDone?.();
       };
       utterance.onerror = () => {
         setSpeakingMessageId((current) => (current === messageId ? null : current));
+        onDone?.();
       };
 
       setSpeakingMessageId(messageId);
@@ -308,7 +348,7 @@ export default function Chatbot({ onClose }: Props) {
   }
 
   function toggleAutoTts() {
-    if (!ttsSupported) return;
+    if (!ttsSupported || isConversationMode) return;
 
     const nextValue = !isAutoTtsEnabled;
     setIsAutoTtsEnabled(nextValue);
@@ -328,13 +368,10 @@ export default function Chatbot({ onClose }: Props) {
     }
   }
 
-  function toggleVoiceInput() {
-    if (isLoading) return;
+  function startVoiceInput({ autoSubmit = false }: { autoSubmit?: boolean } = {}) {
+    if (isLoadingRef.current) return;
 
-    if (isListening) {
-      stopVoiceInput();
-      return;
-    }
+    clearConversationRestartTimer();
 
     const SpeechRecognition = getSpeechRecognitionConstructor();
     if (!SpeechRecognition) {
@@ -345,7 +382,11 @@ export default function Chatbot({ onClose }: Props) {
     stopSpeech();
     abortVoiceInput();
 
-    const baseInput = input.trim() ? `${input.trimEnd()} ` : "";
+    const sessionId = voiceSessionIdRef.current + 1;
+    voiceSessionIdRef.current = sessionId;
+    const baseInput = !autoSubmit && input.trim() ? `${input.trimEnd()} ` : "";
+    let latestTranscript = "";
+    let finalTranscript = "";
     const recognition = new SpeechRecognition();
     recognition.lang = "ko-KR";
     recognition.continuous = false;
@@ -353,49 +394,150 @@ export default function Chatbot({ onClose }: Props) {
     recognition.maxAlternatives = 1;
     recognition.onstart = () => {
       setIsListening(true);
-      setVoiceInputStatus("듣는 중이에요. 말하면 입력창에 바로 들어갑니다.");
+      setVoiceInputStatus(
+        autoSubmit
+          ? "대화 모드로 듣는 중이에요. 질문을 말해주세요."
+          : "듣는 중이에요. 말하면 입력창에 바로 들어갑니다."
+      );
     };
     recognition.onresult = (event) => {
-      let finalTranscript = "";
+      let currentFinalTranscript = "";
       let interimTranscript = "";
 
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      for (let index = 0; index < event.results.length; index += 1) {
         const result = event.results[index];
         const transcript = result[0]?.transcript || "";
 
         if (result.isFinal) {
-          finalTranscript += transcript;
+          currentFinalTranscript += transcript;
         } else {
           interimTranscript += transcript;
         }
       }
 
-      setInput(`${baseInput}${finalTranscript}${interimTranscript}`.trimStart());
+      latestTranscript = `${currentFinalTranscript}${interimTranscript}`.trim();
+      if (currentFinalTranscript.trim()) {
+        finalTranscript = currentFinalTranscript.trim();
+      }
+      setInput(`${baseInput}${latestTranscript}`.trimStart());
     };
     recognition.onerror = (event) => {
+      if (voiceSessionIdRef.current !== sessionId) return;
+
       setIsListening(false);
-      setVoiceInputStatus(getSpeechRecognitionErrorMessage(event.error));
+      const message = getSpeechRecognitionErrorMessage(event.error);
+      setVoiceInputStatus(message);
+
+      if (
+        autoSubmit &&
+        conversationModeRef.current &&
+        event.error !== "not-allowed" &&
+        event.error !== "service-not-allowed" &&
+        event.error !== "audio-capture"
+      ) {
+        scheduleConversationListening(1200);
+      }
     };
     recognition.onend = () => {
+      if (voiceSessionIdRef.current !== sessionId) return;
+
       recognitionRef.current = null;
       setIsListening(false);
-      setVoiceInputStatus((current) =>
-        current.startsWith("듣는 중") ? "음성 입력 완료. 확인 후 전송하세요." : current
-      );
+      const voiceText = (finalTranscript || latestTranscript).trim();
+
+      if (autoSubmit && conversationModeRef.current) {
+        if (voiceText) {
+          setVoiceInputStatus("질문을 보내는 중이에요.");
+          void sendMessage(voiceText, { continueConversation: true });
+          return;
+        }
+
+        setVoiceInputStatus("음성이 잘 들리지 않았어요. 다시 듣고 있어요.");
+        scheduleConversationListening(900);
+        return;
+      }
+
+      setVoiceInputStatus((current) => {
+        if (current.startsWith("듣는 중")) return "음성 입력 완료. 확인 후 전송하세요.";
+        return current;
+      });
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setIsListening(false);
+      setVoiceInputStatus("음성 입력을 시작하지 못했어요. 잠시 뒤 다시 눌러주세요.");
+    }
   }
 
-  async function sendMessage(message: string) {
+  function toggleVoiceInput() {
+    if (isLoading) return;
+
+    if (isListening) {
+      stopVoiceInput();
+      return;
+    }
+
+    startVoiceInput();
+  }
+
+  function toggleConversationMode() {
+    if (!ttsSupported || !sttSupported) {
+      setVoiceInputStatus(
+        "대화 모드는 음성 입력과 읽어주기를 모두 지원하는 브라우저에서 쓸 수 있어요."
+      );
+      return;
+    }
+
+    const nextValue = !conversationModeRef.current;
+    conversationModeRef.current = nextValue;
+    setIsConversationMode(nextValue);
+
+    if (!nextValue) {
+      clearConversationRestartTimer();
+      abortVoiceInput();
+      stopSpeech();
+      setVoiceInputStatus("대화 모드가 꺼졌어요.");
+      return;
+    }
+
+    setIsAutoTtsEnabled(false);
+    setInput("");
+    setVoiceInputStatus("대화 모드가 켜졌어요. 질문을 말해주세요.");
+    startVoiceInput({ autoSubmit: true });
+  }
+
+  function clearConversationRestartTimer() {
+    if (conversationRestartTimerRef.current === null) return;
+
+    window.clearTimeout(conversationRestartTimerRef.current);
+    conversationRestartTimerRef.current = null;
+  }
+
+  function scheduleConversationListening(delay = 500) {
+    clearConversationRestartTimer();
+
+    if (!conversationModeRef.current) return;
+
+    conversationRestartTimerRef.current = window.setTimeout(() => {
+      conversationRestartTimerRef.current = null;
+      if (!conversationModeRef.current || isLoadingRef.current) return;
+      startVoiceInput({ autoSubmit: true });
+    }, delay);
+  }
+
+  async function sendMessage(message: string, options: { continueConversation?: boolean } = {}) {
     const text = message.trim();
-    if (!text || isLoading) return;
+    if (!text || isLoadingRef.current) return;
 
     abortVoiceInput();
     stopSpeech();
     setMessages((current) => [...current, { id: nextId(), role: "user", text }]);
     setInput("");
+    isLoadingRef.current = true;
     setIsLoading(true);
 
     try {
@@ -410,22 +552,45 @@ export default function Chatbot({ onClose }: Props) {
       }
 
       const data = (await response.json()) as ChatResponse;
-      setMessages((current) => [...current, { id: nextId(), role: "assistant", content: data }]);
+      const assistantMessageId = nextId();
+      setMessages((current) => [
+        ...current,
+        { id: assistantMessageId, role: "assistant", content: data }
+      ]);
+
+      if (options.continueConversation && conversationModeRef.current) {
+        startSpeech(assistantMessageId, data.message, () => {
+          if (conversationModeRef.current) {
+            scheduleConversationListening();
+          }
+        });
+      }
     } catch {
+      const errorMessageId = nextId();
+      const errorResponse: ChatResponse = {
+        message: "응답을 만드는 중 문제가 생겼어요. 잠시 뒤 다시 질문해 주세요.",
+        chips: ["한밭수목원 휠체어 가능해?", "성심당 갈 수 있어?"],
+        confidence: "low",
+        sources: []
+      };
       setMessages((current) => [
         ...current,
         {
-          id: nextId(),
+          id: errorMessageId,
           role: "assistant",
-          content: {
-            message: "응답을 만드는 중 문제가 생겼어요. 잠시 뒤 다시 질문해 주세요.",
-            chips: ["한밭수목원 휠체어 가능해?", "성심당 갈 수 있어?"],
-            confidence: "low",
-            sources: []
-          }
+          content: errorResponse
         }
       ]);
+
+      if (options.continueConversation && conversationModeRef.current) {
+        startSpeech(errorMessageId, errorResponse.message, () => {
+          if (conversationModeRef.current) {
+            scheduleConversationListening(900);
+          }
+        });
+      }
     } finally {
+      isLoadingRef.current = false;
       setIsLoading(false);
     }
   }
@@ -437,79 +602,42 @@ export default function Chatbot({ onClose }: Props) {
 
   return (
     <section
-      className="shadow-navy-900/25 fixed inset-x-2 top-4 bottom-4 z-[70] grid grid-rows-[82px_minmax(0,1fr)_84px] overflow-hidden rounded-3xl border border-white/70 bg-white shadow-2xl sm:inset-x-auto sm:top-6 sm:right-6 sm:bottom-6 sm:w-[min(calc(100vw-3rem),720px)]"
+      className="shadow-navy-900/25 fixed inset-x-2 top-4 bottom-4 z-[70] grid grid-rows-[auto_minmax(0,1fr)_90px] overflow-hidden rounded-3xl border border-white/70 bg-white shadow-2xl sm:inset-x-auto sm:top-6 sm:right-6 sm:bottom-6 sm:w-[min(calc(100vw-3rem),720px)]"
       aria-label="다유 챗봇"
     >
       <header className="from-navy-700 via-navy-600 to-brand-600 relative overflow-hidden bg-gradient-to-br px-5 py-4 text-white">
         <div className="bg-brand-300/25 pointer-events-none absolute -top-10 -right-10 h-32 w-32 rounded-full blur-2xl" />
         <div className="bg-gold-300/20 pointer-events-none absolute -bottom-12 left-8 h-28 w-28 rounded-full blur-2xl" />
-        <div className="relative flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <DaiyuAvatar size="lg" className="ring-white/30" />
-            <div className="min-w-0">
-              <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold text-white/90 ring-1 ring-white/15">
-                <Sparkles className="h-3 w-3" aria-hidden="true" />
-                다유
-              </span>
-              <strong className="block text-base leading-tight font-extrabold">
-                무장애 여행 상담
-              </strong>
-              <span className="mt-1 flex items-center gap-1.5 text-xs text-white/80">
-                <span className="bg-brand-200 h-1.5 w-1.5 rounded-full" />
-                대전 접근성 정보 확인 중
-              </span>
+        <div className="relative flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <DaiyuAvatar size="lg" variant="full" className="ring-white/30" />
+              <div className="min-w-0">
+                <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold text-white/90 ring-1 ring-white/15">
+                  <Sparkles className="h-3 w-3" aria-hidden="true" />
+                  다유
+                </span>
+                <strong className="block text-base leading-tight font-extrabold">
+                  무장애 여행 상담
+                </strong>
+                <span className="mt-1 flex items-center gap-1.5 text-xs text-white/80">
+                  <span className="bg-brand-200 h-1.5 w-1.5 rounded-full" />
+                  {isConversationMode
+                    ? isListening
+                      ? "대화 모드로 듣는 중"
+                      : "대화 모드 대기 중"
+                    : isAutoTtsEnabled
+                      ? "답변 자동 읽기 켜짐"
+                      : "대전 접근성 정보 확인 중"}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              disabled={!ttsSupported}
-              onClick={toggleAutoTts}
-              aria-pressed={isAutoTtsEnabled}
-              aria-label={isAutoTtsEnabled ? "자동 읽기 끄기" : "자동 읽기 켜기"}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-white/12 px-2.5 text-xs font-extrabold text-white/90 ring-1 ring-white/15 transition-colors hover:bg-white/18 disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {isAutoTtsEnabled ? (
-                <Volume2 className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <VolumeX className="h-4 w-4" aria-hidden="true" />
-              )}
-              <span className="hidden sm:inline">자동 읽기</span>
-              <span>{isAutoTtsEnabled ? "ON" : "OFF"}</span>
-            </button>
-            <label className="sr-only" htmlFor="daiyu-tts-voice">
-              읽어주기 목소리 선택
-            </label>
-            <select
-              id="daiyu-tts-voice"
-              value={displayedVoiceURI}
-              disabled={!ttsSupported || allowedTtsVoices.length === 0}
-              onChange={(event) => {
-                const voiceURI = event.target.value;
-                stopSpeech();
-                setSelectedVoiceURI(voiceURI);
-
-                if (voiceURI) {
-                  window.localStorage.setItem(TTS_VOICE_STORAGE_KEY, voiceURI);
-                } else {
-                  window.localStorage.removeItem(TTS_VOICE_STORAGE_KEY);
-                }
-              }}
-              className="hidden h-9 max-w-[172px] rounded-xl border border-white/20 bg-white/12 px-2 text-xs font-bold text-white transition-colors outline-none hover:bg-white/18 disabled:cursor-not-allowed disabled:opacity-45 sm:block"
-              aria-label="읽어주기 목소리 선택"
-            >
-              {allowedTtsVoices.length === 0 ? (
-                <option value="">선택 가능한 음성 없음</option>
-              ) : null}
-              {allowedTtsVoices.map((voice) => (
-                <option key={voice.voiceURI} value={voice.voiceURI}>
-                  {voice.name}
-                </option>
-              ))}
-            </select>
             <button
               type="button"
               onClick={() => {
+                conversationModeRef.current = false;
+                setIsConversationMode(false);
+                clearConversationRestartTimer();
                 abortVoiceInput();
                 stopSpeech();
                 onClose();
@@ -519,6 +647,115 @@ export default function Chatbot({ onClose }: Props) {
             >
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+            <button
+              type="button"
+              disabled={(!ttsSupported || !sttSupported) && !isConversationMode}
+              onClick={toggleConversationMode}
+              aria-pressed={isConversationMode}
+              aria-label={isConversationMode ? "대화 모드 끄기" : "대화 모드 켜기"}
+              title="마이크로 질문하고 답변은 자동으로 읽어주는 모드"
+              className={`min-h-[58px] rounded-2xl px-3 py-2 text-left ring-1 transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                isConversationMode
+                  ? "bg-gold-300 text-navy-900 hover:bg-gold-200 ring-white/20"
+                  : "bg-white/12 text-white ring-white/15 hover:bg-white/18"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-extrabold">
+                  <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                  대화 모드
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-black ${
+                    isConversationMode ? "bg-navy-900/10" : "bg-white/15"
+                  }`}
+                >
+                  {isConversationMode ? "켜짐" : "꺼짐"}
+                </span>
+              </span>
+              <span
+                className={`mt-1 block text-[11px] leading-snug font-semibold ${
+                  isConversationMode ? "text-navy-800/80" : "text-white/70"
+                }`}
+              >
+                말하면 전송하고 답변을 읽어요
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={!ttsSupported || isConversationMode}
+              onClick={toggleAutoTts}
+              aria-pressed={isAutoTtsEnabled}
+              aria-label={isAutoTtsEnabled ? "답변 자동 읽기 끄기" : "답변 자동 읽기 켜기"}
+              title="새 답변이 도착하면 자동으로 소리 내어 읽는 기능"
+              className={`min-h-[58px] rounded-2xl px-3 py-2 text-left ring-1 transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                isAutoTtsEnabled
+                  ? "text-navy-900 bg-white ring-white/30 hover:bg-white/95"
+                  : "bg-white/12 text-white ring-white/15 hover:bg-white/18"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-extrabold">
+                  {isAutoTtsEnabled ? (
+                    <Volume2 className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <VolumeX className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  답변 자동읽기
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-black ${
+                    isAutoTtsEnabled ? "bg-brand-100 text-brand-800" : "bg-white/15"
+                  }`}
+                >
+                  {isAutoTtsEnabled ? "켜짐" : "꺼짐"}
+                </span>
+              </span>
+              <span
+                className={`mt-1 block text-[11px] leading-snug font-semibold ${
+                  isAutoTtsEnabled ? "text-navy-700/75" : "text-white/70"
+                }`}
+              >
+                답변만 자동으로 읽어요
+              </span>
+            </button>
+            <div className="col-span-2 hidden min-h-[58px] rounded-2xl bg-white/12 px-3 py-2 ring-1 ring-white/15 sm:col-span-1 sm:block">
+              <label
+                className="mb-1 block text-[11px] font-extrabold text-white/75"
+                htmlFor="daiyu-tts-voice"
+              >
+                읽어주기 목소리
+              </label>
+              <select
+                id="daiyu-tts-voice"
+                value={displayedVoiceURI}
+                disabled={!ttsSupported || allowedTtsVoices.length === 0}
+                onChange={(event) => {
+                  const voiceURI = event.target.value;
+                  stopSpeech();
+                  setSelectedVoiceURI(voiceURI);
+
+                  if (voiceURI) {
+                    window.localStorage.setItem(TTS_VOICE_STORAGE_KEY, voiceURI);
+                  } else {
+                    window.localStorage.removeItem(TTS_VOICE_STORAGE_KEY);
+                  }
+                }}
+                className="text-navy-900 h-7 w-[150px] rounded-lg border border-white/20 bg-white/90 px-2 text-xs font-bold outline-none disabled:cursor-not-allowed disabled:opacity-45"
+                aria-label="읽어주기 목소리 선택"
+              >
+                {allowedTtsVoices.length === 0 ? (
+                  <option value="">선택 가능한 음성 없음</option>
+                ) : null}
+                {allowedTtsVoices.map((voice) => (
+                  <option key={voice.voiceURI} value={voice.voiceURI}>
+                    {voice.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </header>
@@ -545,7 +782,7 @@ export default function Chatbot({ onClose }: Props) {
               <AssistantMessage
                 messageId={message.id}
                 response={message.content}
-                disabled={isLoading}
+                disabled={isLoading || isConversationMode}
                 isSpeaking={speakingMessageId === message.id}
                 onChipClick={sendMessage}
                 onSpeak={speakMessage}
@@ -576,39 +813,58 @@ export default function Chatbot({ onClose }: Props) {
           type="text"
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder={isListening ? "듣는 중이에요..." : "메시지를 입력하세요..."}
+          placeholder={
+            isConversationMode
+              ? isLoading
+                ? "답변을 준비하는 중이에요..."
+                : isListening
+                  ? "대화 모드로 듣는 중이에요..."
+                  : "대화 모드가 켜져 있어요"
+              : isListening
+                ? "듣는 중이에요..."
+                : "메시지를 입력하세요..."
+          }
           aria-label="질문 입력"
-          disabled={isLoading}
+          disabled={isLoading || isConversationMode}
           className="focus:border-brand-400 min-w-0 flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-[16px] transition-colors outline-none placeholder:text-gray-400 focus:bg-white disabled:opacity-60"
         />
         <button
           type="button"
-          disabled={isLoading || !sttSupported}
-          onClick={toggleVoiceInput}
-          aria-pressed={isListening}
-          aria-label={isListening ? "음성 입력 중지" : "음성으로 질문 입력"}
-          title={
-            sttSupported
-              ? isListening
+          disabled={isLoading || (!sttSupported && !isConversationMode)}
+          onClick={isConversationMode ? toggleConversationMode : toggleVoiceInput}
+          aria-pressed={isConversationMode || isListening}
+          aria-label={
+            isConversationMode
+              ? "대화 모드 끄기"
+              : isListening
                 ? "음성 입력 중지"
                 : "음성으로 질문 입력"
-              : "이 브라우저는 음성 입력을 지원하지 않아요"
           }
-          className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl border text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
-            isListening
+          title={
+            isConversationMode
+              ? "대화 모드 끄기"
+              : sttSupported
+                ? isListening
+                  ? "음성 입력 중지"
+                  : "음성으로 질문 입력"
+                : "이 브라우저는 음성 입력을 지원하지 않아요"
+          }
+          className={`inline-flex h-12 min-w-[98px] shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-3 text-[12px] font-extrabold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+            isConversationMode || isListening
               ? "border-red-300 bg-red-500 shadow-red-500/20 hover:bg-red-600"
               : "border-brand-200 bg-brand-500 shadow-brand-500/15 hover:bg-brand-600"
           }`}
         >
-          {isListening ? (
+          {isConversationMode || isListening ? (
             <MicOff className="h-5 w-5" aria-hidden="true" />
           ) : (
             <Mic className="h-5 w-5" aria-hidden="true" />
           )}
+          <span>{isConversationMode ? "대화 종료" : isListening ? "듣기 중지" : "음성입력"}</span>
         </button>
         <button
           type="submit"
-          disabled={isLoading || !input.trim()}
+          disabled={isLoading || isConversationMode || !input.trim()}
           className="from-navy-600 to-brand-500 shadow-brand-500/20 grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br text-white shadow-lg transition-all hover:scale-105 disabled:scale-100 disabled:opacity-40"
           aria-label="전송"
         >
@@ -693,9 +949,18 @@ function getPreferredKoreanVoice(voices: SpeechSynthesisVoice[]) {
   );
 }
 
-function DaiyuAvatar({ size = "md", className = "" }: { size?: "md" | "lg"; className?: string }) {
+function DaiyuAvatar({
+  size = "md",
+  variant = "profile",
+  className = ""
+}: {
+  size?: "md" | "lg";
+  variant?: "profile" | "full";
+  className?: string;
+}) {
   const sizeClass = size === "lg" ? "h-14 w-14 rounded-2xl" : "h-11 w-11 rounded-2xl";
   const imageSize = size === "lg" ? 56 : 44;
+  const imageSrc = variant === "full" ? DAIYU_AVATAR_SRC : DAIYU_PROFILE_SRC;
 
   return (
     <span
@@ -703,7 +968,7 @@ function DaiyuAvatar({ size = "md", className = "" }: { size?: "md" | "lg"; clas
       aria-hidden="true"
     >
       <Image
-        src={DAIYU_AVATAR_SRC}
+        src={imageSrc}
         alt=""
         width={imageSize}
         height={imageSize}
@@ -712,6 +977,245 @@ function DaiyuAvatar({ size = "md", className = "" }: { size?: "md" | "lg"; clas
       />
     </span>
   );
+}
+
+function PlaceRecommendationList({
+  places,
+  disabled,
+  onChipClick
+}: {
+  places: PlaceRecommendation[];
+  disabled: boolean;
+  onChipClick: (message: string) => Promise<void>;
+}) {
+  const [selectedTabs, setSelectedTabs] = useState<Record<string, PlaceInfoTab>>({});
+
+  return (
+    <section className="mt-4 border-t border-gray-100 pt-4" aria-label="추천 후보">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <strong className="block text-[14px] font-extrabold text-gray-950">추천 후보</strong>
+          <span className="mt-0.5 block text-[12px] font-semibold text-gray-500">
+            관광정보와 접근성을 나눠서 확인해요
+          </span>
+        </div>
+        <span className="bg-brand-50 text-brand-700 ring-brand-100 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1">
+          {places.length}곳
+        </span>
+      </div>
+      <div className="grid gap-3">
+        {places.map((place, index) => {
+          const placeKey = `${place.source || place.title}-${index}`;
+          const activeTab = selectedTabs[placeKey] || getDefaultPlaceTab(place);
+
+          return (
+            <article
+              key={placeKey}
+              className="rounded-2xl border border-gray-200 bg-gray-50/80 p-3.5 shadow-sm"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-brand-700 mb-1 block text-[11px] font-extrabold">
+                    후보 {index + 1}
+                    {place.category ? ` · ${place.category}` : ""}
+                  </span>
+                  <h4 className="text-[16px] leading-snug font-extrabold text-gray-950">
+                    {place.title}
+                  </h4>
+                </div>
+                {place.address || place.latitude ? (
+                  <a
+                    href={buildMapSearchUrl(place)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="border-brand-200 text-brand-700 hover:bg-brand-50 inline-flex min-h-9 items-center gap-1.5 rounded-full border bg-white px-2.5 py-1.5 text-[12px] font-extrabold transition-colors"
+                  >
+                    <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                    위치 보기
+                  </a>
+                ) : null}
+              </div>
+
+              <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-gray-700">
+                <p>
+                  <strong className="font-extrabold text-gray-900">한눈에 보기</strong>{" "}
+                  {place.activity}
+                </p>
+                {place.address || place.tel ? (
+                  <div className="flex flex-wrap gap-1.5 text-[12px] font-bold text-gray-600">
+                    {place.address ? (
+                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-gray-100">
+                        위치 {place.address}
+                      </span>
+                    ) : null}
+                    {place.tel ? (
+                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-gray-100">
+                        문의 {place.tel}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
+              <div
+                className="mt-3 grid grid-cols-3 gap-1.5"
+                role="tablist"
+                aria-label={`${place.title} 정보 보기`}
+              >
+                {(["tour", "accessibility", "check"] as PlaceInfoTab[]).map((tab) => {
+                  const isActive = activeTab === tab;
+                  return (
+                    <button
+                      type="button"
+                      key={tab}
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() =>
+                        setSelectedTabs((current) => ({
+                          ...current,
+                          [placeKey]: tab
+                        }))
+                      }
+                      className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[12px] font-extrabold transition-colors ${
+                        isActive
+                          ? "bg-brand-600 text-white shadow-sm"
+                          : "hover:bg-brand-50 hover:text-brand-700 bg-white text-gray-600 ring-1 ring-gray-100"
+                      }`}
+                    >
+                      {tab === "tour" ? <Info className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+                      {tab === "accessibility" ? (
+                        <Accessibility className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : null}
+                      {tab === "check" ? (
+                        <ClipboardCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : null}
+                      {getPlaceTabLabel(tab)}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-3 border-t border-gray-200 pt-3">
+                <PlaceTabContent place={place} tab={activeTab} />
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {place.followUps.slice(0, 2).map((question) => (
+                  <button
+                    type="button"
+                    key={question}
+                    disabled={disabled}
+                    onClick={() => void onChipClick(question)}
+                    className="border-brand-200 text-brand-700 hover:border-brand-400 hover:bg-brand-50 rounded-full border bg-white px-3 py-2 text-left text-[12px] leading-snug font-extrabold transition-colors disabled:opacity-50"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+
+              {place.source ? (
+                <span className="mt-2 block truncate text-[11px] font-semibold text-gray-400">
+                  출처: {place.source}
+                </span>
+              ) : null}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function PlaceTabContent({ place, tab }: { place: PlaceRecommendation; tab: PlaceInfoTab }) {
+  if (tab === "tour") {
+    const details = place.tourDetails || [];
+    return (
+      <div className="text-[13px] leading-relaxed text-gray-700">
+        <strong className="block text-[12px] font-extrabold text-gray-950">관광정보</strong>
+        {details.length ? (
+          <ul className="mt-2 grid gap-1.5">
+            {details.map((item) => (
+              <li key={item} className="flex gap-2">
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1.5 text-gray-500">
+            상세 운영정보는 아직 부족하지만, 위의 한눈에 보기 내용을 기준으로 방문 목적을 잡아볼 수
+            있어요.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (tab === "accessibility") {
+    return (
+      <div className="text-[13px] leading-relaxed text-gray-700">
+        <strong className="block text-[12px] font-extrabold text-gray-950">접근성</strong>
+        {place.accessibility.length ? (
+          <ul className="mt-2 grid gap-1.5">
+            {place.accessibility.map((item) => (
+              <li key={item} className="flex gap-2">
+                <span className="bg-brand-400 mt-2 h-1.5 w-1.5 shrink-0 rounded-full" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1.5 text-gray-500">
+            접근성 세부 항목은 아직 부족해요. 방문 전 공식 안내처로 한 번 더 확인하는 게 좋아요.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-[13px] leading-relaxed text-gray-700">
+      <strong className="block text-[12px] font-extrabold text-gray-950">방문 전 확인</strong>
+      <ul className="mt-2 grid gap-1.5">
+        {getPlaceCheckItems(place).map((item) => (
+          <li key={item} className="flex gap-2">
+            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-400" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function getDefaultPlaceTab(place: PlaceRecommendation): PlaceInfoTab {
+  if (place.tourDetails?.length) return "tour";
+  if (place.accessibility.length) return "accessibility";
+  return "check";
+}
+
+function getPlaceTabLabel(tab: PlaceInfoTab) {
+  if (tab === "tour") return "관광";
+  if (tab === "accessibility") return "접근성";
+  return "확인";
+}
+
+function getPlaceCheckItems(place: PlaceRecommendation) {
+  return [
+    "운영시간, 휴무일, 편의시설은 현장에서 바뀔 수 있어요.",
+    place.tel ? `방문 전 문의: ${place.tel}` : "방문 전 공식 홈페이지나 안내처 확인을 권장해요.",
+    "주차장, 출입구, 화장실 위치는 도착 전 지도와 현장 안내를 같이 확인해 주세요."
+  ];
+}
+
+function buildMapSearchUrl(place: PlaceRecommendation) {
+  if (place.latitude && place.longitude) {
+    return `https://map.naver.com/p/search/${encodeURIComponent(
+      `${place.latitude},${place.longitude}`
+    )}`;
+  }
+
+  return `https://map.naver.com/p/search/${encodeURIComponent(place.address || place.title)}`;
 }
 
 function AssistantMessage({
@@ -740,18 +1244,15 @@ function AssistantMessage({
     <div className="flex items-start gap-3">
       <DaiyuAvatar className="mt-1" />
       <div className="min-w-0 flex-1 rounded-[1.4rem] rounded-bl-md border border-gray-200 bg-white px-4 py-4 text-sm leading-relaxed text-gray-800 shadow-sm shadow-gray-200/60 sm:px-5 sm:py-5">
-        {showEvidenceBadge ? (
-          <span
-            className={`mb-3 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-extrabold ${confidenceTone[response.confidence]}`}
-          >
-            <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-            {confidenceLabels[response.confidence]}
-          </span>
-        ) : null}
-        <p className="text-[17px] leading-8 font-semibold whitespace-pre-line text-gray-950 sm:text-[18px] sm:leading-9">
-          {response.message}
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {showEvidenceBadge ? (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-extrabold ${confidenceTone[response.confidence]}`}
+            >
+              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+              {confidenceLabels[response.confidence]}
+            </span>
+          ) : null}
           <button
             type="button"
             disabled={!ttsSupported}
@@ -762,22 +1263,33 @@ function AssistantMessage({
               }
               onSpeak(messageId, response.message);
             }}
-            className="border-brand-200 text-brand-700 hover:border-brand-400 hover:bg-brand-50 inline-flex min-h-10 items-center gap-2 rounded-full border bg-white px-3 py-2 text-[13px] font-extrabold transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+            className="border-brand-200 text-brand-700 hover:border-brand-400 hover:bg-brand-50 ml-auto inline-flex min-h-8 items-center gap-1.5 rounded-full border bg-white px-2.5 py-1.5 text-[12px] font-extrabold transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
             aria-label={isSpeaking ? "답변 읽기 중지" : "답변 읽어주기"}
           >
             {isSpeaking ? (
-              <VolumeX className="h-4 w-4" aria-hidden="true" />
+              <VolumeX className="h-3.5 w-3.5" aria-hidden="true" />
             ) : (
-              <Volume2 className="h-4 w-4" aria-hidden="true" />
+              <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
             )}
-            {isSpeaking ? "읽기 중지" : "읽어주기"}
+            {isSpeaking ? "중지" : "읽기"}
           </button>
-          {!ttsSupported ? (
-            <span className="text-[12px] font-semibold text-gray-400">
-              이 브라우저는 읽어주기를 지원하지 않아요.
-            </span>
-          ) : null}
         </div>
+        <p className="text-[15px] leading-7 font-semibold whitespace-pre-line text-gray-950 sm:text-[16px] sm:leading-7">
+          {response.message}
+        </p>
+        {!ttsSupported ? (
+          <span className="mt-2 block text-[12px] font-semibold text-gray-400">
+            이 브라우저는 읽어주기를 지원하지 않아요.
+          </span>
+        ) : null}
+
+        {response.places?.length ? (
+          <PlaceRecommendationList
+            places={response.places}
+            disabled={disabled}
+            onChipClick={onChipClick}
+          />
+        ) : null}
 
         {response.card ? (
           <details className="border-brand-100 bg-brand-50/70 mt-4 rounded-2xl border px-3.5 py-3 text-gray-700">

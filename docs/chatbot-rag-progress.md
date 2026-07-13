@@ -299,108 +299,108 @@ provider, service, operation, contentid, contenttypeid, source
 
 아래 목록은 현재 Supabase `chatbot.documents`에 저장된 100개 문서의 `title`, `source`, `category`다. `source`의 마지막 숫자가 한국관광공사 TourAPI의 `contentid`다.
 
-| 번호 | title | category | source |
-|---:|---|---|---|
-| 1 | 3.8민주의거기념관 | 관광지 | tourapi:KorWithService2:3455349 |
-| 2 | 경동오징어국수 | 음식점 | tourapi:KorWithService2:2580294 |
-| 3 | 계룡산 수통골 | 레포츠 | tourapi:KorWithService2:2407314 |
-| 4 | 고치소사마 | 음식점 | tourapi:KorWithService2:2912798 |
-| 5 | 국립대전숲체원 | 관광지 | tourapi:KorWithService2:2662681 |
-| 6 | 국립대전현충원 보훈둘레길 | 관광지 | tourapi:KorWithService2:126003 |
-| 7 | 굿모닝레지던스호텔휴 | 숙박 | tourapi:KorWithService2:1932079 |
-| 8 | 그린베이커리 | 음식점 | tourapi:KorWithService2:2912871 |
-| 9 | 금강로하스대청공원 | 관광지 | tourapi:KorWithService2:2407303 |
-| 10 | 금강로하스산호빛공원 | 관광지 | tourapi:KorWithService2:2913032 |
-| 11 | 길치문화공원 | 관광지 | tourapi:KorWithService2:1622646 |
-| 12 | 꿀잼도시 대전홍보관 | 관광지 | tourapi:KorWithService2:3454325 |
-| 13 | 노크노크 | 음식점 | tourapi:KorWithService2:3452550 |
-| 14 | 대감댁 왕뼈 해장국 유성점 | 음식점 | tourapi:KorWithService2:2913352 |
-| 15 | 대나무통밥맛정식 | 음식점 | tourapi:KorWithService2:2915019 |
-| 16 | 대덕문예회관 | 문화시설 | tourapi:KorWithService2:1747497 |
-| 17 | 대성콩국수 | 음식점 | tourapi:KorWithService2:2899585 |
-| 18 | 대전 가수원도서관 | 문화시설 | tourapi:KorWithService2:130802 |
-| 19 | 대전 별리달리돈까스 | 음식점 | tourapi:KorWithService2:3447047 |
-| 20 | 대전 중구문화원 | 문화시설 | tourapi:KorWithService2:129973 |
-| 21 | 대전 중앙시장 | 쇼핑 | tourapi:KorWithService2:1434477 |
-| 22 | 대전교통문화연수원 | 관광지 | tourapi:KorWithService2:1089992 |
-| 23 | 대전근로자종합복지회관 | 레포츠 | tourapi:KorWithService2:131149 |
-| 24 | 대전대학교박물관 | 문화시설 | tourapi:KorWithService2:129836 |
-| 25 | 대전무형유산전수교육관 | 문화시설 | tourapi:KorWithService2:2733533 |
-| 26 | 대전별서 | 숙박 | tourapi:KorWithService2:3533130 |
-| 27 | 대전서구문화원 | 문화시설 | tourapi:KorWithService2:130197 |
-| 28 | 대전선사박물관 | 문화시설 | tourapi:KorWithService2:1066804 |
-| 29 | 대전솔로몬로파크 | 관광지 | tourapi:KorWithService2:741957 |
-| 30 | 대전시립박물관 | 문화시설 | tourapi:KorWithService2:1907589 |
-| 31 | 대전어린이회관 | 문화시설 | tourapi:KorWithService2:1125312 |
-| 32 | 대전엑스포시민광장 | 관광지 | tourapi:KorWithService2:2738037 |
-| 33 | 대전역 동광장 | 관광지 | tourapi:KorWithService2:2775503 |
-| 34 | 대전전통나래관 | 문화시설 | tourapi:KorWithService2:2605913 |
-| 35 | 대전컨벤션센터(DCC) | 문화시설 | tourapi:KorWithService2:644085 |
-| 36 | 대전트래블라운지 | 관광지 | tourapi:KorWithService2:2722927 |
-| 37 | 대전한밭도서관 | 문화시설 | tourapi:KorWithService2:130760 |
-| 38 | 대청댐 | 관광지 | tourapi:KorWithService2:127663 |
-| 39 | 대청호자연생태관 | 문화시설 | tourapi:KorWithService2:736422 |
-| 40 | 대흥동 문화예술의거리 | 관광지 | tourapi:KorWithService2:1909639 |
-| 41 | 도마큰시장 | 쇼핑 | tourapi:KorWithService2:2758334 |
-| 42 | 동화울수변공원 | 관광지 | tourapi:KorWithService2:2789662 |
-| 43 | 두두당 | 음식점 | tourapi:KorWithService2:2899804 |
-| 44 | 둔산전자타운 | 쇼핑 | tourapi:KorWithService2:1623725 |
-| 45 | 라꼬레 | 음식점 | tourapi:KorWithService2:2912957 |
-| 46 | 라빈고양이카페 | 음식점 | tourapi:KorWithService2:2735322 |
-| 47 | 라운지티 대전 | 음식점 | tourapi:KorWithService2:3446097 |
-| 48 | 롯데백화점 (대전점) | 쇼핑 | tourapi:KorWithService2:132661 |
-| 49 | 롯데시티호텔 대전 | 숙박 | tourapi:KorWithService2:1933910 |
-| 50 | 리원 | 음식점 | tourapi:KorWithService2:1925335 |
-| 51 | 리코타코 | 음식점 | tourapi:KorWithService2:2913097 |
-| 52 | 만나 | 음식점 | tourapi:KorWithService2:690413 |
-| 53 | 무양도원 | 음식점 | tourapi:KorWithService2:2912079 |
-| 54 | 문창전통시장 | 쇼핑 | tourapi:KorWithService2:2746186 |
-| 55 | 발명교육센터 창의발명체험관 | 관광지 | tourapi:KorWithService2:1907645 |
-| 56 | 보라매공원(대전) | 관광지 | tourapi:KorWithService2:2758666 |
-| 57 | 보문산 행복 숲 둘레길 | 관광지 | tourapi:KorWithService2:127542 |
-| 58 | 보물섬수산 | 음식점 | tourapi:KorWithService2:2914349 |
-| 59 | 부사노바 | 숙박 | tourapi:KorWithService2:3533155 |
-| 60 | 부추해물칼국수 | 음식점 | tourapi:KorWithService2:2581103 |
-| 61 | 비빔가 | 음식점 | tourapi:KorWithService2:1923929 |
-| 62 | 뿌리공원 | 관광지 | tourapi:KorWithService2:126838 |
-| 63 | 상소오토캠핑장 | 레포츠 | tourapi:KorWithService2:2727458 |
-| 64 | 석봉도서관 | 문화시설 | tourapi:KorWithService2:3443300 |
-| 65 | 송강전통시장 | 쇼핑 | tourapi:KorWithService2:2746192 |
-| 66 | 스카이로드 | 관광지 | tourapi:KorWithService2:1964622 |
-| 67 | 신탄진장 (3, 8일) | 쇼핑 | tourapi:KorWithService2:1128720 |
-| 68 | 아리랑옛날순대 | 음식점 | tourapi:KorWithService2:2913192 |
-| 69 | 어반더쉐프 | 음식점 | tourapi:KorWithService2:3457340 |
-| 70 | 어선재 | 음식점 | tourapi:KorWithService2:2913435 |
-| 71 | 여진불교미술관 | 문화시설 | tourapi:KorWithService2:1066785 |
-| 72 | 온천칼국수 | 음식점 | tourapi:KorWithService2:2734919 |
-| 73 | 완도수산 | 음식점 | tourapi:KorWithService2:1924026 |
-| 74 | 우암사적공원 | 관광지 | tourapi:KorWithService2:945477 |
-| 75 | 유성 관광특구 | 관광지 | tourapi:KorWithService2:1958042 |
-| 76 | 유성장(4, 9일) | 쇼핑 | tourapi:KorWithService2:132259 |
-| 77 | 으능정이문화의거리 | 쇼핑 | tourapi:KorWithService2:132505 |
-| 78 | 은구비공원 | 관광지 | tourapi:KorWithService2:2775510 |
-| 79 | 을미기공원 | 관광지 | tourapi:KorWithService2:2913058 |
-| 80 | 이응노 미술관 | 문화시설 | tourapi:KorWithService2:590097 |
-| 81 | 인쇄거리 | 관광지 | tourapi:KorWithService2:1623668 |
-| 82 | 장동산림욕장 | 관광지 | tourapi:KorWithService2:705678 |
-| 83 | 정일품두손두부 | 음식점 | tourapi:KorWithService2:3444834 |
-| 84 | 중리전통시장 | 쇼핑 | tourapi:KorWithService2:1128853 |
-| 85 | 지질박물관 | 문화시설 | tourapi:KorWithService2:130550 |
-| 86 | 진신 | 음식점 | tourapi:KorWithService2:2915644 |
-| 87 | 천연기념물센터 | 문화시설 | tourapi:KorWithService2:1906578 |
-| 88 | 추동인공생태습지 | 관광지 | tourapi:KorWithService2:1125505 |
-| 89 | 충남대학교 정심화국제문화회관 | 문화시설 | tourapi:KorWithService2:1167117 |
-| 90 | 케이인하우스 | 음식점 | tourapi:KorWithService2:2734912 |
-| 91 | 태평전통시장 | 쇼핑 | tourapi:KorWithService2:1309877 |
-| 92 | 펠리쓰 | 음식점 | tourapi:KorWithService2:2915610 |
-| 93 | 피터커피 | 음식점 | tourapi:KorWithService2:3452654 |
-| 94 | 한남대학교 성지관 | 문화시설 | tourapi:KorWithService2:129723 |
-| 95 | 한민시장 | 쇼핑 | tourapi:KorWithService2:2761477 |
-| 96 | 한밭교육박물관 | 문화시설 | tourapi:KorWithService2:130420 |
-| 97 | 한밭종합운동장 | 레포츠 | tourapi:KorWithService2:1353752 |
-| 98 | 호텔 인터시티 | 숙박 | tourapi:KorWithService2:143023 |
-| 99 | 호텔ICC | 숙박 | tourapi:KorWithService2:2948479 |
-| 100 | 호텔스카이파크 대전1호점 | 숙박 | tourapi:KorWithService2:2770452 |
+| 번호 | title                         | category | source                          |
+| ---: | ----------------------------- | -------- | ------------------------------- |
+|    1 | 3.8민주의거기념관             | 관광지   | tourapi:KorWithService2:3455349 |
+|    2 | 경동오징어국수                | 음식점   | tourapi:KorWithService2:2580294 |
+|    3 | 계룡산 수통골                 | 레포츠   | tourapi:KorWithService2:2407314 |
+|    4 | 고치소사마                    | 음식점   | tourapi:KorWithService2:2912798 |
+|    5 | 국립대전숲체원                | 관광지   | tourapi:KorWithService2:2662681 |
+|    6 | 국립대전현충원 보훈둘레길     | 관광지   | tourapi:KorWithService2:126003  |
+|    7 | 굿모닝레지던스호텔휴          | 숙박     | tourapi:KorWithService2:1932079 |
+|    8 | 그린베이커리                  | 음식점   | tourapi:KorWithService2:2912871 |
+|    9 | 금강로하스대청공원            | 관광지   | tourapi:KorWithService2:2407303 |
+|   10 | 금강로하스산호빛공원          | 관광지   | tourapi:KorWithService2:2913032 |
+|   11 | 길치문화공원                  | 관광지   | tourapi:KorWithService2:1622646 |
+|   12 | 꿀잼도시 대전홍보관           | 관광지   | tourapi:KorWithService2:3454325 |
+|   13 | 노크노크                      | 음식점   | tourapi:KorWithService2:3452550 |
+|   14 | 대감댁 왕뼈 해장국 유성점     | 음식점   | tourapi:KorWithService2:2913352 |
+|   15 | 대나무통밥맛정식              | 음식점   | tourapi:KorWithService2:2915019 |
+|   16 | 대덕문예회관                  | 문화시설 | tourapi:KorWithService2:1747497 |
+|   17 | 대성콩국수                    | 음식점   | tourapi:KorWithService2:2899585 |
+|   18 | 대전 가수원도서관             | 문화시설 | tourapi:KorWithService2:130802  |
+|   19 | 대전 별리달리돈까스           | 음식점   | tourapi:KorWithService2:3447047 |
+|   20 | 대전 중구문화원               | 문화시설 | tourapi:KorWithService2:129973  |
+|   21 | 대전 중앙시장                 | 쇼핑     | tourapi:KorWithService2:1434477 |
+|   22 | 대전교통문화연수원            | 관광지   | tourapi:KorWithService2:1089992 |
+|   23 | 대전근로자종합복지회관        | 레포츠   | tourapi:KorWithService2:131149  |
+|   24 | 대전대학교박물관              | 문화시설 | tourapi:KorWithService2:129836  |
+|   25 | 대전무형유산전수교육관        | 문화시설 | tourapi:KorWithService2:2733533 |
+|   26 | 대전별서                      | 숙박     | tourapi:KorWithService2:3533130 |
+|   27 | 대전서구문화원                | 문화시설 | tourapi:KorWithService2:130197  |
+|   28 | 대전선사박물관                | 문화시설 | tourapi:KorWithService2:1066804 |
+|   29 | 대전솔로몬로파크              | 관광지   | tourapi:KorWithService2:741957  |
+|   30 | 대전시립박물관                | 문화시설 | tourapi:KorWithService2:1907589 |
+|   31 | 대전어린이회관                | 문화시설 | tourapi:KorWithService2:1125312 |
+|   32 | 대전엑스포시민광장            | 관광지   | tourapi:KorWithService2:2738037 |
+|   33 | 대전역 동광장                 | 관광지   | tourapi:KorWithService2:2775503 |
+|   34 | 대전전통나래관                | 문화시설 | tourapi:KorWithService2:2605913 |
+|   35 | 대전컨벤션센터(DCC)           | 문화시설 | tourapi:KorWithService2:644085  |
+|   36 | 대전트래블라운지              | 관광지   | tourapi:KorWithService2:2722927 |
+|   37 | 대전한밭도서관                | 문화시설 | tourapi:KorWithService2:130760  |
+|   38 | 대청댐                        | 관광지   | tourapi:KorWithService2:127663  |
+|   39 | 대청호자연생태관              | 문화시설 | tourapi:KorWithService2:736422  |
+|   40 | 대흥동 문화예술의거리         | 관광지   | tourapi:KorWithService2:1909639 |
+|   41 | 도마큰시장                    | 쇼핑     | tourapi:KorWithService2:2758334 |
+|   42 | 동화울수변공원                | 관광지   | tourapi:KorWithService2:2789662 |
+|   43 | 두두당                        | 음식점   | tourapi:KorWithService2:2899804 |
+|   44 | 둔산전자타운                  | 쇼핑     | tourapi:KorWithService2:1623725 |
+|   45 | 라꼬레                        | 음식점   | tourapi:KorWithService2:2912957 |
+|   46 | 라빈고양이카페                | 음식점   | tourapi:KorWithService2:2735322 |
+|   47 | 라운지티 대전                 | 음식점   | tourapi:KorWithService2:3446097 |
+|   48 | 롯데백화점 (대전점)           | 쇼핑     | tourapi:KorWithService2:132661  |
+|   49 | 롯데시티호텔 대전             | 숙박     | tourapi:KorWithService2:1933910 |
+|   50 | 리원                          | 음식점   | tourapi:KorWithService2:1925335 |
+|   51 | 리코타코                      | 음식점   | tourapi:KorWithService2:2913097 |
+|   52 | 만나                          | 음식점   | tourapi:KorWithService2:690413  |
+|   53 | 무양도원                      | 음식점   | tourapi:KorWithService2:2912079 |
+|   54 | 문창전통시장                  | 쇼핑     | tourapi:KorWithService2:2746186 |
+|   55 | 발명교육센터 창의발명체험관   | 관광지   | tourapi:KorWithService2:1907645 |
+|   56 | 보라매공원(대전)              | 관광지   | tourapi:KorWithService2:2758666 |
+|   57 | 보문산 행복 숲 둘레길         | 관광지   | tourapi:KorWithService2:127542  |
+|   58 | 보물섬수산                    | 음식점   | tourapi:KorWithService2:2914349 |
+|   59 | 부사노바                      | 숙박     | tourapi:KorWithService2:3533155 |
+|   60 | 부추해물칼국수                | 음식점   | tourapi:KorWithService2:2581103 |
+|   61 | 비빔가                        | 음식점   | tourapi:KorWithService2:1923929 |
+|   62 | 뿌리공원                      | 관광지   | tourapi:KorWithService2:126838  |
+|   63 | 상소오토캠핑장                | 레포츠   | tourapi:KorWithService2:2727458 |
+|   64 | 석봉도서관                    | 문화시설 | tourapi:KorWithService2:3443300 |
+|   65 | 송강전통시장                  | 쇼핑     | tourapi:KorWithService2:2746192 |
+|   66 | 스카이로드                    | 관광지   | tourapi:KorWithService2:1964622 |
+|   67 | 신탄진장 (3, 8일)             | 쇼핑     | tourapi:KorWithService2:1128720 |
+|   68 | 아리랑옛날순대                | 음식점   | tourapi:KorWithService2:2913192 |
+|   69 | 어반더쉐프                    | 음식점   | tourapi:KorWithService2:3457340 |
+|   70 | 어선재                        | 음식점   | tourapi:KorWithService2:2913435 |
+|   71 | 여진불교미술관                | 문화시설 | tourapi:KorWithService2:1066785 |
+|   72 | 온천칼국수                    | 음식점   | tourapi:KorWithService2:2734919 |
+|   73 | 완도수산                      | 음식점   | tourapi:KorWithService2:1924026 |
+|   74 | 우암사적공원                  | 관광지   | tourapi:KorWithService2:945477  |
+|   75 | 유성 관광특구                 | 관광지   | tourapi:KorWithService2:1958042 |
+|   76 | 유성장(4, 9일)                | 쇼핑     | tourapi:KorWithService2:132259  |
+|   77 | 으능정이문화의거리            | 쇼핑     | tourapi:KorWithService2:132505  |
+|   78 | 은구비공원                    | 관광지   | tourapi:KorWithService2:2775510 |
+|   79 | 을미기공원                    | 관광지   | tourapi:KorWithService2:2913058 |
+|   80 | 이응노 미술관                 | 문화시설 | tourapi:KorWithService2:590097  |
+|   81 | 인쇄거리                      | 관광지   | tourapi:KorWithService2:1623668 |
+|   82 | 장동산림욕장                  | 관광지   | tourapi:KorWithService2:705678  |
+|   83 | 정일품두손두부                | 음식점   | tourapi:KorWithService2:3444834 |
+|   84 | 중리전통시장                  | 쇼핑     | tourapi:KorWithService2:1128853 |
+|   85 | 지질박물관                    | 문화시설 | tourapi:KorWithService2:130550  |
+|   86 | 진신                          | 음식점   | tourapi:KorWithService2:2915644 |
+|   87 | 천연기념물센터                | 문화시설 | tourapi:KorWithService2:1906578 |
+|   88 | 추동인공생태습지              | 관광지   | tourapi:KorWithService2:1125505 |
+|   89 | 충남대학교 정심화국제문화회관 | 문화시설 | tourapi:KorWithService2:1167117 |
+|   90 | 케이인하우스                  | 음식점   | tourapi:KorWithService2:2734912 |
+|   91 | 태평전통시장                  | 쇼핑     | tourapi:KorWithService2:1309877 |
+|   92 | 펠리쓰                        | 음식점   | tourapi:KorWithService2:2915610 |
+|   93 | 피터커피                      | 음식점   | tourapi:KorWithService2:3452654 |
+|   94 | 한남대학교 성지관             | 문화시설 | tourapi:KorWithService2:129723  |
+|   95 | 한민시장                      | 쇼핑     | tourapi:KorWithService2:2761477 |
+|   96 | 한밭교육박물관                | 문화시설 | tourapi:KorWithService2:130420  |
+|   97 | 한밭종합운동장                | 레포츠   | tourapi:KorWithService2:1353752 |
+|   98 | 호텔 인터시티                 | 숙박     | tourapi:KorWithService2:143023  |
+|   99 | 호텔ICC                       | 숙박     | tourapi:KorWithService2:2948479 |
+|  100 | 호텔스카이파크 대전1호점      | 숙박     | tourapi:KorWithService2:2770452 |
 
 수집한 데이터는 다음처럼 정제된다.
 
@@ -743,3 +743,111 @@ JS 랭킹 fallback 유지
 ```
 
 주의: 추가 데이터에 embedding을 채우는 순간 OpenAI embedding API 비용이 발생한다. 모델은 저가 기본안인 `text-embedding-3-small`을 사용한다.
+
+## 10. 2026-06-23 데이터 확장 및 답변 품질 보강
+
+### 10.1 500개 적재 시도 결과
+
+TourAPI 대전 지역 무장애 여행 데이터를 500개까지 늘리는 방향으로 스크립트 기본값을 조정했다.
+
+```text
+scripts/chatbot/import-tourapi-barrier-free.mjs 기본 limit: 500
+scripts/chatbot/embed-chunks-openai.mjs 기본 limit: 500
+npm chatbot embedding 명령 limit: 500
+챗봇 keyword fallback 후보 limit: 500
+```
+
+실제 실행 결과, 한국관광공사 TourAPI `areaCode=3` 조건에서 현재 확보 가능한 대전 무장애 콘텐츠는 106개였다.
+
+```text
+요청 목표: 500개
+실제 upsert: 106개
+embedding 신규 저장: 11개
+embedding 미저장 chunk: 0개
+```
+
+따라서 현재 Supabase에는 TourAPI 기준으로 가져올 수 있는 대전 무장애 여행 데이터가 전부 반영된 상태로 본다. 500개 이상으로 늘리려면 같은 API만으로는 부족하고, 다른 공공데이터 또는 자체 가공 데이터를 추가해야 한다.
+
+### 10.2 답변 품질 보강
+
+장소 추천 답변은 접근성 정보만 나열하지 않고, 사용자가 해당 장소에 가면 무엇을 할 수 있는지도 같이 말하도록 보강했다.
+
+현재 답변 원칙은 다음과 같다.
+
+```text
+장소 추천은 기본 2~3곳 중심
+각 장소마다 활동, 접근성 근거, 방문 전 확인사항 포함
+사용자의 접근성 조건과 직접 관련된 근거를 우선 설명
+근거 없는 체험 프로그램이나 편의시설은 생성하지 않음
+```
+
+테스트 질문:
+
+```text
+시각장애인인데 대전 여행 어디 가면 좋아?
+```
+
+확인 결과, 답변은 대전트래블라운지, 대전 엑스포 아쿠아리움, 대전교통문화연수원처럼 2~3곳 중심으로 추천하고, 여행 정보 확인, 해양 생물 관람, 전시/자료 관람 같은 활동 설명과 점자블록, 안내요원 등 접근성 근거를 함께 제시한다.
+
+## 11. 2026-06-23 대전 OpenAPI 추가 적재
+
+TourAPI만으로는 대전 무장애 데이터가 106개 수준에서 멈추므로, 챗봇 답변 근거를 넓히기 위해 대전 공공 OpenAPI 3종을 추가했다.
+
+추가한 데이터는 다음과 같다.
+
+```text
+대전교통공사_공중화장실정보 조회 서비스: 22건
+대전광역시 서구_장애인주차장 위치정보 현황: 125건
+대전광역시 문화관광(관광지): 142건
+합계: 289건
+```
+
+현재 `chatbot.chunks` 기준 전체 CSV 요약은 다음 파일에 생성했다.
+
+```text
+outputs/chatbot-db-data-summary.csv
+CSV 행 수: 414개 데이터 행 + 헤더 1줄
+```
+
+CSV에는 다음 정보가 들어 있다.
+
+```text
+source_type
+provider
+title
+category
+address
+latitude / longitude
+tel
+tags
+source
+document_id / chunk_id
+content
+imported_at / updated_at
+```
+
+새 데이터는 기존 `chatbot.documents`, `chatbot.chunks` 테이블에 같은 방식으로 들어간다. 별도 테이블을 만들지 않고 `metadata.source_type`으로 구분한다.
+
+```text
+public_toilet
+accessible_parking
+culture_tour
+```
+
+추가 데이터 289건에는 `text-embedding-3-small` 임베딩을 생성해 `chunks.embedding`에 저장했다. 따라서 챗봇은 질문 분류 후 pgvector 검색 또는 keyword fallback으로 새 데이터를 함께 사용할 수 있다.
+
+대표 확인 질문:
+
+```text
+대전역 장애인 화장실 있어?
+서구에서 장애인 주차장 어디 있어?
+대전 문화관광지 추천해줘
+```
+
+확인 결과:
+
+```text
+대전역 장애인 화장실 질문은 대전교통공사 공중화장실 데이터와 TourAPI 접근성 데이터를 함께 사용한다.
+서구 장애인주차장 질문은 서구 장애인주차장 위치 데이터가 우선 근거로 잡힌다.
+문화관광지 추천 질문은 대전광역시 문화관광 관광지 데이터가 출처로 표시된다.
+```
