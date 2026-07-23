@@ -26,7 +26,7 @@ export interface MapMarker {
   lat: number;
   lng: number;
   color: string;
-  shape?: "pin" | "dot";
+  shape?: "pin" | "dot" | "heart";
 }
 
 export interface TooltipInfo {
@@ -57,6 +57,22 @@ function renderDot(el: HTMLDivElement, color: string, selected: boolean) {
   const size = selected ? 20 : 14;
   el.innerHTML = `
     <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.28);${selected ? `outline:3px solid ${color}55;outline-offset:1px;` : ""}cursor:pointer;transition:all 0.15s;"></div>`;
+}
+
+function renderHeart(el: HTMLDivElement, color: string, selected: boolean) {
+  const size = selected ? 26 : 20;
+  el.innerHTML = `
+    <div style="cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));${selected ? "transform:scale(1.15);" : ""}transition:transform 0.15s;">
+      <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="1.5">
+        <path d="M12 21s-6.7-4.35-9.3-8.3C1.1 10.2 1.5 6.6 4.4 4.9c2.2-1.3 4.9-.7 6.4 1.2l1.2 1.5 1.2-1.5c1.5-1.9 4.2-2.5 6.4-1.2 2.9 1.7 3.3 5.3 1.7 7.8C18.7 16.65 12 21 12 21z"/>
+      </svg>
+    </div>`;
+}
+
+function getRenderer(shape?: "pin" | "dot" | "heart") {
+  if (shape === "dot") return renderDot;
+  if (shape === "heart") return renderHeart;
+  return renderPin;
 }
 
 function renderPin(el: HTMLDivElement, color: string, selected: boolean) {
@@ -138,15 +154,15 @@ export default function KakaoMap({
     markers.forEach((marker) => {
       const el = document.createElement("div");
       markerElemsRef.current.set(marker.id, el);
-      const render = marker.shape === "dot" ? renderDot : renderPin;
+      const render = getRenderer(marker.shape);
       render(el, marker.color, marker.id === selectedId);
 
       const overlay = new K.CustomOverlay({
         position: new K.LatLng(marker.lat, marker.lng),
         content: el,
-        yAnchor: marker.shape === "dot" ? 0.5 : 1,
+        yAnchor: marker.shape === "dot" || marker.shape === "heart" ? 0.5 : 1,
         xAnchor: 0.5,
-        zIndex: 3
+        zIndex: marker.id === selectedId ? 5 : 3
       });
       overlay.setMap(mapRef.current!);
       overlaysRef.current.push(overlay);
@@ -164,7 +180,7 @@ export default function KakaoMap({
     markers.forEach((marker) => {
       const el = markerElemsRef.current.get(marker.id);
       if (!el) return;
-      const render = marker.shape === "dot" ? renderDot : renderPin;
+      const render = getRenderer(marker.shape);
       render(el, marker.color, marker.id === selectedId);
     });
   }, [selectedId, markers]);

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, Filter, X, Star, Navigation, LocateFixed } from "lucide-react";
+import { Search, Filter, X, Navigation, LocateFixed } from "lucide-react";
 import { THEMES, useFilters } from "@/components/PlaceFilters";
 import { PLACES, PLACE_COLORS, type Place } from "@/data/placesData";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
@@ -14,7 +14,7 @@ import { FilterToggleSection, FilterOverlayPanel } from "@/components/search/Fil
 import { usePlaceSearch } from "@/hooks/usePlaceSearch";
 import { useMyLocation } from "@/hooks/useMyLocation";
 
-const MARKER_COLORS = PLACES.map((p) => PLACE_COLORS[p.colorKey].color);
+const MARKER_COLORS = Object.values(PLACE_COLORS).map((c) => c.color);
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────
 // 지도 화면: 사이드바(검색/필터/목록) + KakaoMap. usePlaceSearch·useMyLocation 훅으로
@@ -22,12 +22,11 @@ const MARKER_COLORS = PLACES.map((p) => PLACE_COLORS[p.colorKey].color);
 export default function Map() {
   const searchParams = useSearchParams();
   const initialTheme = searchParams.get("theme");
-  const initialFilter = searchParams.get("filter");
   const initialPlaceId = searchParams.get("place");
+  const initialContentId = searchParams.get("contentId");
   const mapOnly = searchParams.get("mode") === "map";
 
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [hotFilter, setHotFilter] = useState(initialFilter === "hot");
   const { filters, set, toggleList, reset, activeCount } = useFilters({
     themes: initialTheme && THEMES.includes(initialTheme) ? [initialTheme] : []
   });
@@ -45,10 +44,25 @@ export default function Map() {
     searchDetail,
     isSearching,
     areaCodes,
+    dongOptions,
+    likedIds,
+    refreshLiked,
     tourismDetail,
     isLoadingDetail,
-    handleSearch
-  } = usePlaceSearch({ accessibility: filters.accessibility, gu: filters.gu });
+    handleSearch,
+    focusPlaceById,
+    topRatedPlaces
+  } = usePlaceSearch({
+    accessibility: filters.accessibility,
+    gu: filters.gu,
+    dong: filters.dong,
+    favoritesOnly: filters.favoritesOnly
+  });
+
+  useEffect(() => {
+    if (initialContentId) focusPlaceById(initialContentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialContentId]);
 
   const {
     location: myLocation,
@@ -62,13 +76,17 @@ export default function Map() {
     setDetailId(null);
   };
 
-  const activeFilterCount = activeCount + (hotFilter ? 1 : 0);
+  const activeFilterCount = activeCount;
   const resetFilters = () => {
     reset();
-    setHotFilter(false);
   };
 
-  const visiblePlaces = hotFilter ? PLACES.filter((p) => p.hot) : PLACES;
+  const displayPlaces = searchPlaces.length > 0 ? searchPlaces : topRatedPlaces;
+  // 상위 평점 장소는 목록에 5개 다 보여주되, 지도 마커는 클릭해서 선택하기 전까진 띄우지 않는다.
+  const markerPlaces =
+    searchPlaces.length > 0
+      ? searchPlaces
+      : topRatedPlaces.filter((p) => p.id === searchDetailId);
   const detailPlace = PLACES.find((p) => p.id === detailId);
 
   return (
@@ -89,6 +107,7 @@ export default function Map() {
               detail={tourismDetail}
               isLoading={isLoadingDetail}
               onBack={() => setSearchDetailId(null)}
+              onLikeChange={refreshLiked}
             />
           )
         ) : detailPlace ? (
@@ -106,29 +125,11 @@ export default function Map() {
                 <input
                   type="text"
                   placeholder="장소 검색 (Enter)"
-                  value={hotFilter ? "핫플레이스" : keyword}
-                  readOnly={hotFilter}
-                  onChange={(e) => {
-                    if (!hotFilter) setKeyword(e.target.value);
-                  }}
-                  onKeyDown={(e) => {
-                    if (!hotFilter && e.key === "Enter") handleSearch(keyword);
-                  }}
-                  className={`focus:ring-brand-500 w-full rounded-lg border py-2 pl-9 text-sm focus:ring-2 focus:outline-none ${
-                    hotFilter
-                      ? "border-orange-300 bg-orange-50 pr-8 font-medium text-orange-700"
-                      : "border-gray-200 pr-4"
-                  }`}
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch(keyword)}
+                  className="focus:ring-brand-500 w-full rounded-lg border border-gray-200 py-2 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
                 />
-                {hotFilter && (
-                  <button
-                    onClick={() => setHotFilter(false)}
-                    className="absolute top-1/2 right-2 -translate-y-1/2 text-orange-400 transition-colors hover:text-orange-600"
-                    aria-label="핫플레이스 필터 해제"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
               </div>
             </div>
 
@@ -138,59 +139,23 @@ export default function Map() {
               set={set}
               toggleList={toggleList}
               guOptions={areaCodes.map((a) => a.name)}
+              dongOptions={dongOptions}
               activeCount={activeFilterCount}
               onReset={resetFilters}
               defaultOpen={!!initialTheme}
             />
 
-            {/* 검색 결과 or 전체 장소 목록 */}
+            {/* 검색 결과 or 후기 평점 상위 장소 */}
             <div className="flex-1 overflow-y-auto">
               <div className="sticky top-0 border-b border-gray-100 bg-gray-50 px-4 py-2">
                 <span className="text-xs font-semibold tracking-wide text-gray-400 uppercase">
                   {searchPlaces.length > 0
                     ? `검색 결과 ${searchPlaces.length}개`
-                    : `장소 ${visiblePlaces.length}개`}
+                    : `핫플레이스${displayPlaces.length}개`}
                 </span>
               </div>
 
-              {/* 검색 결과 목록 */}
-              {searchPlaces.length > 0 ? (
-                <SearchResultList places={searchPlaces} onSelect={setSearchDetailId} />
-              ) : (
-                visiblePlaces.map((place) => (
-                  <button
-                    key={place.id}
-                    onClick={() => setDetailId(place.id)}
-                    className="group w-full border-b border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="group-hover:text-brand-700 truncate text-sm font-medium text-gray-800 transition-colors">
-                          {place.name}
-                        </p>
-                        <div className="mt-1 flex items-center gap-2">
-                          <span
-                            className="rounded-full px-1.5 py-0.5 text-xs font-medium"
-                            style={{
-                              background: PLACE_COLORS[place.colorKey].bg,
-                              color: PLACE_COLORS[place.colorKey].color
-                            }}
-                          >
-                            {place.category}
-                          </span>
-                          <div className="flex items-center gap-0.5 text-xs text-gray-500">
-                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                            {place.rating}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="mt-0.5 shrink-0 text-xs text-gray-400">
-                        {place.distance}
-                      </span>
-                    </div>
-                  </button>
-                ))
-              )}
+              <SearchResultList places={displayPlaces} onSelect={setSearchDetailId} />
             </div>
           </>
         )}
@@ -235,6 +200,7 @@ export default function Map() {
             set={set}
             toggleList={toggleList}
             guOptions={areaCodes.map((a) => a.name)}
+            dongOptions={dongOptions}
             onReset={resetFilters}
             onClose={() => setShowMobileFilters(false)}
           />
@@ -242,16 +208,20 @@ export default function Map() {
 
         {/* Kakao Map */}
         <KakaoMap
-          markers={searchPlaces.map((sp, i): MapMarker =>
-            sp.source === "kakao"
-              ? { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#0891b2", shape: "dot" }
-              : {
-                  id: sp.id,
-                  lat: sp.lat,
-                  lng: sp.lng,
-                  color: MARKER_COLORS[i % MARKER_COLORS.length]
-                }
-          )}
+          markers={markerPlaces.map((sp, i): MapMarker => {
+            if (sp.source === "kakao") {
+              return { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#0891b2", shape: "dot" };
+            }
+            if (likedIds.has(sp.id)) {
+              return { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#ef4444", shape: "heart" };
+            }
+            return {
+              id: sp.id,
+              lat: sp.lat,
+              lng: sp.lng,
+              color: MARKER_COLORS[i % MARKER_COLORS.length]
+            };
+          })}
           selectedId={searchDetailId}
           onSelect={(id) => setSearchDetailId(id)}
           onDeselect={() => {
@@ -302,6 +272,7 @@ export default function Map() {
                 detail={tourismDetail}
                 isLoading={isLoadingDetail}
                 onBack={() => setSearchDetailId(null)}
+                onLikeChange={refreshLiked}
               />
             )}
           </div>

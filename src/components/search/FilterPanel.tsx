@@ -9,6 +9,7 @@ interface FilterPanelProps {
   set: <K extends keyof Filters>(key: K, val: Filters[K]) => void;
   toggleList: (key: "themes" | "accessibility", item: string) => void;
   guOptions?: string[];
+  dongOptions?: string[];
   activeCount: number;
   onReset: () => void;
 }
@@ -19,6 +20,7 @@ export function FilterToggleSection({
   set,
   toggleList,
   guOptions,
+  dongOptions,
   activeCount,
   onReset,
   defaultOpen = false
@@ -64,6 +66,7 @@ export function FilterToggleSection({
             set={set}
             toggleList={toggleList}
             guOptions={guOptions}
+            dongOptions={dongOptions}
             compact
           />
         </div>
@@ -78,6 +81,7 @@ export function FilterOverlayPanel({
   set,
   toggleList,
   guOptions,
+  dongOptions,
   onReset,
   onClose
 }: Omit<FilterPanelProps, "activeCount"> & { onClose: () => void }) {
@@ -94,7 +98,13 @@ export function FilterOverlayPanel({
           </button>
         </div>
       </div>
-      <FilterFields filters={filters} set={set} toggleList={toggleList} guOptions={guOptions} />
+      <FilterFields
+        filters={filters}
+        set={set}
+        toggleList={toggleList}
+        guOptions={guOptions}
+        dongOptions={dongOptions}
+      />
     </div>
   );
 }
