@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     auth: { persistSession: false }
   });
 
-  // place 선행 → detail/barrierfree 병렬 (runFullSync 내부에서 처리)
+  // place 선행 → detail/barrierfree/bakery 병렬 (runFullSync 내부에서 처리)
   const startedAt = new Date().toISOString();
   console.log(`[cron/place] 동기화 시작 ${startedAt}`);
   const results = await runFullSync(supabase);
@@ -45,10 +45,11 @@ export async function GET(request: Request) {
       console.error(`[cron/place] ${table} 실패: ${r.error}`, r.partial ?? "");
       continue;
     }
-    console.log(
-      `[cron/place] ${table}: total=${r.totalPlaces} fetched=${r.fetched} ` +
-        `upsert=${r.upserted} deleted=${r.deleted} skipped=${r.skipped} errors=${r.errorCount}`
-    );
+    // 테이블마다 집계 필드가 다르므로(tour 계열: totalPlaces/upserted/skipped,
+    // bakery: totalCount/inserted/updated/unchanged) errors 배열만 제외하고 통째로 남긴다.
+    const summary = { ...r };
+    delete summary.errors;
+    console.log(`[cron/place] ${table}:`, summary);
     // 개별 항목 실패(콘텐츠별 API 오류 등)가 있으면 원인 목록을 함께 남긴다.
     if (typeof r.errorCount === "number" && r.errorCount > 0) {
       console.error(`[cron/place] ${table} 개별 실패 ${r.errorCount}건:`, r.errors);
