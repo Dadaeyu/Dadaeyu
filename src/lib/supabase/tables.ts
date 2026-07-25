@@ -5,6 +5,7 @@ export const T = {
   members: "tb_members",
   userPreferences: "tb_user_preferences",
   userFavorites: "tb_user_favorites",
+  placeLikes: "tb_place_like",
   userPointEvents: "tb_user_point_events",
   courses: "tb_courses",
   courseDays: "tb_course_days",

@@ -44,6 +44,13 @@ export interface DbUserFavorite {
   created_at: string;
 }
 
+export interface DbPlaceLike {
+  like_id: number;
+  user_id: string;
+  place_id: number;
+  registtime: string;
+}
+
 export interface DbCourse {
   id: number;
   author_id: string | null;
