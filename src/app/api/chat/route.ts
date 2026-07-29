@@ -5,6 +5,10 @@ import {
   type TourWeatherDebug,
   type TourWeatherResult
 } from "@/lib/tour-weather";
+import {
+  asksForSingleRecommendation,
+  selectDiverseItems
+} from "@/lib/chat/recommendationDiversity";
 
 type Confidence = "high" | "medium" | "low";
 
@@ -89,6 +93,21 @@ type QueryAnalysis = {
   keywords: string[];
 };
 
+type ChatHistoryItem = {
+  role: "assistant" | "user";
+  content: string;
+  placeTitles: string[];
+};
+
+type ConversationContext = {
+  history: ChatHistoryItem[];
+  previousPlaceTitles: string[];
+  seenPlaceTitles: string[];
+  referencedPlaceTitle: string | null;
+  isFollowUp: boolean;
+  wantsDifferentPlaces: boolean;
+};
+
 type KnowledgeResult = {
   status: "not_configured" | "ready" | "empty" | "unavailable";
   rows: KnowledgeRow[];
@@ -137,8 +156,11 @@ const DEFAULT_EMBEDDING_DIMENSIONS = 1536;
 const SUPPORTED_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
 const KNOWLEDGE_CANDIDATE_LIMIT = 500;
 const KNOWLEDGE_RESULT_LIMIT = 5;
-const VECTOR_CANDIDATE_LIMIT = 20;
+const VECTOR_CANDIDATE_LIMIT = 40;
 const VECTOR_READINESS_TTL_MS = 60_000;
+const MAX_HISTORY_ITEMS = 10;
+const MAX_HISTORY_CONTENT_LENGTH = 1_000;
+const MAX_CONTEXT_PLACE_TITLES = 5;
 const SITE_GUIDE_CHIPS = ["왜 만들었어?", "어떻게 질문하면 돼?", "데이터 출처는 어디야?"];
 const FALLBACK_CHIPS = [
   "다대유는 어떤 사이트야?",
@@ -231,14 +253,19 @@ const ACCESSIBILITY_RULES: Record<string, { tags: string[]; fields: string[]; te
 const systemPrompt = [
   "너는 대전 무장애 여행 앱 '다유'의 챗봇이다.",
   "사용자에게 이동약자, 휠체어, 유모차, 고령자 관점의 여행 정보를 한국어로 실용적으로 답한다.",
-  "말투는 자연스러운 현대 표준어를 기본으로 하되, 대전/충청권 안내원이 말하듯 다정하고 느긋한 호흡을 섞는다.",
-  "사투리 표현은 단어 자체보다 말의 속도와 태도에 가깝게 쓴다. 예를 들면 '천천히 같이 봐요', '걱정부터 덜어볼게요', '한번 확인해보면 좋아요'처럼 부드럽게 안내한다.",
+  "한국인이 일상 대화에서 쓰는 자연스러운 존댓말과 해요체로 답한다.",
+  "친절하되 지나치게 감탄하거나 사용자의 말을 되풀이하지 않는다.",
+  "짧은 질문에는 짧게 답하고, 결론을 먼저 말한 뒤 필요한 이유만 덧붙인다.",
+  "'접근성 관련 편의 항목', '관련 근거가 확인돼요', '재확인 권장'처럼 보고서나 행정 안내문 같은 표현은 쓰지 않는다.",
+  "정보 출처의 한계를 말할 때는 '공개된 안내를 보면', '방문 전에는 한 번 더 확인해 주세요'처럼 쉬운 말로 쓴다.",
+  "같은 어미와 '확인해 주세요', '함께', '차근차근' 같은 표현을 반복하지 않는다.",
   "'가능해유', '좋아유', '그려유', '있어유'처럼 노골적인 방언형 어미는 쓰지 않는다.",
   "모든 문장 끝에 '~유'를 붙이는 식의 과장된 사투리는 절대 쓰지 않는다.",
-  "자연스럽게 어울릴 때만 '괜찮아요', '한번 확인해보면 좋아요', '그럴 수 있어요', '맞을 거예요' 같은 부드러운 표현을 사용한다.",
-  "희화화된 방언, 억지스러운 사투리, 장난스러운 말투는 피한다.",
+  "억지스러운 사투리나 장난스러운 말투는 피한다.",
   "Supabase 근거 데이터가 제공되면 그 내용을 우선 사용한다.",
   "근거 데이터에 없는 내용은 확정 정보처럼 단정하지 말고 방문 전 확인이 필요한 부분을 분명히 말한다.",
+  "'갈 수 있어요', '이용 가능해요', '편리한 곳이에요'처럼 현장 상태까지 보장하는 표현은 피한다. 대신 '현재 공개된 정보에서는 관련 근거가 확인돼요', '확인된 항목은 이래요'처럼 근거의 범위를 먼저 밝힌다.",
+  "특정 장소의 가능 여부를 물어도 답변 첫 문장부터 단정하지 않는다. 확인된 출입구, 엘리베이터, 화장실 등의 항목과 방문 전 다시 확인할 부분을 구분해서 말한다.",
   "추천 카드에 없는 사진, 이미지, 지도 캡처, 실시간 혼잡도 같은 정보를 제공한다고 말하지 않는다.",
   "기상청 관광기후지수 데이터가 제공되면 날씨 조건을 보조 근거로 반영하되, 실시간 현장 날씨를 직접 확인한 것처럼 말하지 않는다.",
   "날씨 데이터가 제공되지 않으면 현재 날씨를 알고 있다고 말하지 않는다.",
@@ -253,8 +280,10 @@ const systemPrompt = [
   "추천 질문에서 근거 후보가 2곳 이상 있으면 답변 본문에도 최소 2곳을 포함한다. 한 장소만 길게 쓰지 말고 장소별로 한 문장씩 비교한다.",
   "사용자의 접근성 조건과 직접 관련된 근거를 먼저 말한다. 예를 들어 시각장애 질문은 점자블록, 보조견, 안내요원, 오디오 가이드 같은 근거를 우선하고, 휠체어 정보는 보조 정보로만 다룬다.",
   "특정 장소 가능 여부 질문은 추천을 늘리지 말고 해당 장소의 가능 근거와 주의할 점을 먼저 답한다.",
+  "최근 대화가 제공되면 '그중', '후보지', '첫 번째', '거기' 같은 표현을 직전 답변의 장소와 조건에 연결해서 답한다.",
+  "후속 질문에는 앞 대화를 기억하고 있다는 것이 자연스럽게 드러나도록 '앞에서 본 후보 중에서는'처럼 맥락을 짧게 밝혀도 좋다.",
   "방문 활동은 제공된 제목, 분류, 내용, 방문 활동 힌트, 관광지 상세 정보 안에서만 말하고, 근거 없는 체험 프로그램이나 편의시설은 지어내지 않는다.",
-  "단순 확인 질문은 4~8문장으로 답하고, 추천 질문은 전체 3~4문장으로 답한다.",
+  "단순 확인 질문은 2~4문장으로 답하고, 추천 질문은 전체 3~4문장으로 답한다.",
   "마크다운, 굵게 표시, 번호 목록은 쓰지 말고 일반 문장으로만 답한다."
 ].join(" ");
 
@@ -271,7 +300,9 @@ const classifierPrompt = [
   "날씨, 오늘, 비, 더위, 추위, 미세먼지처럼 현재 조건이 필요하면 weather_sensitive를 true로 둔다.",
   "대전 앱이므로 location이 없으면 대전으로 둔다.",
   "place_name은 특정 장소명이 있으면 문자열, 없으면 null이다.",
-  "keywords는 DB 검색에 쓸 한국어 핵심어 3~8개다."
+  "keywords는 DB 검색에 쓸 한국어 핵심어 3~8개다.",
+  "현재 질문에 '그중', '후보지', '첫 번째', '두 번째', '거기' 같은 표현이 있으면 최근 대화의 추천 후보와 조건을 이어서 해석한다.",
+  "후속 질문은 새 질문으로 떼어내지 말고 이전 추천 장소와 사용자 조건을 검색어에 반영한다."
 ].join(" ");
 
 function createErrorResponse(message: string): ChatResponse {
@@ -288,6 +319,79 @@ function createStaticSiteFaqResponse(message: string): ChatResponse | null {
 
   if (
     includesAny(compactMessage, [
+      "넌누구",
+      "너는누구",
+      "너누구",
+      "누구니",
+      "정체가뭐",
+      "이름이뭐",
+      "네이름"
+    ])
+  ) {
+    return createSiteGuideResponse({
+      message:
+        "안녕하세요, 저는 다유예요. 대전에서 가볼 곳을 찾고, 휠체어나 유모차로 이동하기 괜찮은지 미리 살펴드려요. 궁금한 장소나 필요한 조건을 편하게 말씀해 주세요.",
+      rows: [
+        "이름: 다유",
+        "역할: 대전 여행지와 접근성 정보 안내",
+        "원칙: 확인된 정보와 방문 전 확인사항을 구분해 설명"
+      ]
+    });
+  }
+
+  if (
+    isConversationalPhrase(compactMessage, [
+      "안녕",
+      "안녕하세요",
+      "하이",
+      "헬로",
+      "반가워",
+      "반갑습니다",
+      "좋은아침",
+      "잘지내",
+      "잘지냈어",
+      "다유안녕",
+      "안녕다유"
+    ])
+  ) {
+    return createConversationalResponse(
+      "안녕하세요! 대전에서 가보고 싶은 곳이 있나요? 휠체어나 유모차처럼 이동할 때 필요한 조건도 같이 찾아드릴게요."
+    );
+  }
+
+  if (
+    isConversationalPhrase(compactMessage, [
+      "고마워",
+      "고마워요",
+      "감사",
+      "감사해요",
+      "감사합니다",
+      "도움됐어",
+      "도움됐어요"
+    ])
+  ) {
+    return createConversationalResponse(
+      "도움이 됐다니 다행이에요. 또 궁금한 곳이 생기면 편하게 물어보세요."
+    );
+  }
+
+  if (
+    isConversationalPhrase(compactMessage, [
+      "잘가",
+      "잘가요",
+      "안녕히",
+      "다음에봐",
+      "또보자",
+      "또봐"
+    ])
+  ) {
+    return createConversationalResponse(
+      "좋아요, 다음에 또 봐요! 대전 여행을 준비할 때 언제든 찾아주세요."
+    );
+  }
+
+  if (
+    includesAny(compactMessage, [
       "어떤사이트",
       "무슨사이트",
       "뭐하는사이트",
@@ -301,7 +405,7 @@ function createStaticSiteFaqResponse(message: string): ChatResponse | null {
   ) {
     return createSiteGuideResponse({
       message:
-        "다대유는 대전 여행을 준비할 때, 방문 전에 접근성 정보를 먼저 살펴볼 수 있게 돕는 무장애 여행 플랫폼이에요. 휠체어, 유모차, 고령자 동선처럼 막상 가면 중요한 것들을 미리 챙겨보자는 취지예요. 지도랑 코스 흐름까지 이어서 볼 수 있게 만드는 중이라, 걱정부터 조금 덜고 천천히 골라볼 수 있어요.",
+        "다대유는 대전 여행지와 이동 편의 정보를 한곳에서 찾아보는 서비스예요. 휠체어 출입구, 유모차 대여, 엘리베이터처럼 방문 전에 궁금한 내용을 미리 확인할 수 있어요. 여행지를 고른 뒤 지도와 추천 코스도 이어서 볼 수 있고요.",
       rows: [
         "대상: 대전 여행을 준비하는 누구나",
         "핵심: 접근성 정보와 여행지 탐색",
@@ -315,7 +419,7 @@ function createStaticSiteFaqResponse(message: string): ChatResponse | null {
   ) {
     return createSiteGuideResponse({
       message:
-        "여행지는 많은데, 이동약자에게 꼭 필요한 정보는 여기저기 흩어져 있는 경우가 많잖아요. 다대유는 대전에 가보고 싶은 마음이 생겼을 때 '갈 수 있을까?'부터 걱정하지 않도록 만든 서비스예요. 방문 전에 확인할 정보를 한곳에 모아두면, 같이 가는 사람들도 훨씬 편하게 계획할 수 있어요.",
+        "여행지 정보는 많지만 휠체어 출입구나 유모차 대여처럼 꼭 필요한 내용은 여러 곳에 흩어져 있잖아요. 다대유는 이런 정보를 한곳에 모아, 대전 여행을 조금 더 쉽게 계획할 수 있도록 만든 서비스예요.",
       rows: [
         "문제: 접근성 정보가 여러 곳에 흩어져 있음",
         "목표: 방문 전 확인 부담 줄이기",
@@ -333,12 +437,16 @@ function createStaticSiteFaqResponse(message: string): ChatResponse | null {
       "뭐물어",
       "뭘물어",
       "어떤질문",
-      "질문예시"
+      "질문예시",
+      "뭐할수있",
+      "무엇을할수있",
+      "도와줄수있",
+      "뭘도와"
     ])
   ) {
     return createSiteGuideResponse({
       message:
-        "장소명에 필요한 조건을 붙여서 물어보면 제일 좋아요. 예를 들면 '대전어린이회관 휠체어 가능해?', '유모차로 갈만한 문화시설 추천해줘', '비 오는 날 실내로 갈 곳 알려줘'처럼요. 조건이 조금 애매해도 괜찮아요. 제가 먼저 분류하고, 근거가 있는 것만 차근차근 정리해볼게요.",
+        "장소와 필요한 조건을 같이 말해주면 가장 정확하게 찾을 수 있어요. 예를 들어 '대전어린이회관은 휠체어로 갈 수 있어?', '유모차로 가기 좋은 문화시설 추천해줘'처럼 물어보세요. 아직 장소를 정하지 못했다면 원하는 지역이나 실내·실외 여부만 알려줘도 괜찮아요.",
       rows: [
         "장소 확인: 특정 여행지 접근성 질문",
         "조건 추천: 휠체어, 유모차, 고령자, 날씨",
@@ -385,6 +493,15 @@ function createStaticSiteFaqResponse(message: string): ChatResponse | null {
   return null;
 }
 
+function createConversationalResponse(message: string): ChatResponse {
+  return {
+    message,
+    chips: ["다대유는 어떤 사이트야?", "어떻게 질문하면 돼?", "유모차로 갈만한 문화시설"],
+    confidence: "high",
+    sources: []
+  };
+}
+
 function createSiteGuideResponse({
   message,
   rows
@@ -406,11 +523,15 @@ function createSiteGuideResponse({
 }
 
 function normalizeStaticFaqText(value: string) {
-  return value.toLocaleLowerCase("ko-KR").replace(/\s+/g, "");
+  return value.toLocaleLowerCase("ko-KR").replace(/[\s!?.,~…'"“”‘’]+/g, "");
 }
 
 function includesAny(value: string, terms: string[]) {
   return terms.some((term) => value.includes(term));
+}
+
+function isConversationalPhrase(value: string, phrases: string[]) {
+  return phrases.includes(value);
 }
 
 function normalizeDaiyuTone(value: string) {
@@ -424,13 +545,19 @@ function normalizeDaiyuTone(value: string) {
     .replace(/맞아유/g, "맞아요")
     .replace(/해봐유/g, "해보세요")
     .replace(/봐유/g, "봐요")
-    .replace(/예유/g, "예요");
+    .replace(/예유/g, "예요")
+    .replace(/^네,?\s*가능해요[.!]?\s*/u, "현재 공개된 정보에서는 이용 가능한 근거가 확인돼요. ")
+    .replace(/현재 공개된 정보에서는/gu, "공개된 안내를 보면")
+    .replace(/관련 근거가 확인돼요/gu, "관련 안내가 있어요")
+    .replace(/접근성 관련 편의 항목/gu, "이동할 때 참고할 정보")
+    .replace(/재확인/gu, "다시 확인")
+    .replace(/휠체어 이용이 편리한 곳이에요[.!]?/gu, "휠체어로 방문할 때 참고할 정보가 있어요.");
 }
 
 function createOutOfScopeResponse(analysis: QueryAnalysis): ChatResponse {
   return {
     message:
-      "저는 대전 무장애 여행과 접근성 정보를 도와주는 챗봇이에요. 이 질문은 제가 잘 도와드리기 어려워요. 여행지 추천, 휠체어 이동 가능 여부, 유모차 동선, 장애인 화장실, 실내외 코스처럼 대전 여행과 관련된 내용으로 다시 물어봐 주세요. 그쪽은 제가 차근차근 같이 볼 수 있어요.",
+      "저는 대전 여행지와 이동 편의 정보를 찾아드리는 다유예요. 이 질문은 제가 정확하게 답하기 어려워요. 대전 여행지나 휠체어·유모차 이동, 장애인 화장실 같은 내용을 물어보면 바로 찾아볼게요.",
     card: {
       title: "질문 범위 안내",
       rows: [
@@ -468,22 +595,22 @@ function createNoKnowledgeResponse({
 
   return {
     message: hasNoMatchingEvidence
-      ? `현재 테스트 데이터 안에서는 ${target} 접근성 근거를 찾지 못했어요. 여기서 가능 여부를 단정하면 오히려 위험할 수 있어서, 그 부분은 멈춰둘게요. 데이터가 더 들어오면 다시 한번 같이 확인해볼 수 있어요.`
-      : "질문 분류는 완료했지만 아직 Supabase 근거 데이터가 준비되지 않아 최종 추천 답변은 만들지 않았어요. chatbot schema를 Data API에 노출하고 chunks 데이터가 들어가면, 그 근거를 조회한 뒤 차근차근 답변할게요.",
+      ? `지금 가지고 있는 자료에서는 ${target} 접근성 정보를 찾지 못했어요. 정확하지 않은 내용을 추측해서 말씀드릴 수는 없어서 여기서는 판단하지 않을게요. 방문을 계획하고 있다면 해당 장소의 공식 홈페이지나 안내전화로 확인해 주세요.`
+      : "지금은 여행 정보를 불러오지 못했어요. 잠시 뒤 다시 물어봐 주세요.",
     card: {
-      title: hasNoMatchingEvidence ? "확인 가능한 근거 없음" : "DB 조회 대기",
+      title: hasNoMatchingEvidence ? "찾은 정보가 없어요" : "정보를 불러오지 못했어요",
       rows: hasNoMatchingEvidence
         ? [
-            "현재 테스트 데이터에서는 확인되지 않음",
-            "근거 없는 답변은 생성하지 않음",
-            `검색 방식: ${getKnowledgeSearchLabel(knowledge)}`
+            "현재 연결된 자료에서는 확인되지 않아요",
+            "확인되지 않은 내용은 추측하지 않아요",
+            "방문 전 공식 안내를 확인해 주세요"
           ]
         : [
-            "Supabase 연결 또는 데이터 적재 확인 필요",
-            "처리: DB 근거 없음으로 최종 답변 생성 중단",
-            `검색 방식: ${getKnowledgeSearchLabel(knowledge)}`
+            "여행 정보를 잠시 불러오지 못했어요",
+            "확인되지 않은 내용은 답하지 않아요",
+            "잠시 뒤 다시 질문해 주세요"
           ],
-      source: hasNoMatchingEvidence ? "Supabase 테스트 DB" : "Supabase 조회"
+      source: "다대유 여행 정보"
     },
     chips: [
       "대전어린이회관 휠체어 가능해?",
@@ -509,6 +636,7 @@ function createSuccessResponse({
   inputMessage,
   knowledge,
   analysis,
+  conversationContext,
   searchTerms,
   weather
 }: {
@@ -518,6 +646,7 @@ function createSuccessResponse({
   inputMessage: string;
   knowledge: KnowledgeResult;
   analysis: QueryAnalysis;
+  conversationContext: ConversationContext;
   searchTerms: string[];
   weather?: TourWeatherResult;
 }): ChatResponse {
@@ -547,12 +676,20 @@ function createSuccessResponse({
     rows.push("AI가 근거 내용을 짧게 요약");
   }
 
-  const places = buildPlaceCards(knowledge.rows);
+  const places = prioritizeConversationPlaces(buildPlaceCards(knowledge.rows), conversationContext);
   const placeFollowUpChips = places.flatMap((place) => place.followUps).slice(0, 3);
   const responseMessage =
-    analysis.intent === "recommend_place" && places.length >= 2
-      ? createCompactRecommendationMessage({ analysis, places })
-      : message;
+    analysis.intent === "recommend_place" &&
+    (places.length >= 2 || (conversationContext.isFollowUp && places.length > 0))
+      ? createCompactRecommendationMessage({
+          analysis,
+          inputMessage,
+          conversationContext,
+          places
+        })
+      : analysis.intent === "check_accessibility" && places.length
+        ? createGroundedAccessibilityCheckMessage(places[0], analysis.accessibility_needs)
+        : message;
 
   return {
     message: responseMessage,
@@ -592,27 +729,134 @@ function createSuccessResponse({
   };
 }
 
+function prioritizeConversationPlaces(places: PlaceCard[], context: ConversationContext) {
+  if (context.wantsDifferentPlaces) {
+    return selectDiverseItems({
+      items: places,
+      getTitle: (place) => place.title,
+      limit: places.length,
+      seenTitles: context.seenPlaceTitles
+    });
+  }
+
+  if (!context.isFollowUp || !context.previousPlaceTitles.length) return places;
+
+  const placesByTitle = new Map(
+    places.map((place) => [normalizeConversationReferenceText(place.title), place])
+  );
+  const contextTitles = context.referencedPlaceTitle
+    ? [context.referencedPlaceTitle]
+    : context.previousPlaceTitles;
+  const previousPlaces = contextTitles.flatMap((title) => {
+    const place = placesByTitle.get(normalizeConversationReferenceText(title));
+    return place ? [place] : [];
+  });
+
+  return previousPlaces.length ? previousPlaces : places;
+}
+
+function createGroundedAccessibilityCheckMessage(place: PlaceCard, needs: string[]) {
+  const facts = place.accessibility
+    .map((item) => item.trim().replace(/[.。]$/, ""))
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (!facts.length) {
+    return `지금 확인할 수 있는 안내만으로는 ${place.title}의 이동 편의 정보를 충분히 알기 어려워요. 방문 전 공식 안내처에 동선을 확인해 주세요.`;
+  }
+
+  return [
+    `공개된 안내에서 ${place.title}의 ${getAccessibilityInfoLabel(needs)} 정보를 찾았어요.`,
+    joinAccessibilityFacts(facts),
+    place.tel
+      ? `시설 상황은 바뀔 수 있으니 방문 전에는 안내처(${place.tel})에 한 번 더 확인해 주세요.`
+      : "시설 상황은 바뀔 수 있으니 방문 전에는 공식 안내처에 한 번 더 확인해 주세요."
+  ].join(" ");
+}
+
+function getAccessibilityInfoLabel(needs: string[]) {
+  if (needs.includes("stroller")) return "유모차 이용";
+  if (needs.includes("visual_impairment")) return "시각장애인 편의";
+  if (needs.includes("hearing_impairment")) return "청각장애인 편의";
+  if (needs.includes("elderly")) return "이동 편의";
+  return "휠체어 이용";
+}
+
+function joinAccessibilityFacts(items: string[]) {
+  const sentences = items.map(formatAccessibilityFact);
+  if (sentences.length < 2) return sentences[0] || "";
+
+  const firstSentence = sentences[0]
+    .replace(/있다고 나와 있어요\.$/u, "있다고 안내돼 있고,")
+    .replace(/있어요\.$/u, "있고,")
+    .replace(/가능해요\.$/u, "가능하고,");
+
+  return `${firstSentence} ${sentences[1]}`;
+}
+
 function createCompactRecommendationMessage({
   analysis,
+  inputMessage,
+  conversationContext,
   places
 }: {
   analysis: QueryAnalysis;
+  inputMessage: string;
+  conversationContext: ConversationContext;
   places: PlaceCard[];
 }) {
   const recommendedPlaces = places.slice(0, 2);
   const location = analysis.location?.trim() || "대전";
   const [firstPlace, secondPlace] = recommendedPlaces;
+  const isFollowUp = conversationContext.isFollowUp;
+
+  if (conversationContext.wantsDifferentPlaces) {
+    const seenTitles = new Set(
+      conversationContext.seenPlaceTitles.map(normalizeConversationReferenceText)
+    );
+    const allNew = recommendedPlaces.every(
+      (place) => !seenTitles.has(normalizeConversationReferenceText(place.title))
+    );
+    const selectedPlaces =
+      asksForSingleRecommendation(inputMessage) || !secondPlace ? [firstPlace] : recommendedPlaces;
+    const lead =
+      selectedPlaces.length === 1
+        ? `${allNew ? "앞에서 본 곳은 빼고" : "이번에는"} ${withObjectParticle(firstPlace.title)} 추천할게요.`
+        : `${allNew ? "앞에서 본 곳과 겹치지 않게" : "이번에는"} ${joinPlaceNames(firstPlace.title, secondPlace.title)} 살펴보세요.`;
+
+    return [
+      lead,
+      ...selectedPlaces.map((place) =>
+        createCompactPlaceRecommendationSentence(place, analysis.accessibility_needs)
+      ),
+      "운영 시간과 자세한 편의시설은 아래 카드에서 볼 수 있어요."
+    ].join(" ");
+  }
+
+  if (isFollowUp && (asksForSingleRecommendation(inputMessage) || !secondPlace)) {
+    return [
+      `앞에서 본 후보 중에서는 ${withObjectParticle(firstPlace.title)} 가장 먼저 추천할게요.`,
+      createCompactPlaceRecommendationSentence(firstPlace, analysis.accessibility_needs),
+      "운영 시간과 자세한 편의시설은 아래 카드에서 볼 수 있어요."
+    ].join(" ");
+  }
 
   return [
-    `${location} 기준으로는 ${joinPlaceNames(firstPlace.title, secondPlace.title)} 먼저 비교해볼 만해요.`,
-    `${withTopicParticle(firstPlace.title)} ${getCompactActivityText(firstPlace)} ${getCompactAccessibilityText(firstPlace)}`,
-    `${withTopicParticle(secondPlace.title)} ${getCompactActivityText(secondPlace)} ${getCompactAccessibilityText(secondPlace)}`,
-    "관광정보와 접근성 상세는 아래 카드에서 탭으로 나눠 확인해 주세요."
+    isFollowUp
+      ? `앞에서 본 후보 중에서는 ${joinPlaceNames(firstPlace.title, secondPlace.title)} 먼저 비교해볼 만해요.`
+      : `${getRecommendationLead(analysis, location)} ${joinPlaceNames(firstPlace.title, secondPlace.title)} 먼저 살펴보세요.`,
+    createCompactPlaceRecommendationSentence(firstPlace, analysis.accessibility_needs),
+    createCompactPlaceRecommendationSentence(secondPlace, analysis.accessibility_needs),
+    "운영 시간과 자세한 편의시설은 아래 카드에서 볼 수 있어요."
   ].join(" ");
 }
 
 function joinPlaceNames(firstTitle: string, secondTitle: string) {
   return `${firstTitle}${getKoreanParticle(firstTitle, "과", "와")} ${secondTitle}${getKoreanParticle(secondTitle, "을", "를")}`;
+}
+
+function withObjectParticle(value: string) {
+  return `${value}${getKoreanParticle(value, "을", "를")}`;
 }
 
 function withTopicParticle(value: string) {
@@ -640,22 +884,96 @@ function hasFinalConsonant(value: string) {
   return (lastHangul.charCodeAt(0) - 0xac00) % 28 !== 0;
 }
 
-function getCompactActivityText(place: PlaceCard) {
+function createCompactPlaceRecommendationSentence(place: PlaceCard, needs: string[]) {
   const activity = place.activity.trim().replace(/[.。]$/, "");
-  return `${activity}${activity.endsWith("곳") ? "이고," : "이에요."}`;
+  const activitySentence = `${withTopicParticle(place.title)} ${activity}${
+    activity.endsWith("곳") ? "이에요." : "예요."
+  }`;
+  const accessibilityFact = getPreferredAccessibilityFact(place.accessibility, needs);
+
+  return accessibilityFact
+    ? `${activitySentence} ${formatAccessibilityFact(accessibilityFact)}`
+    : `${activitySentence} 자세한 이동 편의 정보는 아래 카드에서 확인할 수 있어요.`;
 }
 
-function getCompactAccessibilityText(place: PlaceCard) {
-  if (!place.accessibility.length) {
-    return "접근성 세부 근거는 카드에서 더 확인해 주세요.";
+function getRecommendationLead(analysis: QueryAnalysis, location: string) {
+  if (analysis.accessibility_needs.includes("stroller")) {
+    return "유모차로 방문할 곳을 찾는다면";
+  }
+  if (
+    analysis.accessibility_needs.includes("wheelchair") ||
+    analysis.accessibility_needs.includes("mobility_access")
+  ) {
+    return "휠체어 이동을 고려하고 있다면";
+  }
+  if (analysis.accessibility_needs.includes("elderly")) {
+    return "걷는 부담이 적은 곳을 찾는다면";
+  }
+  if (analysis.accessibility_needs.includes("visual_impairment")) {
+    return "시각장애인 편의 정보를 함께 보고 싶다면";
+  }
+  if (analysis.accessibility_needs.includes("hearing_impairment")) {
+    return "청각장애인 편의 정보를 함께 보고 싶다면";
   }
 
-  const labels = place.accessibility
-    .map((item) => item.split(":")[0]?.trim())
-    .filter(Boolean)
-    .slice(0, 2);
+  return `${location}에서 가볼 곳을 찾는다면`;
+}
 
-  return `${labels.join(", ")} 근거가 있어요.`;
+function getPreferredAccessibilityFact(items: string[], needs: string[]) {
+  const preferredLabels = needs.includes("stroller")
+    ? ["유모차", "엘리베이터", "출입통로", "수유실"]
+    : needs.includes("visual_impairment")
+      ? ["점자블록", "보조견", "안내요원", "오디오 가이드"]
+      : needs.includes("hearing_impairment")
+        ? ["수화", "자막", "청각"]
+        : ["출입통로", "엘리베이터", "장애인 주차", "장애인 화장실"];
+
+  return (
+    preferredLabels
+      .map((label) => items.find((item) => item.startsWith(`${label}:`)))
+      .find((item): item is string => Boolean(item)) || items[0]
+  );
+}
+
+function formatAccessibilityFact(item: string) {
+  const [rawLabel, ...rawDetailParts] = item.split(":");
+  const label = rawLabel.trim();
+  const detail = rawDetailParts
+    .join(":")
+    .trim()
+    .replace(/_무장애 편의시설/gu, "");
+
+  if (/주출입구.*단차가 없어.*휠체어 접근 가능함/u.test(detail)) {
+    return "주출입구에 단차가 없어 휠체어로 들어갈 수 있다고 나와 있어요.";
+  }
+  if (/주출입구.*턱이 없어.*휠체어 접근 가능함/u.test(detail)) {
+    return "주출입구에 턱이 없어 휠체어로 들어갈 수 있다고 나와 있어요.";
+  }
+  if (/장애인\s*전용\s*주차구역\s*있음\(지하\)/u.test(detail)) {
+    return "지하에 장애인 전용 주차구역이 있어요.";
+  }
+  if (/장애인\s*전용\s*주차구역\s*있음/u.test(detail)) {
+    return "장애인 전용 주차구역이 있어요.";
+  }
+  if (/엘리베이터.*있음/u.test(detail)) {
+    return "엘리베이터가 있어요.";
+  }
+  if (/장애인\s*전용?\s*화장실.*있음/u.test(detail)) {
+    return "장애인 화장실이 있어요.";
+  }
+  if (/유모차.*무료대여가능/u.test(detail)) {
+    return "안내데스크에서 유모차를 무료로 빌릴 수 있어요.";
+  }
+  if (/유모차.*대여가능/u.test(detail)) {
+    return "유모차를 빌릴 수 있어요.";
+  }
+
+  const naturalDetail = detail
+    .replace(/가능함$/u, "가능해요")
+    .replace(/있음$/u, "있어요")
+    .replace(/구비$/u, "갖춰져 있어요");
+
+  return `${withTopicParticle(label)} ${naturalDetail}${/[.!?]$/u.test(naturalDetail) ? "" : "."}`;
 }
 
 function buildPlaceCards(rows: KnowledgeRow[]): PlaceCard[] {
@@ -938,12 +1256,224 @@ function getSupabaseHeaders(config: ReturnType<typeof getSupabaseConfig>, extra?
   };
 }
 
+function normalizeChatHistory(value: unknown): ChatHistoryItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.slice(-MAX_HISTORY_ITEMS).flatMap((item): ChatHistoryItem[] => {
+    if (!item || typeof item !== "object") return [];
+
+    const record = item as Record<string, unknown>;
+    if (record.role !== "assistant" && record.role !== "user") return [];
+
+    const content =
+      typeof record.content === "string"
+        ? record.content.trim().slice(0, MAX_HISTORY_CONTENT_LENGTH)
+        : "";
+    if (!content) return [];
+
+    const placeTitles = Array.isArray(record.placeTitles)
+      ? Array.from(
+          new Set(
+            record.placeTitles
+              .filter((title): title is string => typeof title === "string")
+              .map((title) => title.trim().slice(0, 80))
+              .filter(Boolean)
+          )
+        ).slice(0, MAX_CONTEXT_PLACE_TITLES)
+      : [];
+
+    return [{ role: record.role, content, placeTitles }];
+  });
+}
+
+function createConversationContext(
+  history: ChatHistoryItem[],
+  message: string
+): ConversationContext {
+  const previousAssistantMessage = [...history]
+    .reverse()
+    .find((item) => item.role === "assistant" && item.placeTitles.length);
+  const previousPlaceTitles = previousAssistantMessage?.placeTitles || [];
+  const seenPlaceTitles = Array.from(
+    new Set(history.filter((item) => item.role === "assistant").flatMap((item) => item.placeTitles))
+  );
+  const referencedPlaceTitle = resolveReferencedPlaceTitle(message, previousPlaceTitles);
+  const compactMessage = normalizeConversationReferenceText(message);
+  const wantsDifferentPlaces = asksForDifferentPlaces(compactMessage);
+  const isFollowUp =
+    previousPlaceTitles.length > 0 &&
+    (wantsDifferentPlaces ||
+      Boolean(referencedPlaceTitle) ||
+      includesAny(compactMessage, [
+        "후보지",
+        "후보중",
+        "그중",
+        "이중",
+        "이곳중",
+        "여기서",
+        "앞에서",
+        "아까",
+        "방금",
+        "추천한곳",
+        "추천해준곳",
+        "추천해준",
+        "그곳",
+        "거기",
+        "첫번째",
+        "두번째",
+        "세번째",
+        "1번",
+        "2번",
+        "3번",
+        "다시추천"
+      ]));
+
+  return {
+    history,
+    previousPlaceTitles,
+    seenPlaceTitles,
+    referencedPlaceTitle,
+    isFollowUp,
+    wantsDifferentPlaces
+  };
+}
+
+function asksForDifferentPlaces(compactMessage: string) {
+  return includesAny(compactMessage, [
+    "다른곳",
+    "다른데",
+    "다른장소",
+    "또다른",
+    "말고",
+    "빼고",
+    "겹치지않",
+    "새로운곳",
+    "새장소",
+    "더추천",
+    "또추천",
+    "다시추천"
+  ]);
+}
+
+function resolveReferencedPlaceTitle(message: string, placeTitles: string[]) {
+  if (!placeTitles.length) return null;
+
+  const compactMessage = normalizeConversationReferenceText(message);
+  const explicitlyNamedPlace = placeTitles.find((title) =>
+    compactMessage.includes(normalizeConversationReferenceText(title))
+  );
+  if (explicitlyNamedPlace) return explicitlyNamedPlace;
+
+  const ordinalIndex = [
+    ["첫번째", "첫째", "1번"],
+    ["두번째", "둘째", "2번"],
+    ["세번째", "셋째", "3번"]
+  ].findIndex((patterns) => includesAny(compactMessage, patterns));
+
+  if (ordinalIndex >= 0) return placeTitles[ordinalIndex] || null;
+
+  if (placeTitles.length === 1 && includesAny(compactMessage, ["그곳", "거기", "여기", "이곳"])) {
+    return placeTitles[0];
+  }
+
+  return null;
+}
+
+function normalizeConversationReferenceText(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("ko-KR")
+    .replace(/[\s!?.,'"]/g, "");
+}
+
+function applyConversationContext(
+  analysis: QueryAnalysis,
+  message: string,
+  context: ConversationContext
+): QueryAnalysis {
+  if (!context.isFollowUp) return analysis;
+
+  const compactMessage = normalizeConversationReferenceText(message);
+  const asksForCandidateRecommendation = includesAny(compactMessage, [
+    "추천",
+    "어디",
+    "어느",
+    "제일",
+    "가장",
+    "골라",
+    "고르"
+  ]);
+  const inheritedNeeds = fallbackAnalysis(
+    formatConversationHistory(context.history)
+  ).accessibility_needs;
+  const currentNeeds = fallbackAnalysis(message).accessibility_needs;
+
+  return {
+    ...analysis,
+    in_scope: true,
+    scope_reason: context.wantsDifferentPlaces
+      ? "이전 추천과 겹치지 않는 새 장소 요청"
+      : "직전 추천 후보를 이어서 묻는 후속 질문",
+    intent: context.wantsDifferentPlaces
+      ? "recommend_place"
+      : context.referencedPlaceTitle
+        ? analysis.intent
+        : asksForCandidateRecommendation
+          ? "recommend_place"
+          : analysis.intent,
+    place_name: context.wantsDifferentPlaces ? null : context.referencedPlaceTitle,
+    location: analysis.location || "대전",
+    accessibility_needs: currentNeeds.length
+      ? currentNeeds
+      : analysis.accessibility_needs.length
+        ? analysis.accessibility_needs
+        : inheritedNeeds,
+    keywords: Array.from(
+      new Set([
+        ...(context.wantsDifferentPlaces
+          ? []
+          : context.referencedPlaceTitle
+            ? [context.referencedPlaceTitle]
+            : context.previousPlaceTitles),
+        ...analysis.keywords
+      ])
+    ).slice(0, 8)
+  };
+}
+
+function formatConversationHistory(history: ChatHistoryItem[]) {
+  if (!history.length) return "";
+
+  return history
+    .slice(-6)
+    .map((item) => {
+      const speaker = item.role === "user" ? "사용자" : "다유";
+      const placeContext = item.placeTitles.length
+        ? ` (추천 후보: ${item.placeTitles.join(", ")})`
+        : "";
+      return `${speaker}: ${item.content}${placeContext}`;
+    })
+    .join("\n");
+}
+
+function createChatCompletionHistory(history: ChatHistoryItem[]) {
+  return history.slice(-6).map((item) => ({
+    role: item.role,
+    content:
+      item.role === "assistant" && item.placeTitles.length
+        ? `${item.content}\n추천 후보: ${item.placeTitles.join(", ")}`
+        : item.content
+  }));
+}
+
 async function classifyQuestion({
   apiKey,
+  history,
   message,
   model
 }: {
   apiKey: string;
+  history: ChatHistoryItem[];
   message: string;
   model: string;
 }): Promise<QueryAnalysis> {
@@ -964,7 +1494,8 @@ async function classifyQuestion({
               "다음 질문을 JSON으로 분류해.",
               "예시 출력:",
               '{"in_scope":true,"scope_reason":"대전 무장애 여행지 추천 질문","intent":"recommend_place","accessibility_needs":["wheelchair"],"weather_sensitive":true,"place_name":null,"location":"대전","keywords":["휠체어","장애인","날씨","추천"]}',
-              `질문: ${message}`
+              ...(history.length ? ["최근 대화:", formatConversationHistory(history)] : []),
+              `현재 질문: ${message}`
             ].join("\n")
           }
         ],
@@ -1071,6 +1602,23 @@ function fallbackAnalysis(message: string): QueryAnalysis {
     location: "대전",
     keywords
   };
+}
+
+function normalizeProfileAccessibilityNeeds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const allowedNeeds = new Set([
+    "wheelchair",
+    "stroller",
+    "elderly",
+    "visual_impairment",
+    "hearing_impairment",
+    "mobility_access"
+  ]);
+  return Array.from(
+    new Set(
+      value.filter((item): item is string => typeof item === "string" && allowedNeeds.has(item))
+    )
+  );
 }
 
 function rankKnowledgeRows(rows: KnowledgeRow[], analysis: QueryAnalysis, searchTerms: string[]) {
@@ -1364,12 +1912,6 @@ function getVectorFailureMessage(status: number, text: string) {
   return "pgvector 검색 호출 실패";
 }
 
-function getKnowledgeSearchLabel(knowledge: KnowledgeResult) {
-  if (knowledge.searchMode === "vector") return "pgvector";
-  if (knowledge.searchMode === "keyword") return "JS 랭킹 fallback";
-  return "검색 준비 전";
-}
-
 function getRequestedFacilityCategory(searchTerms: string[]) {
   if (asksForToilet(searchTerms)) return "공중화장실";
   if (asksForParking(searchTerms)) return "장애인주차장";
@@ -1586,7 +2128,10 @@ async function fetchVectorReadiness(
   }
 }
 
-async function fetchKnowledge(analysis: QueryAnalysis): Promise<KnowledgeResult> {
+async function fetchKnowledge(
+  analysis: QueryAnalysis,
+  seenPlaceTitles: string[] = []
+): Promise<KnowledgeResult> {
   const config = getSupabaseConfig();
 
   if (!config.url || !config.key || !config.schema || !config.table) {
@@ -1605,11 +2150,21 @@ async function fetchKnowledge(analysis: QueryAnalysis): Promise<KnowledgeResult>
 
   const searchTerms = buildSearchTerms(analysis);
 
-  const vectorKnowledge = await fetchVectorKnowledge(config, analysis, searchTerms);
+  const vectorKnowledge = await fetchVectorKnowledge(
+    config,
+    analysis,
+    searchTerms,
+    seenPlaceTitles
+  );
   if (vectorKnowledge.status === "ready") {
     const facilityCategory = getRequestedFacilityCategory(searchTerms);
     if (facilityCategory && !hasCategory(vectorKnowledge.rows, facilityCategory)) {
-      const facilityKnowledge = await fetchKeywordKnowledge(config, analysis, searchTerms);
+      const facilityKnowledge = await fetchKeywordKnowledge(
+        config,
+        analysis,
+        searchTerms,
+        seenPlaceTitles
+      );
       if (
         facilityKnowledge.status === "ready" &&
         hasCategory(facilityKnowledge.rows, facilityCategory)
@@ -1637,7 +2192,12 @@ async function fetchKnowledge(analysis: QueryAnalysis): Promise<KnowledgeResult>
     return vectorKnowledge;
   }
 
-  const keywordKnowledge = await fetchKeywordKnowledge(config, analysis, searchTerms);
+  const keywordKnowledge = await fetchKeywordKnowledge(
+    config,
+    analysis,
+    searchTerms,
+    seenPlaceTitles
+  );
   if (keywordKnowledge.status === "ready" && vectorKnowledge.status !== "not_configured") {
     const fallbackDebug =
       keywordKnowledge.debug ||
@@ -1664,7 +2224,8 @@ async function fetchKnowledge(analysis: QueryAnalysis): Promise<KnowledgeResult>
 async function fetchVectorKnowledge(
   config: ReturnType<typeof getSupabaseConfig>,
   analysis: QueryAnalysis,
-  searchTerms: string[]
+  searchTerms: string[],
+  seenPlaceTitles: string[]
 ): Promise<KnowledgeResult> {
   const embedding = getEmbeddingConfig();
 
@@ -1768,10 +2329,12 @@ async function fetchVectorKnowledge(
       };
     }
 
-    const rankedRows = rankKnowledgeRows(rows, analysis, searchTerms).slice(
-      0,
-      KNOWLEDGE_RESULT_LIMIT
-    );
+    const rankedRows = selectDiverseItems({
+      items: rankKnowledgeRows(rows, analysis, searchTerms),
+      getTitle: (row) => getRowText(row, "title") || "",
+      limit: KNOWLEDGE_RESULT_LIMIT,
+      seenTitles: seenPlaceTitles
+    });
 
     if (!rankedRows.length) {
       return {
@@ -1838,7 +2401,8 @@ async function fetchVectorKnowledge(
 async function fetchKeywordKnowledge(
   config: ReturnType<typeof getSupabaseConfig>,
   analysis: QueryAnalysis,
-  searchTerms: string[]
+  searchTerms: string[],
+  seenPlaceTitles: string[]
 ): Promise<KnowledgeResult> {
   const params = new URLSearchParams({
     select: "*",
@@ -1891,10 +2455,12 @@ async function fetchKeywordKnowledge(
       };
     }
 
-    const rankedRows = rankKnowledgeRows(rows, analysis, searchTerms).slice(
-      0,
-      KNOWLEDGE_RESULT_LIMIT
-    );
+    const rankedRows = selectDiverseItems({
+      items: rankKnowledgeRows(rows, analysis, searchTerms),
+      getTitle: (row) => getRowText(row, "title") || "",
+      limit: KNOWLEDGE_RESULT_LIMIT,
+      seenTitles: seenPlaceTitles
+    });
 
     if (!rankedRows.length) {
       return {
@@ -2076,7 +2642,7 @@ function getRowActivityHint(row: KnowledgeRow) {
   }
 
   if (includesAny(searchableText, ["박물관", "미술관", "전시", "문화시설", "기념관"])) {
-    return "전시, 자료, 문화 콘텐츠를 실내에서 관람하거나 쉬어갈 수 있는 곳";
+    return "실내에서 전시와 문화 자료를 천천히 둘러볼 수 있는 곳";
   }
 
   if (includesAny(searchableText, ["시장", "쇼핑", "상점", "백화점", "몰"])) {
@@ -2113,8 +2679,15 @@ function getRowTags(row: KnowledgeRow) {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { message?: unknown };
+    const body = (await request.json()) as {
+      message?: unknown;
+      accessibilityNeeds?: unknown;
+      history?: unknown;
+    };
     const message = typeof body.message === "string" ? body.message.trim() : "";
+    const history = normalizeChatHistory(body.history);
+    const conversationContext = createConversationContext(history, message);
+    const profileAccessibilityNeeds = normalizeProfileAccessibilityNeeds(body.accessibilityNeeds);
 
     if (!message) {
       return NextResponse.json({ error: "message is required" }, { status: 400 });
@@ -2136,15 +2709,37 @@ export async function POST(request: Request) {
       );
     }
 
-    const analysis = await classifyQuestion({ apiKey, message, model });
+    const classifiedAnalysis = await classifyQuestion({
+      apiKey,
+      history,
+      message,
+      model
+    });
+    const contextualAnalysis = applyConversationContext(
+      classifiedAnalysis,
+      message,
+      conversationContext
+    );
+    const analysis: QueryAnalysis = {
+      ...contextualAnalysis,
+      accessibility_needs: Array.from(
+        new Set([...contextualAnalysis.accessibility_needs, ...profileAccessibilityNeeds])
+      )
+    };
 
     if (!analysis.in_scope) {
       return NextResponse.json(createOutOfScopeResponse(analysis));
     }
 
     const searchTerms = buildSearchTerms(analysis);
+    const seenPlaceTitles =
+      analysis.intent === "recommend_place" &&
+      !analysis.place_name &&
+      (!conversationContext.isFollowUp || conversationContext.wantsDifferentPlaces)
+        ? conversationContext.seenPlaceTitles
+        : [];
     const [knowledge, weather] = await Promise.all([
-      fetchKnowledge(analysis),
+      fetchKnowledge(analysis, seenPlaceTitles),
       fetchTourWeather({
         location: analysis.location,
         weatherSensitive: analysis.weather_sensitive
@@ -2177,6 +2772,23 @@ export async function POST(request: Request) {
         messages: [
           { role: "system", content: systemPrompt },
           { role: "system", content: formatKnowledgeContext(knowledge, weather) },
+          ...(profileAccessibilityNeeds.length
+            ? [
+                {
+                  role: "system",
+                  content: `사용자가 저장한 접근성 조건: ${profileAccessibilityNeeds.join(", ")}. 질문과 관련 있을 때만 근거 자료 안에서 반영한다.`
+                }
+              ]
+            : []),
+          ...(conversationContext.isFollowUp
+            ? [
+                {
+                  role: "system",
+                  content: `현재 질문은 최근 대화의 후속 질문이다. 직전 추천 후보는 ${conversationContext.previousPlaceTitles.join(", ")}이며, 이 후보 안에서 사용자의 질문을 이어서 답한다.`
+                }
+              ]
+            : []),
+          ...createChatCompletionHistory(history),
           { role: "user", content: message }
         ],
         thinking: { type: "disabled" },
@@ -2214,6 +2826,7 @@ export async function POST(request: Request) {
         inputMessage: message,
         knowledge,
         analysis,
+        conversationContext,
         searchTerms,
         weather
       })

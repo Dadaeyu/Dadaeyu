@@ -19,8 +19,16 @@ export interface AreaCode {
 }
 
 // DB(tb_tourism_places) + 카카오 로컬 검색을 병행 조회하고, 좌표 기준으로 중복을 제거한다.
-export function usePlaceSearch({ accessibility, gu }: { accessibility: string[]; gu: string }) {
-  const [keyword, setKeyword] = useState("");
+export function usePlaceSearch({
+  accessibility,
+  gu,
+  initialKeyword = ""
+}: {
+  accessibility: string[];
+  gu: string;
+  initialKeyword?: string;
+}) {
+  const [keyword, setKeyword] = useState(initialKeyword);
   const [searchPlaces, setSearchPlaces] = useState<SearchPlace[]>([]);
   const [searchDetailId, setSearchDetailId] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);

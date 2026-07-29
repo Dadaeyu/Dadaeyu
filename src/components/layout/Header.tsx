@@ -29,11 +29,11 @@ export default function Header() {
 
   return (
     <header className="border-hairline sticky top-0 z-40 border-b bg-white/85 backdrop-blur-md">
-      <div className="relative mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 md:px-6">
+      <div className="relative mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 lg:gap-4 lg:px-6">
         {/* 브랜드 로고 — 마크(위치핀+하트) + 워드마크 */}
         <Link
           href="/"
-          className="group flex shrink-0 items-center gap-2.5"
+          className="group flex min-h-12 shrink-0 items-center gap-2.5"
           aria-label="다대유 - 대전 무장애 여행 홈"
         >
           <span className="bg-brand-500 relative inline-flex h-9 w-9 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-105">
@@ -68,7 +68,7 @@ export default function Header() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="hidden md:inline-flex"
+                className="hidden min-h-12 min-w-12 lg:inline-flex"
                 disabled={loggingOut}
                 onClick={handleLogout}
               >
@@ -77,7 +77,12 @@ export default function Header() {
               </Button>
             </>
           ) : (
-            <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="hidden min-h-12 min-w-12 lg:inline-flex"
+            >
               <Link href={`/login?next=${encodeURIComponent(pathname)}`}>로그인</Link>
             </Button>
           )}
@@ -87,7 +92,7 @@ export default function Header() {
             onClick={() => setShowAccessibility((v) => !v)}
             aria-label="접근성 설정"
             aria-expanded={showAccessibility}
-            className={`rounded-full ${
+            className={`size-12 rounded-full ${
               showAccessibility ? "bg-brand-50 text-brand-600" : "text-steel hover:text-brand-600"
             }`}
           >

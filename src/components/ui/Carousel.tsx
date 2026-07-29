@@ -94,7 +94,7 @@ function Carousel({
   React.useEffect(() => {
     if (!api) return;
 
-    // 마운트 시 1회 스크롤 가능 상태 동기화 — embla(외부 시스템)와 맞추기 위한 의도된 호출.
+    // 마운트 시 1회 스크롤 가능 상태 동기화. embla(외부 시스템)와 맞추기 위한 의도된 호출.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     onSelect(api);
     api.on("reInit", onSelect);
@@ -136,7 +136,14 @@ function CarouselContent({ className, ...props }: React.ComponentProps<"div">) {
   const { carouselRef, orientation } = useCarousel();
 
   return (
-    <div ref={carouselRef} className="overflow-hidden" data-slot="carousel-content">
+    <div
+      ref={carouselRef}
+      className={cn(
+        "overflow-hidden",
+        orientation === "horizontal" ? "touch-pan-y" : "touch-pan-x"
+      )}
+      data-slot="carousel-content"
+    >
       <div
         className={cn("flex", orientation === "horizontal" ? "-ml-4" : "-mt-4 flex-col", className)}
         {...props}

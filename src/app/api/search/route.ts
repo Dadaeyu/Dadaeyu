@@ -14,7 +14,18 @@ const ACCESSIBILITY_COLS: Record<string, string[]> = {
   ],
   시각: ["has_braile_block", "has_help_dog", "has_guide_human", "has_audio_guide", "has_big_print"],
   청각: ["has_sign_guide", "has_video_guide"],
-  영유아: ["has_stroller", "has_lactation_room"]
+  영유아: ["has_stroller", "has_lactation_room"],
+  "계단 피하기": ["has_route", "has_wheelchair", "has_exit", "has_elevator"],
+  "긴 이동 피하기": ["has_route", "has_restroom", "has_parking"],
+  "시각 안내": [
+    "has_braile_block",
+    "has_help_dog",
+    "has_guide_human",
+    "has_audio_guide",
+    "has_big_print"
+  ],
+  "청각 안내": ["has_sign_guide", "has_video_guide"],
+  "쉬운 설명": []
 };
 
 async function getAccessibleIds(types: string[]): Promise<number[] | null> {

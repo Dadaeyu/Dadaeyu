@@ -31,10 +31,7 @@ export default function RootShell({
   const [activeNotice, setActiveNotice] = useState<ActiveNotice | null>(null);
 
   useEffect(() => {
-    if (!isHomePage) {
-      setActiveNotice(null);
-      return;
-    }
+    if (!isHomePage) return;
 
     let cancelled = false;
 
@@ -55,7 +52,7 @@ export default function RootShell({
           // ignore storage errors
         }
 
-        setActiveNotice(notice);
+        if (isDisplayableNotice(notice)) setActiveNotice(notice);
       })
       .catch(() => {});
 
@@ -106,4 +103,10 @@ export default function RootShell({
       </AccessibilityProvider>
     </AuthProvider>
   );
+}
+
+function isDisplayableNotice(notice: ActiveNotice) {
+  const content = notice.content.replace(/\s+/g, " ").trim();
+  if (content.length < 10) return false;
+  return !/^(테스트|test|히히)/iu.test(content);
 }

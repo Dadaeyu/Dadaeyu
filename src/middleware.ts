@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveAuthDestination } from "@/lib/auth/post-login";
 import { needsEmailConfirmation } from "@/lib/auth/user";
+import { getPublicSupabaseConfig } from "@/lib/supabase/config";
 
 const PROTECTED_PATHS = ["/mypage", "/onboarding"];
 const AUTH_PATHS = ["/login", "/signup", "/forgot-password", "/find-email"];
@@ -31,25 +32,24 @@ function isOnboardingExempt(pathname: string) {
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
   const pathname = request.nextUrl.pathname;
+  const config = getPublicSupabaseConfig();
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-        }
+  if (!config.isConfigured) return response;
+
+  const supabase = createServerClient(config.url, config.key, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options)
+        );
       }
     }
-  );
+  });
 
   const {
     data: { user }

@@ -26,12 +26,24 @@ import {
 } from "@/lib/supabase/member";
 import NicknameField from "@/components/NicknameField";
 import { usePlaces } from "@/context/PlacesContext";
+import {
+  HOME_NEED_OPTIONS,
+  homeNeedIdsToStorageValues,
+  resolveHomeNeedIds
+} from "@/features/home/homeData";
 
-const ACCESS_OPTIONS = [
-  { key: "시각", icon: "👁️" },
-  { key: "청각", icon: "🦻" },
-  { key: "보행", icon: "♿" }
-];
+const ACCESS_ICONS = {
+  step_free: "♿",
+  short_distance: "↔️",
+  visual_guidance: "👁️",
+  hearing_guidance: "🦻",
+  easy_explanation: "가"
+} as const;
+
+const ACCESS_OPTIONS = HOME_NEED_OPTIONS.map((option) => ({
+  key: option.storageValue,
+  icon: ACCESS_ICONS[option.id]
+}));
 
 type TabKey = "saved" | "courses" | "posts" | "reports";
 
@@ -67,7 +79,7 @@ export default function MyPage() {
       );
     }
     if (preferences) {
-      setAccess(preferences.accessibility_needs);
+      setAccess(homeNeedIdsToStorageValues(resolveHomeNeedIds(preferences.accessibility_needs)));
       setThemes(preferences.theme_preferences);
     }
   }, [member, preferences]);

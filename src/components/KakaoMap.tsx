@@ -103,6 +103,7 @@ export default function KakaoMap({
   myLocation = null,
   focusMyLocationTrigger = 0
 }: Props) {
+  const mapKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ?? process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const overlaysRef = useRef<kakao.maps.CustomOverlay[]>([]);
@@ -111,6 +112,7 @@ export default function KakaoMap({
   const tooltipOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const myLocationOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const [mapInitCount, setMapInitCount] = useState(0);
+  const [mapLoadFailed, setMapLoadFailed] = useState(false);
 
   const initMap = () => {
     if (!containerRef.current || !window.kakao?.maps) return;
@@ -274,12 +276,25 @@ export default function KakaoMap({
 
   return (
     <>
-      <Script
-        src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ?? process.env.NEXT_PUBLIC_KAKAO_MAP_KEY}&libraries=services&autoload=false`}
-        strategy="afterInteractive"
-        onReady={() => window.kakao.maps.load(initMap)}
-      />
+      {mapKey ? (
+        <Script
+          src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${mapKey}&libraries=services&autoload=false`}
+          strategy="afterInteractive"
+          onReady={() => window.kakao.maps.load(initMap)}
+          onError={() => setMapLoadFailed(true)}
+        />
+      ) : null}
       <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      {!mapKey || mapLoadFailed ? (
+        <div className="bg-surface text-slate absolute inset-0 grid place-items-center px-6 text-center">
+          <div className="max-w-sm">
+            <p className="text-ink text-lg font-semibold">지도를 불러올 수 없어요</p>
+            <p className="mt-2 text-base leading-6">
+              지도 연결 설정을 확인하는 동안 검색 결과 목록에서 장소 정보를 먼저 확인해 주세요.
+            </p>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

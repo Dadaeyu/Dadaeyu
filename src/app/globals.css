@@ -424,6 +424,56 @@
     font-size: calc(16px * var(--a11y-scale, 1));
   }
 
+  @media (max-width: 767px) {
+    html.font-scale-large .home-heading-row {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    html.font-scale-large .home-heading-row > a {
+      width: 100%;
+    }
+
+    html.font-scale-large .home-profile-label {
+      display: inline !important;
+    }
+
+    html.font-scale-large .home-action-grid,
+    html.font-scale-large .home-needs-grid {
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    html.font-scale-large .home-search-input {
+      min-height: 64px !important;
+    }
+
+    html.font-scale-large .home-search-submit {
+      height: 64px !important;
+      width: 64px !important;
+    }
+
+    html.font-scale-large .home-search-submit svg,
+    html.font-scale-large .home-search-row > svg {
+      height: 24px !important;
+      width: 24px !important;
+    }
+
+    html.font-scale-large .mobile-nav-list {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    html.font-scale-large .mobile-nav-item {
+      min-width: 0;
+      padding: 8px 2px;
+    }
+
+    html.font-scale-large .mobile-nav-item > svg {
+      height: 22px;
+      width: 22px;
+    }
+  }
+
   :focus-visible {
     outline: 2px solid var(--color-brand-500);
     outline-offset: 2px;
