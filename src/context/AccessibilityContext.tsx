@@ -53,44 +53,72 @@ function prefsToA11yState(prefs: {
 export function AccessibilityProvider({ children }: { children: ReactNode }) {
   const auth = useOptionalAuth();
   const [state, setState] = useState<AccessibilityState>(DEFAULT_A11Y_STATE);
+  const stateRef = useRef(state);
   const lastSpoken = useRef<string | null>(null);
   const loaded = useRef(false);
   const syncedFromDb = useRef(false);
+  const syncedUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     const saved = loadAccessibilityState();
     loaded.current = true;
+    stateRef.current = saved;
     setState(saved);
     applyAccessibilityState(saved);
   }, []);
 
+  // 로그인 완료 후 DB preferences → 화면 (기기 간 동기화). auth.loading 끝난 뒤에만.
   useEffect(() => {
-    if (!auth?.preferences || syncedFromDb.current) return;
+    if (!auth || auth.loading) return;
+
+    if (!auth.user) {
+      syncedFromDb.current = false;
+      syncedUserId.current = null;
+      return;
+    }
+
+    if (!auth.preferences) return;
+
+    // 같은 유저로 이미 동기화했으면 스킵 (토글 직후 preferences 패치로 재적용·깜빡임 방지)
+    if (syncedFromDb.current && syncedUserId.current === auth.user.id) return;
+
     const fromDb = prefsToA11yState(auth.preferences);
     syncedFromDb.current = true;
+    syncedUserId.current = auth.user.id;
+    stateRef.current = fromDb;
     setState(fromDb);
     applyAccessibilityState(fromDb);
     saveAccessibilityState(fromDb);
-  }, [auth?.preferences]);
-
-  useEffect(() => {
-    if (!auth?.user) syncedFromDb.current = false;
-  }, [auth?.user]);
+  }, [auth, auth?.loading, auth?.user, auth?.preferences]);
 
   const persistState = useCallback(
-    (next: AccessibilityState) => {
+    async (next: AccessibilityState) => {
       applyAccessibilityState(next);
       saveAccessibilityState(next);
-      if (auth?.user) {
-        updateUserPreferences(auth.user.id, {
+      if (!auth?.user) return;
+      try {
+        const updated = await updateUserPreferences(auth.user.id, {
           dark_mode: next.darkMode,
           high_contrast: next.highContrast,
           font_scale: next.fontScale,
           read_aloud: next.readAloud
-        }).catch(() => {});
+        });
+        auth.patchPreferences({
+          dark_mode: updated.dark_mode,
+          high_contrast: updated.high_contrast,
+          font_scale: updated.font_scale,
+          read_aloud: updated.read_aloud,
+          updated_at: updated.updated_at
+        });
+      } catch (err) {
+        console.warn("[a11y] DB 동기화 실패 (로컬에는 저장됨)", err);
       }
     },
-    [auth?.user]
+    [auth]
   );
 
   const speak = useCallback((text: string) => {
@@ -147,11 +175,10 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
   const updateState = useCallback(
     (updater: (prev: AccessibilityState) => AccessibilityState) => {
       if (!loaded.current) return;
-      setState((prev) => {
-        const next = updater(prev);
-        persistState(next);
-        return next;
-      });
+      const next = updater(stateRef.current);
+      stateRef.current = next;
+      setState(next);
+      void persistState(next);
     },
     [persistState]
   );

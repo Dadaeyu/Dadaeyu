@@ -22,7 +22,12 @@ export async function POST(request: Request) {
 
     password?: string;
 
-    profile?: { nickname?: string; phone?: string; theme_preferences?: string[] };
+    profile?: {
+      nickname?: string;
+      phone?: string;
+      theme_preferences?: string[];
+      accessibility_needs?: string[];
+    };
 
     next?: string;
 
@@ -61,6 +66,11 @@ export async function POST(request: Request) {
         (v): v is string => typeof v === "string" && v.trim().length > 0
       )
     : [];
+  const accessibilityNeeds = Array.isArray(body.profile?.accessibility_needs)
+    ? body.profile.accessibility_needs.filter(
+        (v): v is string => typeof v === "string" && v.trim().length > 0
+      )
+    : [];
 
   if (!email || !password || !nickname || !phone) {
     return jsonError("가입 정보가 올바르지 않습니다.", "invalid_request", 400);
@@ -78,7 +88,8 @@ export async function POST(request: Request) {
     profile: {
       nickname,
       phone,
-      ...(themePreferences.length > 0 ? { theme_preferences: themePreferences } : {})
+      ...(themePreferences.length > 0 ? { theme_preferences: themePreferences } : {}),
+      ...(accessibilityNeeds.length > 0 ? { accessibility_needs: accessibilityNeeds } : {})
     }
   });
 

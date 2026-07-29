@@ -23,6 +23,8 @@ interface AuthContextValue {
   loading: boolean;
   signOut: () => Promise<void>;
   refreshMember: () => Promise<void>;
+  /** 접근성 등 일부 필드만 로컬 preferences 캐시에 반영 */
+  patchPreferences: (patch: Partial<DbUserPreferences>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -49,6 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     await loadUserData(user.id);
   }, [user, loadUserData]);
+
+  const patchPreferences = useCallback((patch: Partial<DbUserPreferences>) => {
+    setPreferences((prev) =>
+      prev ? { ...prev, ...patch, updated_at: new Date().toISOString() } : prev
+    );
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -96,9 +104,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       preferences,
       loading,
       signOut,
-      refreshMember
+      refreshMember,
+      patchPreferences
     }),
-    [user, session, member, preferences, loading, signOut, refreshMember]
+    [user, session, member, preferences, loading, signOut, refreshMember, patchPreferences]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

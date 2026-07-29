@@ -82,7 +82,10 @@ type EventRow = {
   badge_label: string;
   badge_color: string;
   cover_gradient: string;
+  cover_image_url: string | null;
   period_label: string;
+  period_start: string | null;
+  period_end: string | null;
   is_visible: boolean;
   sort_order: number;
 };
@@ -95,7 +98,10 @@ export function buildEventPatch(body: {
   badge_label?: string;
   badge_color?: string;
   cover_gradient?: string;
+  cover_image_url?: string | null;
   period_label?: string;
+  period_start?: string | null;
+  period_end?: string | null;
   is_visible?: boolean;
   sort_order?: number;
 }): Record<string, unknown> {
@@ -107,7 +113,20 @@ export function buildEventPatch(body: {
   if (body.badge_label !== undefined) patch.badge_label = body.badge_label.trim();
   if (body.badge_color !== undefined) patch.badge_color = body.badge_color.trim();
   if (body.cover_gradient !== undefined) patch.cover_gradient = body.cover_gradient.trim();
+  if (body.cover_image_url !== undefined) {
+    patch.cover_image_url =
+      body.cover_image_url === null || body.cover_image_url.trim() === ""
+        ? null
+        : body.cover_image_url.trim();
+  }
   if (body.period_label !== undefined) patch.period_label = body.period_label.trim();
+  if (body.period_start !== undefined) {
+    patch.period_start =
+      body.period_start === null || body.period_start === "" ? null : body.period_start;
+  }
+  if (body.period_end !== undefined) {
+    patch.period_end = body.period_end === null || body.period_end === "" ? null : body.period_end;
+  }
   if (body.is_visible !== undefined) patch.is_visible = body.is_visible;
   if (body.sort_order !== undefined) patch.sort_order = body.sort_order;
   return patch;
@@ -125,7 +144,17 @@ export function mergeAndValidateEvent(
     badge_label: (patch.badge_label as string | undefined) ?? existing.badge_label,
     badge_color: (patch.badge_color as string | undefined) ?? existing.badge_color,
     cover_gradient: (patch.cover_gradient as string | undefined) ?? existing.cover_gradient,
+    cover_image_url:
+      patch.cover_image_url !== undefined
+        ? (patch.cover_image_url as string | null)
+        : existing.cover_image_url,
     period_label: (patch.period_label as string | undefined) ?? existing.period_label,
+    period_start:
+      patch.period_start !== undefined
+        ? (patch.period_start as string | null)
+        : existing.period_start,
+    period_end:
+      patch.period_end !== undefined ? (patch.period_end as string | null) : existing.period_end,
     is_visible: (patch.is_visible as boolean | undefined) ?? existing.is_visible,
     sort_order: (patch.sort_order as number | undefined) ?? existing.sort_order
   };

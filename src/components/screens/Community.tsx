@@ -30,8 +30,11 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
 import { formatCommunityDate } from "@/lib/community/format";
-import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
+import { COMMUNITY_DEFAULT_PAGE_SIZE, COMMUNITY_PAGE_SIZES } from "@/lib/pagination";
 import { ListPagination } from "@/components/community/ListPagination";
+import { useOptionalAuth } from "@/context/AuthContext";
+import { requireLoginOrRedirect } from "@/lib/auth/require-login-redirect";
+import { CommunityLevelBadge } from "@/components/community/CommunityLevelBadge";
 
 type CommunityNoticeItem = {
   id: number;
@@ -48,6 +51,7 @@ type CommunityEventItem = {
   badge_label: string;
   badge_color: string;
   cover_gradient: string;
+  cover_image_url: string | null;
   period_label: string;
 };
 
@@ -111,6 +115,7 @@ type BoardPostItem = {
   board_nm: string;
   title: string;
   writer_nm: string;
+  writer_community_level?: number;
   view_cnt: number;
   like_cnt: number;
   comment_cnt: number;
@@ -136,9 +141,39 @@ function CommunityContentError({ message, onRetry }: { message: string; onRetry:
   );
 }
 
+function PageSizeSelect({
+  value,
+  onChange,
+  disabled
+}: {
+  value: number;
+  onChange: (size: number) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="text-steel flex items-center gap-2 text-sm">
+      <span className="whitespace-nowrap">표시</span>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="border-hairline bg-background text-ink focus:ring-brand-500 rounded-md border px-2 py-1.5 text-sm focus:ring-2 focus:outline-none"
+      >
+        {COMMUNITY_PAGE_SIZES.map((n) => (
+          <option key={n} value={n}>
+            {n}개씩
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export default function Community() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const auth = useOptionalAuth();
   const id = typeof params.id === "string" ? params.id : undefined;
   const initialTab = searchParams.get("tab");
   const initialBoardId = searchParams.get("boardId");
@@ -161,16 +196,32 @@ export default function Community() {
   const [boardPosts, setBoardPosts] = useState<BoardPostItem[]>([]);
   const [boardTotal, setBoardTotal] = useState(0);
   const [boardPage, setBoardPage] = useState(0);
+  const [boardPageSize, setBoardPageSize] = useState(COMMUNITY_DEFAULT_PAGE_SIZE);
   const [boardQuery, setBoardQuery] = useState("");
   const [boardSearchInput, setBoardSearchInput] = useState("");
   const [boardLoading, setBoardLoading] = useState(false);
   const [boardError, setBoardError] = useState<string | null>(null);
+
   const [notices, setNotices] = useState<CommunityNoticeItem[]>([]);
+  const [noticeTotal, setNoticeTotal] = useState(0);
+  const [noticePage, setNoticePage] = useState(0);
+  const [noticePageSize, setNoticePageSize] = useState(COMMUNITY_DEFAULT_PAGE_SIZE);
+  const [noticeLoading, setNoticeLoading] = useState(false);
+  const [noticeError, setNoticeError] = useState<string | null>(null);
+
   const [events, setEvents] = useState<CommunityEventItem[]>([]);
+  const [eventTotal, setEventTotal] = useState(0);
+  const [eventPage, setEventPage] = useState(0);
+  const [eventPageSize, setEventPageSize] = useState(COMMUNITY_DEFAULT_PAGE_SIZE);
+  const [eventLoading, setEventLoading] = useState(false);
+  const [eventError, setEventError] = useState<string | null>(null);
+
   const [faqs, setFaqs] = useState<CommunityFaqItem[]>([]);
-  const [contentLoading, setContentLoading] = useState(true);
-  const [contentError, setContentError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [faqTotal, setFaqTotal] = useState(0);
+  const [faqPage, setFaqPage] = useState(0);
+  const [faqPageSize, setFaqPageSize] = useState(COMMUNITY_DEFAULT_PAGE_SIZE);
+  const [faqLoading, setFaqLoading] = useState(false);
+  const [faqError, setFaqError] = useState<string | null>(null);
 
   const loadBoardPosts = useCallback(
     async (isCancelled: () => boolean) => {
@@ -179,7 +230,7 @@ export default function Community() {
       try {
         const params = new URLSearchParams();
         params.set("page", String(boardPage + 1));
-        params.set("pageSize", String(DEFAULT_PAGE_SIZE));
+        params.set("pageSize", String(boardPageSize));
         if (boardQuery.trim()) params.set("q", boardQuery.trim());
         if (filter !== "all") params.set("boardId", filter);
         if (contentIdFilter) params.set("contentId", contentIdFilter);
@@ -205,72 +256,104 @@ export default function Community() {
         if (!isCancelled()) setBoardLoading(false);
       }
     },
-    [boardPage, boardQuery, filter, contentIdFilter]
+    [boardPage, boardPageSize, boardQuery, filter, contentIdFilter]
   );
 
-  const loadCommunityContent = useCallback(async (isCancelled: () => boolean) => {
-    setContentLoading(true);
-    setContentError(null);
-    try {
-      const [noticesRes, eventsRes, faqsRes] = await Promise.all([
-        fetch("/api/community/notices"),
-        fetch("/api/community/events"),
-        fetch("/api/community/faq")
-      ]);
-
-      const errors: string[] = [];
-      if (!noticesRes.ok) {
-        errors.push(await parseJsonError(noticesRes, "공지사항을 불러오지 못했습니다"));
+  const loadNotices = useCallback(
+    async (isCancelled: () => boolean) => {
+      setNoticeLoading(true);
+      setNoticeError(null);
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(noticePage + 1));
+        params.set("pageSize", String(noticePageSize));
+        const res = await fetch(`/api/community/notices?${params}`);
+        if (!res.ok) {
+          throw new Error(await parseJsonError(res, "공지사항을 불러오지 못했습니다"));
+        }
+        const json = (await res.json()) as {
+          items?: CommunityNoticeItem[];
+          total?: number;
+        };
+        if (isCancelled()) return;
+        setNotices(json.items ?? []);
+        setNoticeTotal(json.total ?? 0);
+      } catch (e) {
+        if (!isCancelled()) {
+          setNoticeError(e instanceof Error ? e.message : "공지 로드 실패");
+          setNotices([]);
+          setNoticeTotal(0);
+        }
+      } finally {
+        if (!isCancelled()) setNoticeLoading(false);
       }
-      if (!eventsRes.ok) {
-        errors.push(await parseJsonError(eventsRes, "이벤트를 불러오지 못했습니다"));
+    },
+    [noticePage, noticePageSize]
+  );
+
+  const loadEvents = useCallback(
+    async (isCancelled: () => boolean) => {
+      setEventLoading(true);
+      setEventError(null);
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(eventPage + 1));
+        params.set("pageSize", String(eventPageSize));
+        const res = await fetch(`/api/community/events?${params}`);
+        if (!res.ok) {
+          throw new Error(await parseJsonError(res, "이벤트를 불러오지 못했습니다"));
+        }
+        const json = (await res.json()) as {
+          items?: CommunityEventItem[];
+          total?: number;
+        };
+        if (isCancelled()) return;
+        setEvents(json.items ?? []);
+        setEventTotal(json.total ?? 0);
+      } catch (e) {
+        if (!isCancelled()) {
+          setEventError(e instanceof Error ? e.message : "이벤트 로드 실패");
+          setEvents([]);
+          setEventTotal(0);
+        }
+      } finally {
+        if (!isCancelled()) setEventLoading(false);
       }
-      if (!faqsRes.ok) {
-        errors.push(await parseJsonError(faqsRes, "FAQ를 불러오지 못했습니다"));
+    },
+    [eventPage, eventPageSize]
+  );
+
+  const loadFaqs = useCallback(
+    async (isCancelled: () => boolean) => {
+      setFaqLoading(true);
+      setFaqError(null);
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(faqPage + 1));
+        params.set("pageSize", String(faqPageSize));
+        const res = await fetch(`/api/community/faq?${params}`);
+        if (!res.ok) {
+          throw new Error(await parseJsonError(res, "FAQ를 불러오지 못했습니다"));
+        }
+        const json = (await res.json()) as {
+          items?: CommunityFaqItem[];
+          total?: number;
+        };
+        if (isCancelled()) return;
+        setFaqs(json.items ?? []);
+        setFaqTotal(json.total ?? 0);
+      } catch (e) {
+        if (!isCancelled()) {
+          setFaqError(e instanceof Error ? e.message : "FAQ 로드 실패");
+          setFaqs([]);
+          setFaqTotal(0);
+        }
+      } finally {
+        if (!isCancelled()) setFaqLoading(false);
       }
-
-      if (isCancelled()) return;
-
-      if (errors.length > 0) {
-        setContentError(errors.join(" "));
-        setNotices([]);
-        setEvents([]);
-        setFaqs([]);
-        return;
-      }
-
-      const [noticesJson, eventsJson, faqsJson] = await Promise.all([
-        noticesRes.json(),
-        eventsRes.json(),
-        faqsRes.json()
-      ]);
-
-      if (isCancelled()) return;
-
-      setNotices((noticesJson as { notices?: CommunityNoticeItem[] }).notices ?? []);
-      setEvents((eventsJson as { events?: CommunityEventItem[] }).events ?? []);
-      setFaqs((faqsJson as { faqs?: CommunityFaqItem[] }).faqs ?? []);
-    } catch {
-      if (!isCancelled()) {
-        setContentError("커뮤니티 콘텐츠를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        setNotices([]);
-        setEvents([]);
-        setFaqs([]);
-      }
-    } finally {
-      if (!isCancelled()) setContentLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (id) return;
-
-    let cancelled = false;
-    loadCommunityContent(() => cancelled);
-    return () => {
-      cancelled = true;
-    };
-  }, [id, reloadKey, loadCommunityContent]);
+    },
+    [faqPage, faqPageSize]
+  );
 
   useEffect(() => {
     if (id) return;
@@ -297,13 +380,39 @@ export default function Community() {
 
   useEffect(() => {
     if (id || mainTab !== "board") return;
-
     let cancelled = false;
     loadBoardPosts(() => cancelled);
     return () => {
       cancelled = true;
     };
-  }, [id, mainTab, boardPage, boardQuery, filter, contentIdFilter, loadBoardPosts]);
+  }, [id, mainTab, boardPage, boardPageSize, boardQuery, filter, contentIdFilter, loadBoardPosts]);
+
+  useEffect(() => {
+    if (id || mainTab !== "notice") return;
+    let cancelled = false;
+    loadNotices(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, mainTab, noticePage, noticePageSize, loadNotices]);
+
+  useEffect(() => {
+    if (id || mainTab !== "event") return;
+    let cancelled = false;
+    loadEvents(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, mainTab, eventPage, eventPageSize, loadEvents]);
+
+  useEffect(() => {
+    if (id || mainTab !== "faq") return;
+    let cancelled = false;
+    loadFaqs(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, mainTab, faqPage, faqPageSize, loadFaqs]);
 
   if (id === "new") return <CommunityWrite />;
   if (id && /^\d+$/.test(id)) return <CommunityDetail id={id} />;
@@ -321,11 +430,19 @@ export default function Community() {
       <div className="flex items-center justify-between">
         <h1 className="text-ink text-2xl font-bold">커뮤니티</h1>
         {mainTab === "board" && (
-          <Button asChild variant="accent" size="sm">
-            <Link href={filter !== "all" ? `/community/new?board=${filter}` : "/community/new"}>
-              <Plus className="h-4 w-4" />
-              글쓰기
-            </Link>
+          <Button
+            variant="accent"
+            size="sm"
+            onClick={() => {
+              const href = filter !== "all" ? `/community/new?board=${filter}` : "/community/new";
+              if (!requireLoginOrRedirect(auth?.user, router, href)) {
+                return;
+              }
+              router.push(href);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            글쓰기
           </Button>
         )}
       </div>
@@ -341,13 +458,23 @@ export default function Community() {
       {/* ── 게시판 ── */}
       {mainTab === "board" && (
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-            <input
-              value={boardSearchInput}
-              onChange={(e) => setBoardSearchInput(e.target.value)}
-              placeholder="제목 검색"
-              className="border-hairline focus:ring-brand-500 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+              <input
+                value={boardSearchInput}
+                onChange={(e) => setBoardSearchInput(e.target.value)}
+                placeholder="제목 검색"
+                className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
+              />
+            </div>
+            <PageSizeSelect
+              value={boardPageSize}
+              disabled={boardLoading}
+              onChange={(size) => {
+                setBoardPageSize(size);
+                setBoardPage(0);
+              }}
             />
           </div>
 
@@ -411,7 +538,12 @@ export default function Community() {
                       </Badge>
                       <div className="min-w-0 flex-1">
                         <h3 className="text-ink mb-2 truncate font-semibold">{post.title}</h3>
-                        <div className="text-steel flex items-center gap-4 text-sm">
+                        <div className="text-steel flex flex-wrap items-center gap-2 text-sm">
+                          <CommunityLevelBadge
+                            level={post.writer_community_level}
+                            size="sm"
+                            showLabel={false}
+                          />
                           <span>{post.writer_nm}</span>
                           <span>{formatCommunityDate(post.created_at)}</span>
                         </div>
@@ -439,7 +571,7 @@ export default function Community() {
           <ListPagination
             page={boardPage}
             total={boardTotal}
-            pageSize={DEFAULT_PAGE_SIZE}
+            pageSize={boardPageSize}
             disabled={boardLoading}
             onChange={setBoardPage}
           />
@@ -449,12 +581,19 @@ export default function Community() {
       {/* ── 공지사항 ── */}
       {mainTab === "notice" && (
         <div className="space-y-3">
-          {contentError ? (
-            <CommunityContentError
-              message={contentError}
-              onRetry={() => setReloadKey((k) => k + 1)}
+          <div className="flex justify-end">
+            <PageSizeSelect
+              value={noticePageSize}
+              disabled={noticeLoading}
+              onChange={(size) => {
+                setNoticePageSize(size);
+                setNoticePage(0);
+              }}
             />
-          ) : contentLoading ? (
+          </div>
+          {noticeError ? (
+            <CommunityContentError message={noticeError} onRetry={() => loadNotices(() => false)} />
+          ) : noticeLoading ? (
             <p className="text-stone text-sm">불러오는 중…</p>
           ) : notices.length === 0 ? (
             <p className="text-stone text-sm">등록된 공지가 없습니다.</p>
@@ -479,7 +618,7 @@ export default function Community() {
                     <div className="flex items-center gap-2">
                       {notice.pinned && (
                         <span className="bg-brand-500 text-ink shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold">
-                          중요
+                          고정
                         </span>
                       )}
                       <h3 className="text-ink truncate font-semibold">{notice.title}</h3>
@@ -492,69 +631,113 @@ export default function Community() {
               </Link>
             ))
           )}
+          <ListPagination
+            page={noticePage}
+            total={noticeTotal}
+            pageSize={noticePageSize}
+            disabled={noticeLoading}
+            onChange={setNoticePage}
+          />
         </div>
       )}
 
       {/* ── 이벤트 ── */}
       {mainTab === "event" && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {contentError ? (
-            <div className="sm:col-span-2">
-              <CommunityContentError
-                message={contentError}
-                onRetry={() => setReloadKey((k) => k + 1)}
-              />
-            </div>
-          ) : contentLoading ? (
-            <p className="text-stone text-sm">불러오는 중…</p>
-          ) : events.length === 0 ? (
-            <p className="text-stone text-sm">등록된 이벤트가 없습니다.</p>
-          ) : (
-            events.map((ev) => (
-              <Link key={ev.id} href={`/community/event/${ev.id}`}>
-                <Card
-                  variant="interactive"
-                  padding="none"
-                  className="cursor-pointer overflow-hidden"
-                >
-                  <div
-                    className={`flex h-32 items-center justify-center bg-gradient-to-br ${ev.cover_gradient}`}
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <PageSizeSelect
+              value={eventPageSize}
+              disabled={eventLoading}
+              onChange={(size) => {
+                setEventPageSize(size);
+                setEventPage(0);
+              }}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {eventError ? (
+              <div className="sm:col-span-2">
+                <CommunityContentError
+                  message={eventError}
+                  onRetry={() => loadEvents(() => false)}
+                />
+              </div>
+            ) : eventLoading ? (
+              <p className="text-stone text-sm">불러오는 중…</p>
+            ) : events.length === 0 ? (
+              <p className="text-stone text-sm">등록된 이벤트가 없습니다.</p>
+            ) : (
+              events.map((ev) => (
+                <Link key={ev.id} href={`/community/event/${ev.id}`}>
+                  <Card
+                    variant="interactive"
+                    padding="none"
+                    className="cursor-pointer overflow-hidden"
                   >
-                    <span className="text-5xl">{ev.emoji}</span>
-                  </div>
-                  <div className="bg-white p-4">
-                    <div className="mb-1.5 flex items-center justify-between">
-                      {ev.badge_label ? (
-                        <Badge tone="custom" className={`font-semibold ${ev.badge_color}`}>
-                          {ev.badge_label}
-                        </Badge>
+                    <div
+                      className={`relative flex h-32 items-center justify-center overflow-hidden bg-gradient-to-br ${ev.cover_gradient}`}
+                    >
+                      {ev.cover_image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={ev.cover_image_url}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
                       ) : (
-                        <span />
+                        <span className="text-5xl">{ev.emoji}</span>
                       )}
-                      <span className="text-stone flex items-center gap-1 text-xs">
-                        <Calendar className="h-3 w-3" />
-                        {ev.period_label}
-                      </span>
                     </div>
-                    <p className="text-ink mb-1 leading-snug font-bold">{ev.title}</p>
-                    <p className="text-steel line-clamp-2 text-sm leading-relaxed">{ev.summary}</p>
-                  </div>
-                </Card>
-              </Link>
-            ))
-          )}
+                    <div className="bg-white p-4">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        {ev.badge_label ? (
+                          <Badge tone="custom" className={`font-semibold ${ev.badge_color}`}>
+                            {ev.badge_label}
+                          </Badge>
+                        ) : (
+                          <span />
+                        )}
+                        <span className="text-stone flex items-center gap-1 text-xs">
+                          <Calendar className="h-3 w-3" />
+                          {ev.period_label}
+                        </span>
+                      </div>
+                      <p className="text-ink mb-1 leading-snug font-bold">{ev.title}</p>
+                      <p className="text-steel line-clamp-2 text-sm leading-relaxed">
+                        {ev.summary}
+                      </p>
+                    </div>
+                  </Card>
+                </Link>
+              ))
+            )}
+          </div>
+          <ListPagination
+            page={eventPage}
+            total={eventTotal}
+            pageSize={eventPageSize}
+            disabled={eventLoading}
+            onChange={setEventPage}
+          />
         </div>
       )}
 
       {/* ── FAQ ── */}
       {mainTab === "faq" && (
         <div className="space-y-2.5">
-          {contentError ? (
-            <CommunityContentError
-              message={contentError}
-              onRetry={() => setReloadKey((k) => k + 1)}
+          <div className="flex justify-end">
+            <PageSizeSelect
+              value={faqPageSize}
+              disabled={faqLoading}
+              onChange={(size) => {
+                setFaqPageSize(size);
+                setFaqPage(0);
+              }}
             />
-          ) : contentLoading ? (
+          </div>
+          {faqError ? (
+            <CommunityContentError message={faqError} onRetry={() => loadFaqs(() => false)} />
+          ) : faqLoading ? (
             <p className="text-stone text-sm">불러오는 중…</p>
           ) : faqs.length === 0 ? (
             <p className="text-stone text-sm">등록된 FAQ가 없습니다.</p>
@@ -573,6 +756,13 @@ export default function Community() {
               </Link>
             ))
           )}
+          <ListPagination
+            page={faqPage}
+            total={faqTotal}
+            pageSize={faqPageSize}
+            disabled={faqLoading}
+            onChange={setFaqPage}
+          />
           <div className="text-stone flex items-center justify-center gap-2 pt-3 text-sm">
             <HelpCircle className="h-4 w-4" />
             <span>원하는 답변이 없나요? 게시판에 질문을 남겨주세요.</span>
@@ -586,6 +776,7 @@ export default function Community() {
 // ── 글쓰기 화면 ──────────────────────────────────────────
 function CommunityWrite() {
   const router = useRouter();
+  const auth = useOptionalAuth();
   const searchParams = useSearchParams();
   const boardParam = searchParams.get("board");
   const editParam = searchParams.get("edit");
@@ -686,8 +877,14 @@ function CommunityWrite() {
     if (boards.length > 0 && !selectedBoard?.rating_yn) setRating(null);
   }, [boards, selectedBoard]);
 
+  useEffect(() => {
+    if (auth?.loading) return;
+    requireLoginOrRedirect(auth?.user, router, "/community/new");
+  }, [auth?.loading, auth?.user, router]);
+
   const handleSubmit = async () => {
     if (!boardId || !title.trim() || !content.trim()) return;
+    if (!requireLoginOrRedirect(auth?.user, router, "/community/new")) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -876,7 +1073,7 @@ function CommunityWrite() {
           onChange={(e) => setTitle(e.target.value)}
           placeholder="제목을 입력해주세요"
           maxLength={50}
-          className="focus:ring-brand-500 border-hairline w-full rounded-lg border px-4 py-3 text-sm focus:ring-2 focus:outline-none"
+          className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full rounded-lg border px-4 py-3 text-sm focus:ring-2 focus:outline-none"
         />
         <p className="text-stone mt-1 text-right text-xs">{title.length}/50</p>
       </div>
@@ -889,7 +1086,7 @@ function CommunityWrite() {
           onChange={(e) => setContent(e.target.value)}
           placeholder="여행 후기, 팁, 질문 등 자유롭게 작성해주세요"
           rows={10}
-          className="focus:ring-brand-500 border-hairline w-full resize-none rounded-lg border px-4 py-3 text-sm leading-relaxed focus:ring-2 focus:outline-none"
+          className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full resize-none rounded-lg border px-4 py-3 text-sm leading-relaxed focus:ring-2 focus:outline-none"
         />
         <p className="text-stone mt-1 text-right text-xs">{content.length}자</p>
       </div>
@@ -1118,6 +1315,7 @@ type PostDetail = {
   title: string;
   content: string;
   writer_nm: string;
+  writer_community_level?: number;
   rating: number | null;
   view_cnt: number;
   like_cnt: number;
@@ -1137,6 +1335,7 @@ type CommentItem = {
   content: string;
   created_at: string;
   author_nickname: string;
+  author_community_level?: number;
   can_edit: boolean;
 };
 
@@ -1355,7 +1554,8 @@ function CommunityDetail({ id }: { id: string }) {
       {/* Post */}
       <div>
         <h1 className="text-ink mb-3 text-xl font-bold">{post.title}</h1>
-        <div className="border-hairline-soft text-steel flex items-center gap-3 border-b pb-4 text-sm">
+        <div className="border-hairline-soft text-steel flex flex-wrap items-center gap-2 border-b pb-4 text-sm">
+          <CommunityLevelBadge level={post.writer_community_level} size="sm" />
           <span className="text-slate font-medium">{post.writer_nm}</span>
           <span>{formatCommunityDate(post.created_at)}</span>
         </div>
@@ -1481,7 +1681,12 @@ function CommunityDetail({ id }: { id: string }) {
             comments.map((c) => (
               <div key={c.id} className="bg-surface-soft rounded-lg p-4">
                 <div className="mb-1.5 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <CommunityLevelBadge
+                      level={c.author_community_level}
+                      size="sm"
+                      showLabel={false}
+                    />
                     <span className="text-ink font-semibold">{c.author_nickname}</span>
                     <span className="text-stone">{formatCommunityDate(c.created_at)}</span>
                   </div>

@@ -1,6 +1,9 @@
 import type { User } from "@supabase/supabase-js";
 import { normalizePhone } from "@/lib/auth/phone";
-import { parseThemePreferencesFromMetadata } from "@/lib/supabase/codes";
+import {
+  parseAccessibilityNeedsFromMetadata,
+  parseThemePreferencesFromMetadata
+} from "@/lib/supabase/codes";
 import { createAdminClient } from "./admin";
 
 type MemberRow = {
@@ -50,26 +53,39 @@ async function ensureUserPreferences(userId: string, user?: User): Promise<void>
   const themes = user
     ? parseThemePreferencesFromMetadata(user.user_metadata?.theme_preferences)
     : null;
+  const accessNeeds = user
+    ? parseAccessibilityNeedsFromMetadata(user.user_metadata?.accessibility_needs)
+    : null;
 
   const { data } = await admin
     .from("tb_user_preferences")
-    .select("user_id, theme_preferences")
+    .select("user_id, theme_preferences, accessibility_needs")
     .eq("user_id", userId)
     .maybeSingle();
 
   if (!data) {
     await admin.from("tb_user_preferences").insert({
       user_id: userId,
-      ...(themes ? { theme_preferences: themes } : {})
+      ...(themes ? { theme_preferences: themes } : {}),
+      ...(accessNeeds ? { accessibility_needs: accessNeeds } : {})
     });
     return;
   }
 
+  const patch: {
+    theme_preferences?: string[];
+    accessibility_needs?: string[];
+  } = {};
+
   if (themes && (!data.theme_preferences || data.theme_preferences.length === 0)) {
-    await admin
-      .from("tb_user_preferences")
-      .update({ theme_preferences: themes })
-      .eq("user_id", userId);
+    patch.theme_preferences = themes;
+  }
+  if (accessNeeds && (!data.accessibility_needs || data.accessibility_needs.length === 0)) {
+    patch.accessibility_needs = accessNeeds;
+  }
+
+  if (Object.keys(patch).length > 0) {
+    await admin.from("tb_user_preferences").update(patch).eq("user_id", userId);
   }
 }
 
@@ -97,6 +113,34 @@ export async function syncThemePreferencesFromMetadata(user: User): Promise<void
     await admin
       .from("tb_user_preferences")
       .update({ theme_preferences: themes })
+      .eq("user_id", user.id);
+  }
+}
+
+/** metadata accessibility_needs → tb_user_preferences (idempotent) */
+export async function syncAccessibilityNeedsFromMetadata(user: User): Promise<void> {
+  const accessNeeds = parseAccessibilityNeedsFromMetadata(user.user_metadata?.accessibility_needs);
+  if (!accessNeeds) return;
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("tb_user_preferences")
+    .select("accessibility_needs")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!data) {
+    await admin.from("tb_user_preferences").insert({
+      user_id: user.id,
+      accessibility_needs: accessNeeds
+    });
+    return;
+  }
+
+  if (!data.accessibility_needs || data.accessibility_needs.length === 0) {
+    await admin
+      .from("tb_user_preferences")
+      .update({ accessibility_needs: accessNeeds })
       .eq("user_id", user.id);
   }
 }

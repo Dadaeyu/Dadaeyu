@@ -10,6 +10,13 @@ const POST_TYPE_LABELS: Record<string, string> = {
   question: "질문"
 };
 
+type MemberEmbed = { nickname: string; community_level?: number };
+
+function pickMember(raw: MemberEmbed | MemberEmbed[] | null): MemberEmbed | null {
+  if (!raw) return null;
+  return Array.isArray(raw) ? (raw[0] ?? null) : raw;
+}
+
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: Params) {
@@ -25,7 +32,7 @@ export async function GET(_request: Request, { params }: Params) {
     const { data, error } = await supabase
       .from("tb_community_posts")
       .select(
-        "id, title, content, post_type, like_count, comment_count, created_at, attached_place_id, attached_course_id, author_id, tb_members!author_id(nickname)"
+        "id, title, content, post_type, like_count, comment_count, created_at, attached_place_id, attached_course_id, author_id, tb_members!author_id(nickname, community_level)"
       )
       .eq("id", postId)
       .maybeSingle();
@@ -33,27 +40,40 @@ export async function GET(_request: Request, { params }: Params) {
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const author = data.tb_members as { nickname: string } | { nickname: string }[] | null;
-    const nickname = Array.isArray(author) ? author[0]?.nickname : author?.nickname;
+    const author = pickMember(data.tb_members as MemberEmbed | MemberEmbed[] | null);
 
     const { data: comments, error: commentsError } = await supabase
       .from("tb_community_comments")
-      .select("id, content, created_at, author_id, tb_members!author_id(nickname)")
+      .select("id, content, created_at, author_id, tb_members!author_id(nickname, community_level)")
       .eq("post_id", postId)
       .order("created_at", { ascending: true });
 
     if (commentsError) throw commentsError;
 
     const commentItems = (comments ?? []).map((c) => {
-      const cAuthor = c.tb_members as { nickname: string } | { nickname: string }[] | null;
-      const cNickname = Array.isArray(cAuthor) ? cAuthor[0]?.nickname : cAuthor?.nickname;
+      const cAuthor = pickMember(c.tb_members as MemberEmbed | MemberEmbed[] | null);
       return {
         id: c.id,
         content: c.content,
         created_at: c.created_at,
-        author_nickname: cNickname ?? "알 수 없음"
+        author_nickname: cAuthor?.nickname ?? "알 수 없음",
+        author_community_level: cAuthor?.community_level ?? 1
       };
     });
+
+    let liked = false;
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: likeRow } = await supabase
+        .from("tb_post_likes")
+        .select("post_id")
+        .eq("user_id", user.id)
+        .eq("post_id", postId)
+        .maybeSingle();
+      liked = !!likeRow;
+    }
 
     return NextResponse.json({
       post: {
@@ -62,12 +82,14 @@ export async function GET(_request: Request, { params }: Params) {
         content: data.content,
         post_type: data.post_type,
         post_type_label: POST_TYPE_LABELS[data.post_type] ?? data.post_type,
-        author_nickname: nickname ?? "알 수 없음",
+        author_nickname: author?.nickname ?? "알 수 없음",
+        author_community_level: author?.community_level ?? 1,
         like_count: data.like_count,
         comment_count: data.comment_count,
         created_at: data.created_at,
         attached_place_id: data.attached_place_id,
-        attached_course_id: data.attached_course_id
+        attached_course_id: data.attached_course_id,
+        liked
       },
       comments: commentItems
     });

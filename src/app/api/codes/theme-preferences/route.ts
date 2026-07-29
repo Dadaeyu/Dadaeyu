@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { THEME_CODE_IDS } from "@/lib/supabase/codes";
+import { THEME_CODE_GROUP } from "@/lib/supabase/codes";
 
 export async function GET() {
   try {
     const admin = createAdminClient();
-    const ids = THEME_CODE_IDS.map(String);
 
     const { data, error } = await admin
       .from("tb_code")
       .select("code_id, code_nm")
-      .in("code_id", ids)
+      .eq("code_group", THEME_CODE_GROUP)
       .order("code_id", { ascending: true });
 
     if (error) {
