@@ -11,6 +11,7 @@ export const ACCESSIBILITY = ["시각", "청각", "보행", "영유아", "임산
 export interface Filters {
   accessibility: string[];
   gu: string;
+  dong: string;
   themes: string[];
   headcount: number;
   dateFrom: string;
@@ -22,6 +23,7 @@ export interface Filters {
 export const DEFAULT_FILTERS: Filters = {
   accessibility: [],
   gu: "",
+  dong: "",
   themes: [],
   headcount: 1,
   dateFrom: "",
@@ -52,6 +54,7 @@ export function useFilters(initial?: Partial<Filters>) {
   const activeCount = [
     filters.accessibility.length > 0,
     filters.gu,
+    filters.dong,
     filters.themes.length > 0,
     filters.headcount > 1,
     filters.dateFrom || filters.dateTo,
@@ -67,12 +70,14 @@ export function FilterFields({
   set,
   toggleList,
   guOptions = [],
+  dongOptions = [],
   compact = false
 }: {
   filters: Filters;
   set: <K extends keyof Filters>(key: K, val: Filters[K]) => void;
   toggleList: (key: "themes" | "accessibility", item: string) => void;
   guOptions?: string[];
+  dongOptions?: string[];
   compact?: boolean;
 }) {
   const xs = compact ? "text-xs" : "text-sm";
@@ -147,19 +152,33 @@ export function FilterFields({
       <div>
         <p className={`${xs} text-steel mb-1.5 font-semibold`}>위치</p>
         <div className="flex gap-1.5">
-          <div
-            className={`border-hairline bg-surface text-steel flex items-center rounded-lg border px-2 py-1.5 ${xs} shrink-0`}
-          >
-            대전광역시
-          </div>
           <div className="relative flex-1">
             <select
               value={filters.gu}
-              onChange={(e) => set("gu", e.target.value)}
+              onChange={(e) => {
+                set("gu", e.target.value);
+                set("dong", "");
+              }}
               className={`border-hairline w-full appearance-none rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 bg-white pr-6 focus:ring-2 focus:outline-none`}
             >
               <option value="">구 전체</option>
               {guOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="text-stone pointer-events-none absolute top-1/2 right-1.5 h-3 w-3 -translate-y-1/2" />
+          </div>
+          <div className="relative flex-1">
+            <select
+              value={filters.dong}
+              onChange={(e) => set("dong", e.target.value)}
+              disabled={!filters.gu || dongOptions.length === 0}
+              className={`border-hairline w-full appearance-none rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 bg-white pr-6 focus:ring-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              <option value="">동 전체</option>
+              {dongOptions.map((d) => (
                 <option key={d} value={d}>
                   {d}
                 </option>

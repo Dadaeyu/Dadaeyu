@@ -44,6 +44,13 @@ export interface DbUserFavorite {
   created_at: string;
 }
 
+export interface DbPlaceLike {
+  like_id: number;
+  user_id: string;
+  place_id: number;
+  registtime: string;
+}
+
 export interface DbCourse {
   id: number;
   author_id: string | null;
@@ -105,6 +112,41 @@ export interface DbPlace {
   address: string | null;
   hours: string | null;
   phone: string | null;
+}
+
+export interface DbBoard {
+  board_id: number;
+  board_nm: string;
+  board_desc: string | null;
+  board_type: string;
+  sort_order: number;
+  use_yn: boolean;
+  comment_yn: boolean;
+  reply_yn: boolean;
+  allow_image: boolean;
+  allow_file: boolean;
+  allow_secret: boolean;
+  max_upload_count: number;
+  category_yn: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbPost {
+  post_id: number;
+  board_id: number;
+  title: string;
+  content: string;
+  writer_id: string | null;
+  writer_nm: string;
+  rating: number | null;
+  view_cnt: number;
+  like_cnt: number;
+  comment_cnt: number;
+  notice_yn: boolean;
+  use_yn: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DbPlaceReview {

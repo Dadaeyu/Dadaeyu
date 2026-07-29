@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin } from "lucide-react";
+import { MapPin, Star } from "lucide-react";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 
 // DB(tourism)/카카오 검색 결과 목록. usePlaceSearch()의 searchPlaces를 그대로 넘기면 된다.
@@ -43,6 +43,18 @@ export default function SearchResultList({
                 <p className="mt-0.5 truncate text-xs text-cyan-600">
                   {sp.category.split(" > ").pop()}
                 </p>
+              )}
+              {sp.average_rating !== undefined && (
+                <div className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
+                  <Star
+                    className={`h-3 w-3 ${
+                      sp.average_rating != null
+                        ? "fill-yellow-400 text-yellow-400"
+                        : "text-gray-300"
+                    }`}
+                  />
+                  <span>{sp.average_rating != null ? sp.average_rating.toFixed(1) : "0"}</span>
+                </div>
               )}
             </div>
           </div>

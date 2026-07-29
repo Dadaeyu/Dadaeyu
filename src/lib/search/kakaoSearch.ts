@@ -11,12 +11,20 @@ export interface SearchPlace {
   phone?: string;
   category?: string;
   placeUrl?: string;
+  // "후기" 게시판 별점 평균 (상위 평점 장소 목록에서만 채워짐)
+  average_rating?: number | null;
+  review_count?: number;
 }
 
-export async function fetchKakaoPlaces(keyword: string, gu?: string): Promise<SearchPlace[]> {
+export async function fetchKakaoPlaces(
+  keyword: string,
+  gu?: string,
+  dong?: string
+): Promise<SearchPlace[]> {
   try {
     const params = new URLSearchParams({ query: keyword });
     if (gu) params.set("gu", gu);
+    if (dong) params.set("dong", dong);
     const res = await fetch(`/api/kakao-search?${params}`);
     if (!res.ok) return [];
     const { documents } = await res.json();
