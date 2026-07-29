@@ -26,13 +26,17 @@ import {
   Star,
   ShieldCheck,
   Megaphone,
-  HelpCircle
+  HelpCircle,
+  Layers,
+  MessageSquare
 } from "lucide-react";
 import { PLACES, PLACE_COLORS } from "@/data/placesData";
 import { Button } from "@/components/ui/Button";
 import { DashboardSection } from "@/components/screens/admin/DashboardSection";
 import { UsersSection } from "@/components/screens/admin/UsersSection";
 import { PostsSection } from "@/components/screens/admin/PostsSection";
+import { BoardSection } from "@/components/screens/admin/BoardSection";
+import { BoardPostsSection } from "@/components/screens/admin/BoardPostsSection";
 import { ReportsSection } from "@/components/screens/admin/ReportsSection";
 import { NoticesSection } from "@/components/screens/admin/NoticesSection";
 import { CommunityNoticesSection } from "@/components/screens/admin/CommunityNoticesSection";
@@ -48,7 +52,9 @@ const SECTIONS = [
   { key: "community-notices", label: "공지 관리", icon: Megaphone },
   { key: "events", label: "이벤트 관리", icon: Calendar },
   { key: "faq", label: "FAQ 관리", icon: HelpCircle },
-  { key: "posts", label: "게시판 관리", icon: FileText },
+  { key: "board-settings", label: "게시판 관리", icon: Layers },
+  { key: "board-posts", label: "게시글 관리", icon: FileText },
+  { key: "posts", label: "커뮤니티 게시글", icon: MessageSquare },
   { key: "places", label: "장소 관리", icon: MapPin },
   { key: "courses", label: "코스 관리", icon: Route },
   { key: "reports", label: "제보 확인", icon: Flag },
@@ -201,6 +207,8 @@ export default function Admin() {
         <div className="flex-1 overflow-auto px-4 py-6 md:px-8">
           {section === "dashboard" && <DashboardSection />}
           {section === "users" && <UsersSection />}
+          {section === "board-settings" && <BoardSection />}
+          {section === "board-posts" && <BoardPostsSection />}
           {section === "posts" && <PostsSection />}
           {section === "notices" && <NoticesSection />}
           {section === "community-notices" && <CommunityNoticesSection />}
@@ -232,19 +240,22 @@ const PLACE_COLUMNS = [
   "title",
   "addr1",
   "addr2",
+  "ldongregncd",
+  "ldongsigngucd",
   "mapx",
   "mapy",
   "contenttypeid",
-  "lclsSystm1",
-  "lclsSystm2",
-  "lclsSystm3",
+  "lclssystm1",
+  "lclssystm2",
+  "lclssystm3",
   "firstimage",
   "createdtime",
   "modifiedtime",
   "registtime",
   "updatetime",
   "delete_yn",
-  "deletetime"
+  "deletetime",
+  "dong"
 ] as const;
 
 const PLACE_DETAIL_COLUMNS = [

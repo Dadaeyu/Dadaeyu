@@ -16,6 +16,8 @@ export const T = {
   communityPosts: "tb_community_posts",
   communityComments: "tb_community_comments",
   postLikes: "tb_post_likes",
+  boards: "tb_board",
+  boardPosts: "tb_post",
   placeReports: "tb_place_reports",
   places: "tb_places",
   place: "tb_place",
