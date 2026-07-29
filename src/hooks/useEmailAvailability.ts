@@ -20,16 +20,16 @@ export function useEmailAvailability(email: string) {
     const trimmed = normalizeEmail(email);
 
     if (!trimmed) {
-      setStatus("idle");
+      queueMicrotask(() => setStatus("idle"));
       return;
     }
 
     if (!isValidFormat(trimmed)) {
-      setStatus("invalid");
+      queueMicrotask(() => setStatus("invalid"));
       return;
     }
 
-    setStatus("checking");
+    queueMicrotask(() => setStatus("checking"));
     let cancelled = false;
 
     const timer = setTimeout(async () => {

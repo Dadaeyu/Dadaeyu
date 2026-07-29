@@ -47,12 +47,14 @@ export function ProfileSection({ onDirtyChange }: Props) {
     if (!member) return;
     const g = genderToLabel(member.gender) as "남성" | "여성" | "비공개";
     const a = ageGroupToLabel(member.age_group);
-    setNickname(member.nickname);
-    setGender(g);
-    setAge(a);
-    setAvatarPreview(member.avatar_url);
-    baseline.current = { nickname: member.nickname, gender: g, age: a };
-    onDirtyChange(false);
+    queueMicrotask(() => {
+      setNickname(member.nickname);
+      setGender(g);
+      setAge(a);
+      setAvatarPreview(member.avatar_url);
+      baseline.current = { nickname: member.nickname, gender: g, age: a };
+      onDirtyChange(false);
+    });
   }, [member, onDirtyChange]);
 
   const markDirty = useCallback(() => {

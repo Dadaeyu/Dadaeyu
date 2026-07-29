@@ -41,7 +41,7 @@ export default function RootShell({
 
   useEffect(() => {
     if (!isHomePage) {
-      setQueue([]);
+      queueMicrotask(() => setQueue([]));
       return;
     }
 
@@ -55,7 +55,9 @@ export default function RootShell({
       .then((json) => {
         if (cancelled) return;
         const notices = json?.notices ?? [];
-        setQueue(notices.filter((n) => !isSnoozedToday(n.id)));
+        setQueue(
+          notices.filter((notice) => isDisplayableNotice(notice) && !isSnoozedToday(notice.id))
+        );
       })
       .catch(() => {});
 
@@ -109,4 +111,10 @@ export default function RootShell({
       </AccessibilityProvider>
     </AuthProvider>
   );
+}
+
+function isDisplayableNotice(notice: ActiveNotice) {
+  const content = notice.content.replace(/\s+/g, " ").trim();
+  if (content.length < 10) return false;
+  return !/^(테스트|test|히히)/iu.test(content);
 }

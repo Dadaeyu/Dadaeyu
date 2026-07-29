@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 import { callEnsureMember } from "@/lib/auth/actions";
 import { fetchMember, fetchUserPreferences } from "@/lib/supabase/member";
 import type { DbMember, DbUserPreferences } from "@/lib/supabase/types";
+import { getPublicSupabaseConfig } from "@/lib/supabase/config";
 
 interface AuthContextValue {
   user: User | null;
@@ -28,13 +29,14 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const PUBLIC_SUPABASE_CONFIGURED = getPublicSupabaseConfig().isConfigured;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [member, setMember] = useState<DbMember | null>(null);
   const [preferences, setPreferences] = useState<DbUserPreferences | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(PUBLIC_SUPABASE_CONFIGURED);
 
   const loadUserData = useCallback(async (userId: string) => {
     await callEnsureMember().catch(() => {});
@@ -59,6 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!PUBLIC_SUPABASE_CONFIGURED) return;
+
     const supabase = createClient();
 
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -88,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadUserData]);
 
   const signOut = useCallback(async () => {
+    if (!PUBLIC_SUPABASE_CONFIGURED) return;
     const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);

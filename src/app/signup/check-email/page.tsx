@@ -32,14 +32,12 @@ function CheckEmailForm() {
   useEffect(() => {
     const link = sessionStorage.getItem("devConfirmationLink");
     const noticeText = sessionStorage.getItem("devConfirmationNotice");
-    if (link) {
-      setDevLink(link);
-      sessionStorage.removeItem("devConfirmationLink");
-    }
-    if (noticeText) {
-      setNotice(noticeText);
-      sessionStorage.removeItem("devConfirmationNotice");
-    }
+    sessionStorage.removeItem("devConfirmationLink");
+    sessionStorage.removeItem("devConfirmationNotice");
+    queueMicrotask(() => {
+      if (link) setDevLink(link);
+      if (noticeText) setNotice(noticeText);
+    });
   }, []);
 
   useEffect(() => {

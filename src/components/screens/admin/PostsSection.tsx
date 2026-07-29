@@ -83,12 +83,14 @@ export function PostsSection() {
   }, []);
 
   useEffect(() => {
-    if (mode === "list") loadList();
+    if (mode === "list") queueMicrotask(() => void loadList());
   }, [mode, loadList]);
 
   useEffect(() => {
-    if (isViewing && editingId) loadForView(editingId);
-    else setViewPost(null);
+    queueMicrotask(() => {
+      if (isViewing && editingId) void loadForView(editingId);
+      else setViewPost(null);
+    });
   }, [isViewing, editingId, loadForView]);
 
   useEffect(() => {
@@ -100,7 +102,7 @@ export function PostsSection() {
 
   useEffect(() => {
     if (mode !== "list") return;
-    setSearchInput(q);
+    queueMicrotask(() => setSearchInput(q));
   }, [mode, q]);
 
   const deletePost = async (id: number) => {

@@ -23,6 +23,7 @@ export default function Map() {
   const searchParams = useSearchParams();
   const initialTheme = searchParams.get("theme");
   const initialPlaceId = searchParams.get("place");
+  const initialQuery = searchParams.get("query")?.trim() ?? "";
   const initialContentId = searchParams.get("contentId");
   const mapOnly = searchParams.get("mode") === "map";
 
@@ -56,13 +57,13 @@ export default function Map() {
     accessibility: filters.accessibility,
     gu: filters.gu,
     dong: filters.dong,
-    favoritesOnly: filters.favoritesOnly
+    favoritesOnly: filters.favoritesOnly,
+    initialKeyword: initialQuery
   });
 
   useEffect(() => {
     if (initialContentId) focusPlaceById(initialContentId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialContentId]);
+  }, [focusPlaceById, initialContentId]);
 
   const {
     location: myLocation,
@@ -203,6 +204,21 @@ export default function Map() {
             onClose={() => setShowMobileFilters(false)}
           />
         )}
+
+        {searchPlaces.length > 0 && !showMobileFilters && !searchDetail ? (
+          <section
+            className={`${mapOnly ? "" : "md:hidden"} border-hairline absolute top-20 right-3 left-3 z-20 max-h-[min(46vh,24rem)] overflow-y-auto rounded-lg border bg-white shadow-xl`}
+            aria-label={`검색 결과 ${searchPlaces.length}개`}
+          >
+            <div className="border-hairline sticky top-0 border-b bg-white px-4 py-3">
+              <p className="text-ink text-sm font-semibold">검색 결과 {searchPlaces.length}개</p>
+              <p className="text-steel mt-0.5 text-xs">
+                장소를 선택하면 상세 정보를 확인할 수 있습니다.
+              </p>
+            </div>
+            <SearchResultList places={searchPlaces} onSelect={setSearchDetailId} />
+          </section>
+        ) : null}
 
         {/* Kakao Map */}
         <KakaoMap

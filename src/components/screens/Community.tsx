@@ -9,7 +9,7 @@ import {
   MessageCircle,
   Eye,
   ArrowLeft,
-  Image,
+  Image as ImageIcon,
   X,
   Megaphone,
   Calendar,
@@ -82,11 +82,11 @@ function usePlaceQuickSearch() {
 
   useEffect(() => {
     if (!keyword.trim()) {
-      setResults([]);
+      queueMicrotask(() => setResults([]));
       return;
     }
     let cancelled = false;
-    setLoading(true);
+    queueMicrotask(() => setLoading(true));
     const t = setTimeout(() => {
       fetch(`/api/search?keyword=${encodeURIComponent(keyword.trim())}`)
         .then((r) => (r.ok ? r.json() : []))
@@ -381,7 +381,9 @@ export default function Community() {
   useEffect(() => {
     if (id || mainTab !== "board") return;
     let cancelled = false;
-    loadBoardPosts(() => cancelled);
+    queueMicrotask(() => {
+      if (!cancelled) void loadBoardPosts(() => cancelled);
+    });
     return () => {
       cancelled = true;
     };
@@ -390,7 +392,9 @@ export default function Community() {
   useEffect(() => {
     if (id || mainTab !== "notice") return;
     let cancelled = false;
-    loadNotices(() => cancelled);
+    queueMicrotask(() => {
+      if (!cancelled) void loadNotices(() => cancelled);
+    });
     return () => {
       cancelled = true;
     };
@@ -399,7 +403,9 @@ export default function Community() {
   useEffect(() => {
     if (id || mainTab !== "event") return;
     let cancelled = false;
-    loadEvents(() => cancelled);
+    queueMicrotask(() => {
+      if (!cancelled) void loadEvents(() => cancelled);
+    });
     return () => {
       cancelled = true;
     };
@@ -408,7 +414,9 @@ export default function Community() {
   useEffect(() => {
     if (id || mainTab !== "faq") return;
     let cancelled = false;
-    loadFaqs(() => cancelled);
+    queueMicrotask(() => {
+      if (!cancelled) void loadFaqs(() => cancelled);
+    });
     return () => {
       cancelled = true;
     };
@@ -830,7 +838,7 @@ function CommunityWrite() {
   useEffect(() => {
     if (!isEditing) return;
     let cancelled = false;
-    setLoadingEdit(true);
+    queueMicrotask(() => setLoadingEdit(true));
     fetch(`/api/community/board-posts/${editParam}`)
       .then(async (r) => ({
         ok: r.ok,
@@ -874,7 +882,7 @@ function CommunityWrite() {
   const selectedBoard = boards.find((b) => b.board_id === boardId);
 
   useEffect(() => {
-    if (boards.length > 0 && !selectedBoard?.rating_yn) setRating(null);
+    if (boards.length > 0 && !selectedBoard?.rating_yn) queueMicrotask(() => setRating(null));
   }, [boards, selectedBoard]);
 
   useEffect(() => {
@@ -1146,7 +1154,7 @@ function CommunityWrite() {
                 disabled={uploadingImage}
                 className="hover:border-brand-400 hover:text-brand-500 border-hairline text-stone flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-full border-2 border-dashed transition-colors disabled:opacity-50"
               >
-                <Image className="h-5 w-5" />
+                <ImageIcon className="h-5 w-5" />
                 <span className="text-[10px]">
                   {uploadingImage ? "업로드 중…" : `${attachmentCount}/${maxAttachments}`}
                 </span>
@@ -1392,7 +1400,7 @@ function CommunityDetail({ id }: { id: string }) {
   }, [id]);
 
   useEffect(() => {
-    loadComments();
+    queueMicrotask(() => void loadComments());
   }, [loadComments]);
 
   const handleCommentSubmit = async () => {
@@ -1493,7 +1501,7 @@ function CommunityDetail({ id }: { id: string }) {
   }, [id]);
 
   useEffect(() => {
-    loadPost();
+    queueMicrotask(() => void loadPost());
   }, [loadPost]);
 
   if (loading) {

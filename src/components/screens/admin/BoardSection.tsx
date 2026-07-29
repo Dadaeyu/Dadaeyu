@@ -153,15 +153,16 @@ export function BoardSection() {
   }, []);
 
   useEffect(() => {
-    if (mode === "list") loadList();
+    if (mode === "list") queueMicrotask(() => void loadList());
   }, [mode, loadList]);
 
   useEffect(() => {
-    if (isEditing && editingId) loadForEdit(editingId);
-    else if (isCreating) {
-      setForm(EMPTY_FORM);
-      setLoading(false);
-    }
+    if (isEditing && editingId) queueMicrotask(() => void loadForEdit(editingId));
+    else if (isCreating)
+      queueMicrotask(() => {
+        setForm(EMPTY_FORM);
+        setLoading(false);
+      });
   }, [isEditing, isCreating, editingId, loadForEdit]);
 
   useEffect(() => {
@@ -171,7 +172,7 @@ export function BoardSection() {
   }, [mode, searchInput, setQuery]);
 
   useEffect(() => {
-    setSearchInput(q);
+    queueMicrotask(() => setSearchInput(q));
   }, [q]);
 
   const saveBoard = async () => {

@@ -20,9 +20,11 @@ export function AccessibilityNeedsSection({ onDirtyChange }: Props) {
 
   useEffect(() => {
     const next = preferences?.accessibility_needs ?? [];
-    setAccess(next);
-    baseline.current = next;
-    onDirtyChange(false);
+    queueMicrotask(() => {
+      setAccess(next);
+      baseline.current = next;
+      onDirtyChange(false);
+    });
   }, [preferences, onDirtyChange]);
 
   const onChange = useCallback(

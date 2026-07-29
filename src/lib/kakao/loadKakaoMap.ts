@@ -50,9 +50,9 @@ function injectScript(key: string): Promise<void> {
 }
 
 function loadKakaoMapInternal(): Promise<KakaoGlobal> {
-  const key = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+  const key = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ?? process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
   if (!key) {
-    return Promise.reject(new Error("NEXT_PUBLIC_KAKAO_MAP_KEY가 설정되지 않았습니다."));
+    return Promise.reject(new Error("NEXT_PUBLIC_KAKAO_MAP_API_KEY가 설정되지 않았습니다."));
   }
 
   if (typeof window === "undefined") {

@@ -30,7 +30,7 @@ const PHASE_FILES = {
   4: "schema-auth-phase4-email-verify.sql",
   5: "schema-community-content.sql",
   6: "schema-community-posts-question.sql",
-  7: "schema-community-media.sql",
+  7: "schema-community-media.sql"
 };
 
 function loadEnv() {
@@ -58,17 +58,14 @@ async function applyViaManagementApi(accessToken, sqlFile) {
   const statements = splitStatements(sql);
 
   for (const query of statements) {
-    const res = await fetch(
-      `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query: query + ";" }),
-      }
-    );
+    const res = await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ query: query + ";" })
+    });
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`실패 (${sqlFile}): ${body.slice(0, 300)}`);

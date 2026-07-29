@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -596,6 +596,7 @@ function CourseDetail({ id }: { id: string }) {
   const numId = Number(id);
   const router = useRouter();
   const { myCourses, updateCourse, addCourse } = useCourseContext();
+  const nextLocalIdRef = useRef(-1);
 
   const contextCourse = myCourses.find((c) => c.id === numId);
   const isOwned = isNew || !!contextCourse;
@@ -686,7 +687,7 @@ function CourseDetail({ id }: { id: string }) {
                 onClick={() => {
                   if (isNew) {
                     addCourse({
-                      id: Date.now(),
+                      id: nextLocalIdRef.current--,
                       title: editTitle,
                       duration: editDays.length > 1 ? `${editDays.length}일` : "반일",
                       isPrivate: editIsPrivate,
@@ -913,7 +914,7 @@ function CourseDetail({ id }: { id: string }) {
                             editDays.map((d) => {
                               if (d.day !== activeDay) return d;
                               const newPlace: EditPlace = {
-                                id: Date.now(),
+                                id: nextLocalIdRef.current--,
                                 name: p.name,
                                 time: "09:00",
                                 duration: "1시간"

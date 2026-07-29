@@ -67,8 +67,8 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
     const saved = loadAccessibilityState();
     loaded.current = true;
     stateRef.current = saved;
-    setState(saved);
     applyAccessibilityState(saved);
+    queueMicrotask(() => setState(saved));
   }, []);
 
   // 로그인 완료 후 DB preferences → 화면 (기기 간 동기화). auth.loading 끝난 뒤에만.

@@ -7,12 +7,12 @@
  * Mintlify 디자인 시스템 토큰 (DESIGN.md 기준)
  * - 시그니처 민트 그린(brand-green) #00d4a4 는 액센트 CTA / 활성 상태에만
  * - 블랙 필(primary) #0a0a0a 이 라이트 배경의 주 CTA
- * - 본문/헤딩은 Inter, 코드는 Geist Mono
+ * - 본문/헤딩은 시스템 sans-serif, 코드는 시스템 monospace
  */
 :root {
   --font-size: 16px;
-  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: var(--font-geist-mono), "SF Mono", Menlo, Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   /* Surfaces */
   --background: #ffffff; /* canvas */
@@ -566,6 +566,56 @@
 
   html {
     font-size: calc(16px * var(--a11y-scale, 1));
+  }
+
+  @media (max-width: 767px) {
+    html.font-scale-large .home-heading-row {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    html.font-scale-large .home-heading-row > a {
+      width: 100%;
+    }
+
+    html.font-scale-large .home-profile-label {
+      display: inline !important;
+    }
+
+    html.font-scale-large .home-action-grid,
+    html.font-scale-large .home-needs-grid {
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    html.font-scale-large .home-search-input {
+      min-height: 64px !important;
+    }
+
+    html.font-scale-large .home-search-submit {
+      height: 64px !important;
+      width: 64px !important;
+    }
+
+    html.font-scale-large .home-search-submit svg,
+    html.font-scale-large .home-search-row > svg {
+      height: 24px !important;
+      width: 24px !important;
+    }
+
+    html.font-scale-large .mobile-nav-list {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    html.font-scale-large .mobile-nav-item {
+      min-width: 0;
+      padding: 8px 2px;
+    }
+
+    html.font-scale-large .mobile-nav-item > svg {
+      height: 22px;
+      width: 22px;
+    }
   }
 
   :focus-visible {

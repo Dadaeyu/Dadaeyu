@@ -86,7 +86,7 @@ export default function MyPage() {
   }, [user, refreshMember]);
 
   useEffect(() => {
-    if (user) loadData();
+    if (user) queueMicrotask(() => void loadData());
   }, [user, loadData]);
 
   const savedPlaces = places.filter((p) => savedPlaceIds.includes(p.id));

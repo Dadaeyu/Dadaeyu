@@ -180,7 +180,7 @@ export function NoticesSection() {
   }, []);
 
   useEffect(() => {
-    if (mode === "list") loadList();
+    if (mode === "list") queueMicrotask(() => void loadList());
   }, [mode, loadList]);
 
   useEffect(() => {
@@ -195,8 +195,10 @@ export function NoticesSection() {
   }, [mode, items]);
 
   useEffect(() => {
-    if (isEditing && editingId) loadForEdit(editingId);
-    else if (isCreating) setForm(EMPTY_FORM);
+    queueMicrotask(() => {
+      if (isEditing && editingId) void loadForEdit(editingId);
+      else if (isCreating) setForm(EMPTY_FORM);
+    });
   }, [isEditing, isCreating, editingId, loadForEdit]);
 
   useEffect(() => {
@@ -208,7 +210,7 @@ export function NoticesSection() {
 
   useEffect(() => {
     if (mode !== "list") return;
-    setSearchInput(q);
+    queueMicrotask(() => setSearchInput(q));
   }, [mode, q]);
 
   const validateForm = (): string | null => {

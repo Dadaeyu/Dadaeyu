@@ -20,9 +20,11 @@ export function ThemesSection({ onDirtyChange }: Props) {
 
   useEffect(() => {
     const next = preferences?.theme_preferences ?? [];
-    setThemes(next);
-    baseline.current = next;
-    onDirtyChange(false);
+    queueMicrotask(() => {
+      setThemes(next);
+      baseline.current = next;
+      onDirtyChange(false);
+    });
   }, [preferences, onDirtyChange]);
 
   const onChange = useCallback(

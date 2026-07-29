@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { requireAdmin } from "@/lib/supabase/require-admin";
 
 // tb_area_code 시딩용: 공공데이터포털 대전(lDongRegnCd=30) 행정구역 코드를 받아 upsert한다.
 const API_URL = "https://apis.data.go.kr/B551011/KorService2/ldongCode2";
@@ -6,10 +7,14 @@ const API_URL = "https://apis.data.go.kr/B551011/KorService2/ldongCode2";
 type LdongItem = { code: string; name: string };
 
 export async function POST() {
-  const serviceKey = process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY;
+  const admin = await requireAdmin();
+  if (!admin) return Response.json({ error: "Forbidden" }, { status: 403 });
+
+  const serviceKey =
+    process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? process.env.TOUR_API_SERVICE_KEY;
   if (!serviceKey) {
     return Response.json(
-      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY가 설정되지 않았습니다." },
+      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY 또는 TOUR_API_SERVICE_KEY가 필요합니다." },
       { status: 500 }
     );
   }

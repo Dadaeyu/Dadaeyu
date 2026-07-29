@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { XMLParser } from "fast-xml-parser";
+import { requireAdmin } from "@/lib/supabase/require-admin";
 
 // tb_tourism_detail 시딩용: 공공데이터포털 관광지 상세(개요/이용시간 등)를 받아 upsert한다.
 const COMMON_API = "https://apis.data.go.kr/B551011/KorService2/detailCommon2";
@@ -203,10 +204,14 @@ function chunk<T>(arr: T[], n: number): T[][] {
 }
 
 export async function POST() {
-  const serviceKey = process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY;
+  const admin = await requireAdmin();
+  if (!admin) return Response.json({ error: "Forbidden" }, { status: 403 });
+
+  const serviceKey =
+    process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? process.env.TOUR_API_SERVICE_KEY;
   if (!serviceKey) {
     return Response.json(
-      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY가 설정되지 않았습니다." },
+      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY 또는 TOUR_API_SERVICE_KEY가 필요합니다." },
       { status: 500 }
     );
   }
@@ -256,10 +261,14 @@ export async function POST() {
 // GET /api/tourism/seed-detail?contentId=130420&contentTypeId=14
 // 한 건 테스트용 (쿼터 확인 후 사용)
 export async function GET(req: Request) {
-  const serviceKey = process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY;
+  const admin = await requireAdmin();
+  if (!admin) return Response.json({ error: "Forbidden" }, { status: 403 });
+
+  const serviceKey =
+    process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? process.env.TOUR_API_SERVICE_KEY;
   if (!serviceKey) {
     return Response.json(
-      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY가 설정되지 않았습니다." },
+      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY 또는 TOUR_API_SERVICE_KEY가 필요합니다." },
       { status: 500 }
     );
   }

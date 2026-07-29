@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveAuthDestination } from "@/lib/auth/post-login";
 import { needsEmailConfirmation } from "@/lib/auth/user";
+import { getPublicSupabaseConfig } from "@/lib/supabase/config";
 
 const PROTECTED_PATHS = ["/mypage", "/onboarding"];
 const AUTH_PATHS = ["/login", "/signup", "/forgot-password", "/find-email"];
@@ -28,28 +29,27 @@ function isOnboardingExempt(pathname: string) {
   );
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
   const pathname = request.nextUrl.pathname;
+  const config = getPublicSupabaseConfig();
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-        }
+  if (!config.isConfigured) return response;
+
+  const supabase = createServerClient(config.url, config.key, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options)
+        );
       }
     }
-  );
+  });
 
   const {
     data: { user }
@@ -78,22 +78,18 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (user && !pathname.startsWith("/api/") && !pathname.startsWith("/auth/")) {
-    const { data: memberStatus } = await supabase
+  if (isProtectedPath(pathname) && user) {
+    const { data: member } = await supabase
       .from("tb_members")
       .select("status")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (memberStatus?.status === "suspended" || memberStatus?.status === "withdrawn") {
+    if (member?.status === "suspended") {
       await supabase.auth.signOut();
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
-      loginUrl.search = "";
-      loginUrl.searchParams.set(
-        "error",
-        memberStatus.status === "withdrawn" ? "account_withdrawn" : "account_suspended"
-      );
+      loginUrl.searchParams.set("error", "account_suspended");
       return NextResponse.redirect(loginUrl);
     }
   }

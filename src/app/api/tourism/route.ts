@@ -1,9 +1,17 @@
 const API_URL = "https://apis.data.go.kr/B551011/KorWithService2/areaBasedList2";
-const SERVICE_KEY = "6bf19775de8488bbefbb5c248866a9a85dc8d4f0dfaaaa8198871f5ac8ba7e18";
 
 export async function GET() {
+  const serviceKey =
+    process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? process.env.TOUR_API_SERVICE_KEY;
+  if (!serviceKey) {
+    return Response.json(
+      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY 또는 TOUR_API_SERVICE_KEY가 필요합니다." },
+      { status: 500 }
+    );
+  }
+
   const params = new URLSearchParams({
-    serviceKey: SERVICE_KEY,
+    serviceKey,
     MobileOS: "ETC",
     MobileApp: "AppTest",
     arrange: "C",

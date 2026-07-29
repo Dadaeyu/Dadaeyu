@@ -85,7 +85,7 @@ export function CourseProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!auth?.user) {
-      setMyCourses([]);
+      queueMicrotask(() => setMyCourses([]));
       return;
     }
     let cancelled = false;

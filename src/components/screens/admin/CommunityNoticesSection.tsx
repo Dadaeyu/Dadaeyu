@@ -152,19 +152,21 @@ export function CommunityNoticesSection() {
   }, []);
 
   useEffect(() => {
-    if (mode === "list") loadList();
+    if (mode === "list") queueMicrotask(() => void loadList());
   }, [mode, loadList]);
 
   useEffect(() => {
-    if (isEditing && editingId) {
-      setForm(EMPTY_FORM);
-      void loadForEdit(editingId);
-    } else if (isCreating) {
-      setForm(EMPTY_FORM);
-      setHydratedEditId(null);
-    } else {
-      setHydratedEditId(null);
-    }
+    queueMicrotask(() => {
+      if (isEditing && editingId) {
+        setForm(EMPTY_FORM);
+        void loadForEdit(editingId);
+      } else if (isCreating) {
+        setForm(EMPTY_FORM);
+        setHydratedEditId(null);
+      } else {
+        setHydratedEditId(null);
+      }
+    });
   }, [isEditing, isCreating, editingId, loadForEdit]);
 
   useEffect(() => {
@@ -176,7 +178,7 @@ export function CommunityNoticesSection() {
 
   useEffect(() => {
     if (mode !== "list") return;
-    setSearchInput(q);
+    queueMicrotask(() => setSearchInput(q));
   }, [mode, q]);
 
   const submit = async () => {

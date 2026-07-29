@@ -18,15 +18,11 @@ import {
   Trash2,
   Edit,
   Check,
-  X,
   Eye,
   EyeOff,
   AlertCircle,
   FileText,
   ChevronRight,
-  ChevronLeft,
-  ChevronsRight,
-  ChevronsLeft,
   Star,
   ShieldCheck,
   Megaphone,
@@ -36,9 +32,6 @@ import {
 } from "lucide-react";
 import { PLACES, PLACE_COLORS } from "@/data/placesData";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { genId } from "@/utils/id";
 import { DashboardSection } from "@/components/screens/admin/DashboardSection";
 import { UsersSection } from "@/components/screens/admin/UsersSection";
 import { PostsSection } from "@/components/screens/admin/PostsSection";

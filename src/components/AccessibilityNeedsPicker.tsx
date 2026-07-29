@@ -31,7 +31,9 @@ export default function AccessibilityNeedsPicker({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    queueMicrotask(() => {
+      if (!cancelled) setLoading(true);
+    });
     fetchAccessibilityNeedOptions()
       .then((items) => {
         if (!cancelled) {

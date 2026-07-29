@@ -37,27 +37,23 @@ function OnboardingForm() {
   const [accessNeeds, setAccessNeeds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (member?.nickname) {
-      setNickname(member.nickname);
+    if (!member?.nickname) return;
+    const currentNickname = member.nickname;
+    queueMicrotask(() => {
+      setNickname(currentNickname);
       setSetupError(null);
-    }
+    });
   }, [member?.nickname]);
 
   useEffect(() => {
-    if (skipNickname) {
-      setNicknameCanSubmit(true);
-    }
-  }, [skipNickname]);
-
-  useEffect(() => {
-    if (preferences?.theme_preferences?.length) {
-      setThemes(preferences.theme_preferences);
-    }
+    if (!preferences?.theme_preferences?.length) return;
+    const savedThemes = preferences.theme_preferences;
+    queueMicrotask(() => setThemes(savedThemes));
   }, [preferences?.theme_preferences]);
 
   useEffect(() => {
     if (preferences?.accessibility_needs?.length) {
-      setAccessNeeds(preferences.accessibility_needs);
+      queueMicrotask(() => setAccessNeeds(preferences.accessibility_needs));
     }
   }, [preferences?.accessibility_needs]);
 
@@ -220,7 +216,7 @@ function OnboardingForm() {
 
         <button
           type="submit"
-          disabled={loading || !nicknameCanSubmit}
+          disabled={loading || (!skipNickname && !nicknameCanSubmit)}
           className="bg-brand-600 hover:bg-brand-700 w-full rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50"
         >
           {loading ? "저장 중..." : "시작하기"}

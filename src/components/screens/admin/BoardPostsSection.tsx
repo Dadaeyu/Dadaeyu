@@ -116,12 +116,12 @@ export function BoardPostsSection() {
   }, []);
 
   useEffect(() => {
-    if (mode === "list") loadList();
+    if (mode === "list") queueMicrotask(() => void loadList());
   }, [mode, loadList]);
 
   useEffect(() => {
-    if (isEditing && editingId) loadForEdit(editingId);
-    else setEditPost(null);
+    if (isEditing && editingId) queueMicrotask(() => void loadForEdit(editingId));
+    else queueMicrotask(() => setEditPost(null));
   }, [isEditing, editingId, loadForEdit]);
 
   useEffect(() => {
@@ -131,7 +131,7 @@ export function BoardPostsSection() {
   }, [mode, searchInput, setQuery]);
 
   useEffect(() => {
-    setSearchInput(q);
+    queueMicrotask(() => setSearchInput(q));
   }, [q]);
 
   const savePost = async () => {

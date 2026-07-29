@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Star,
@@ -13,15 +14,11 @@ import {
   MessageCircle,
   PenLine
 } from "lucide-react";
-import { PLACE_DETAILS } from "@/data/placesData";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import type { TourismDetail } from "@/hooks/usePlaceSearch";
 import AccessibilitySection from "./AccessibilitySection";
 import { useAuth } from "@/context/AuthContext";
 import { isPlaceLiked } from "@/lib/supabase/placeLikes";
-
-// ── 임시 하드코딩 템플릿 (태그 플레이스홀더) ───────────────
-const PLACEHOLDER_DETAIL = PLACE_DETAILS[1];
 
 const REVIEW_PREVIEW_LENGTH = 60;
 // 리뷰로 취급하는 게시판("후기")의 board_id.
@@ -90,7 +87,9 @@ export default function TourismDetailPanel({
 
   useEffect(() => {
     let cancelled = false;
-    setReviewsLoading(true);
+    queueMicrotask(() => {
+      if (!cancelled) setReviewsLoading(true);
+    });
     fetch(`/api/tourism/place-reviews?contentId=${encodeURIComponent(sp.id)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
@@ -130,8 +129,8 @@ export default function TourismDetailPanel({
 
   useEffect(() => {
     if (!user) {
-      setFavorited(false);
-      return;
+      queueMicrotask(() => setFavorited(false));
+      return undefined;
     }
     let cancelled = false;
     isPlaceLiked(user.id, placeId)
@@ -192,7 +191,14 @@ export default function TourismDetailPanel({
 
       {/* 이미지 */}
       {image ? (
-        <img src={image} alt={title} className="h-40 w-full shrink-0 object-cover" />
+        <Image
+          src={image}
+          alt={title}
+          width={640}
+          height={320}
+          unoptimized
+          className="h-40 w-full shrink-0 object-cover"
+        />
       ) : (
         <div className="from-brand-400 to-brand-600 flex h-40 shrink-0 items-center justify-center bg-gradient-to-br">
           <MapPin className="h-12 w-12 text-white/60" />

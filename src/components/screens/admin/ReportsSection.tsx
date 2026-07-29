@@ -50,7 +50,7 @@ export function ReportsSection() {
   }, []);
 
   useEffect(() => {
-    loadReports();
+    queueMicrotask(() => void loadReports());
   }, [loadReports]);
 
   const updateStatus = async (id: number, status: ReportStatus) => {
