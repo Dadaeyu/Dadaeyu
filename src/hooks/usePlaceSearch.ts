@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchKakaoPlaces, type SearchPlace } from "@/lib/search/kakaoSearch";
 
 export interface TourismDetail {
   title: string;
+  category: string | null;
   image: string;
   addr1: string;
   overview: string | null;
@@ -18,94 +19,242 @@ export interface AreaCode {
   name: string;
 }
 
-// DB(tb_tourism_places) + 카카오 로컬 검색을 병행 조회하고, 좌표 기준으로 중복을 제거한다.
+type SearchRequest = {
+  keyword: string;
+  revision: number;
+};
+
+type SearchResultState = {
+  key: string;
+  places: SearchPlace[];
+};
+
+type TourismDetailState = {
+  contentId: string;
+  detail: TourismDetail | null;
+};
+
+// DB(tb_place) + 카카오 로컬 검색을 병행 조회하고, 좌표 기준으로 중복을 제거한다.
 export function usePlaceSearch({
   accessibility,
   gu,
+  dong,
+  favoritesOnly,
   initialKeyword = ""
 }: {
   accessibility: string[];
   gu: string;
+  dong: string;
+  favoritesOnly: boolean;
   initialKeyword?: string;
 }) {
   const [keyword, setKeyword] = useState(initialKeyword);
-  const [searchPlaces, setSearchPlaces] = useState<SearchPlace[]>([]);
+  const [searchRequest, setSearchRequest] = useState<SearchRequest>({
+    keyword: initialKeyword,
+    revision: 0
+  });
+  const [searchResult, setSearchResult] = useState<SearchResultState>({
+    key: "",
+    places: []
+  });
   const [searchDetailId, setSearchDetailId] = useState<string | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
   const [areaCodes, setAreaCodes] = useState<AreaCode[]>([]);
 
   useEffect(() => {
-    fetch("/api/area-code")
-      .then((r) => r.json())
+    const controller = new AbortController();
+
+    void fetch("/api/area-code", { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : []))
       .then((data) => setAreaCodes(Array.isArray(data) ? data : []))
-      .catch(() => setAreaCodes([]));
+      .catch((error: unknown) => {
+        if (!isAbortError(error)) setAreaCodes([]);
+      });
+
+    return () => controller.abort();
   }, []);
 
-  const [tourismDetail, setTourismDetail] = useState<TourismDetail | null>(null);
-  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const selectedGuCode = useMemo(
+    () => (gu ? areaCodes.find((area) => area.name === gu)?.code : undefined),
+    [areaCodes, gu]
+  );
+
+  const [dongResult, setDongResult] = useState<{ guCode: string; options: string[] }>({
+    guCode: "",
+    options: []
+  });
 
   useEffect(() => {
-    const sp = searchDetailId ? searchPlaces.find((p) => p.id === searchDetailId) : null;
-    if (!sp || sp.source === "kakao") {
-      setTourismDetail(null);
-      return;
-    }
-    setIsLoadingDetail(true);
-    fetch(`/api/tourism/detail?contentId=${searchDetailId}`)
-      .then((r) => r.json())
-      .then((data) => setTourismDetail(data))
-      .catch(() => setTourismDetail(null))
-      .finally(() => setIsLoadingDetail(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchDetailId]);
+    if (!selectedGuCode) return;
 
-  const handleSearch = async (kw: string) => {
-    const guCode = gu ? areaCodes.find((a) => a.name === gu)?.code : undefined;
-    if (!kw.trim() && accessibility.length === 0 && !guCode) {
-      setSearchPlaces([]);
-      setSearchDetailId(null);
-      return;
-    }
-    setIsSearching(true);
-    try {
-      const params = new URLSearchParams();
-      if (kw.trim()) params.set("keyword", kw);
-      if (accessibility.length > 0) params.set("accessibility", accessibility.join(","));
-      if (guCode) params.set("gu", guCode);
+    const controller = new AbortController();
+    void fetch(`/api/area-code/dong?gu=${encodeURIComponent(selectedGuCode)}`, {
+      signal: controller.signal
+    })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data) =>
+        setDongResult({
+          guCode: selectedGuCode,
+          options: Array.isArray(data) ? data : []
+        })
+      )
+      .catch((error: unknown) => {
+        if (!isAbortError(error)) {
+          setDongResult({ guCode: selectedGuCode, options: [] });
+        }
+      });
 
-      const [dbRes, kakaoResults] = await Promise.all([
-        fetch(`/api/search?${params}`)
-          .then((r) => r.json())
-          .catch(() => []),
-        kw.trim() ? fetchKakaoPlaces(kw, gu || undefined) : Promise.resolve([])
-      ]);
+    return () => controller.abort();
+  }, [selectedGuCode]);
 
-      const dbResults: SearchPlace[] = (Array.isArray(dbRes) ? dbRes : []).map(
-        (p: Omit<SearchPlace, "source">) => ({ ...p, source: "db" as const })
-      );
+  const dongOptions = selectedGuCode === dongResult.guCode ? dongResult.options : [];
 
-      // 좌표 기준 중복 제거 (소수점 3자리 ≈ 100m)
-      const coordKey = (lat: number, lng: number) => `${lat.toFixed(3)}_${lng.toFixed(3)}`;
-      const dbCoords = new Set(dbResults.map((p) => coordKey(p.lat, p.lng)));
-      const uniqueKakao = kakaoResults.filter((p) => !dbCoords.has(coordKey(p.lat, p.lng)));
+  const [likedPlaces, setLikedPlaces] = useState<SearchPlace[]>([]);
+  const likedIds = useMemo(() => new Set(likedPlaces.map((place) => place.id)), [likedPlaces]);
 
-      setSearchPlaces([...dbResults, ...uniqueKakao]);
-      setSearchDetailId(null);
-    } catch {
-      setSearchPlaces([]);
-    } finally {
-      setIsSearching(false);
-    }
-  };
+  const refreshLiked = useCallback(async () => {
+    const liked = await fetchLikedPlaces();
+    setLikedPlaces(liked);
+    return liked;
+  }, []);
 
   useEffect(() => {
-    handleSearch(keyword);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessibility, gu]);
+    const controller = new AbortController();
+
+    void fetchLikedPlaces(controller.signal)
+      .then(setLikedPlaces)
+      .catch((error: unknown) => {
+        if (!isAbortError(error)) setLikedPlaces([]);
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  const [topRatedPlaces, setTopRatedPlaces] = useState<SearchPlace[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void fetchTopRatedPlaces(controller.signal)
+      .then(setTopRatedPlaces)
+      .catch((error: unknown) => {
+        if (!isAbortError(error)) setTopRatedPlaces([]);
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  const searchKey = useMemo(
+    () =>
+      JSON.stringify([
+        searchRequest.keyword.trim(),
+        searchRequest.revision,
+        accessibility,
+        selectedGuCode ?? "",
+        gu,
+        dong,
+        favoritesOnly
+      ]),
+    [accessibility, dong, favoritesOnly, gu, searchRequest, selectedGuCode]
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void fetchCombinedPlaces(
+      {
+        accessibility,
+        dong,
+        favoritesOnly,
+        gu,
+        guCode: selectedGuCode,
+        keyword: searchRequest.keyword
+      },
+      controller.signal
+    )
+      .then(({ liked, places }) => {
+        setSearchResult({ key: searchKey, places });
+        setSearchDetailId(null);
+        if (liked) setLikedPlaces(liked);
+      })
+      .catch((error: unknown) => {
+        if (!isAbortError(error)) {
+          setSearchResult({ key: searchKey, places: [] });
+          setSearchDetailId(null);
+        }
+      });
+
+    return () => controller.abort();
+  }, [accessibility, dong, favoritesOnly, gu, searchKey, searchRequest.keyword, selectedGuCode]);
+
+  const handleSearch = useCallback((nextKeyword: string) => {
+    setSearchRequest((current) => ({
+      keyword: nextKeyword,
+      revision: current.revision + 1
+    }));
+  }, []);
+
+  const searchPlaces = searchResult.places;
+  const isSearching = searchResult.key !== searchKey;
 
   const searchDetail = searchDetailId
-    ? (searchPlaces.find((p) => p.id === searchDetailId) ?? null)
+    ? (searchPlaces.find((place) => place.id === searchDetailId) ??
+      topRatedPlaces.find((place) => place.id === searchDetailId) ??
+      null)
     : null;
+
+  const [tourismDetailResult, setTourismDetailResult] = useState<TourismDetailState | null>(null);
+
+  useEffect(() => {
+    if (!searchDetailId || !searchDetail || searchDetail.source === "kakao") return;
+
+    const controller = new AbortController();
+    void fetch(`/api/tourism/detail?contentId=${encodeURIComponent(searchDetailId)}`, {
+      signal: controller.signal
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("관광지 상세 정보를 불러오지 못했습니다.");
+        return (await response.json()) as TourismDetail;
+      })
+      .then((detail) => setTourismDetailResult({ contentId: searchDetailId, detail }))
+      .catch((error: unknown) => {
+        if (!isAbortError(error)) {
+          setTourismDetailResult({ contentId: searchDetailId, detail: null });
+        }
+      });
+
+    return () => controller.abort();
+  }, [searchDetail, searchDetailId]);
+
+  const isDatabaseDetail = Boolean(
+    searchDetailId && searchDetail && searchDetail.source !== "kakao"
+  );
+  const tourismDetail =
+    searchDetailId && tourismDetailResult?.contentId === searchDetailId
+      ? tourismDetailResult.detail
+      : null;
+  const isLoadingDetail = isDatabaseDetail && tourismDetailResult?.contentId !== searchDetailId;
+
+  const focusPlaceById = useCallback(async (contentId: string) => {
+    try {
+      const response = await fetch(`/api/search?id=${encodeURIComponent(contentId)}`);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const found: Omit<SearchPlace, "source"> | undefined = Array.isArray(data)
+        ? data[0]
+        : undefined;
+      if (!found) return;
+
+      const place: SearchPlace = { ...found, source: "db" };
+      setSearchResult((current) => ({
+        ...current,
+        places: [place, ...current.places.filter((item) => item.id !== place.id)]
+      }));
+      setSearchDetailId(place.id);
+    } catch {
+      // 게시글 연결 장소를 찾지 못해도 지도 화면 자체는 계속 사용할 수 있다.
+    }
+  }, []);
 
   return {
     keyword,
@@ -116,8 +265,103 @@ export function usePlaceSearch({
     searchDetail,
     isSearching,
     areaCodes,
+    dongOptions,
+    likedIds,
+    refreshLiked,
     tourismDetail,
     isLoadingDetail,
-    handleSearch
+    handleSearch,
+    focusPlaceById,
+    topRatedPlaces
   };
+}
+
+async function fetchLikedPlaces(signal?: AbortSignal): Promise<SearchPlace[]> {
+  const response = await fetch("/api/tourism/liked", { signal });
+  if (!response.ok) return [];
+
+  const liked = await response.json();
+  return (Array.isArray(liked) ? liked : []).map((place: Omit<SearchPlace, "source">) => ({
+    ...place,
+    source: "db" as const
+  }));
+}
+
+async function fetchTopRatedPlaces(signal?: AbortSignal): Promise<SearchPlace[]> {
+  const response = await fetch("/api/tourism/top-rated-places", { signal });
+  if (!response.ok) return [];
+
+  const json = await response.json();
+  const places: Omit<SearchPlace, "source">[] = Array.isArray(json?.places) ? json.places : [];
+  return places.map((place) => ({ ...place, source: "db" as const }));
+}
+
+async function fetchCombinedPlaces(
+  {
+    accessibility,
+    dong,
+    favoritesOnly,
+    gu,
+    guCode,
+    keyword
+  }: {
+    accessibility: string[];
+    dong: string;
+    favoritesOnly: boolean;
+    gu: string;
+    guCode?: string;
+    keyword: string;
+  },
+  signal: AbortSignal
+) {
+  const trimmedKeyword = keyword.trim();
+  const hasNormalQuery = Boolean(trimmedKeyword || accessibility.length > 0 || guCode || dong);
+
+  if (!hasNormalQuery && !favoritesOnly) {
+    return { places: [] as SearchPlace[], liked: null as SearchPlace[] | null };
+  }
+
+  const params = new URLSearchParams();
+  if (trimmedKeyword) params.set("keyword", trimmedKeyword);
+  if (accessibility.length > 0) params.set("accessibility", accessibility.join(","));
+  if (guCode) params.set("gu", guCode);
+  if (dong) params.set("dong", dong);
+
+  const [databaseResponse, kakaoResults, liked] = await Promise.all([
+    hasNormalQuery
+      ? fetch(`/api/search?${params}`, { signal }).then(async (response) => {
+          if (!response.ok) throw new Error("장소 검색에 실패했습니다.");
+          return response.json();
+        })
+      : Promise.resolve([]),
+    trimmedKeyword
+      ? fetchKakaoPlaces(trimmedKeyword, gu || undefined, dong || undefined)
+      : Promise.resolve([]),
+    favoritesOnly ? fetchLikedPlaces(signal) : Promise.resolve(null)
+  ]);
+
+  const databasePlaces: SearchPlace[] = (
+    Array.isArray(databaseResponse) ? databaseResponse : []
+  ).map((place: Omit<SearchPlace, "source">) => ({ ...place, source: "db" as const }));
+
+  const mergedDatabasePlaces = Array.from(
+    new Map([...databasePlaces, ...(liked ?? [])].map((place) => [place.id, place])).values()
+  );
+
+  const coordinateKey = (lat: number, lng: number) => `${lat.toFixed(3)}_${lng.toFixed(3)}`;
+  const databaseCoordinates = new Set(
+    mergedDatabasePlaces.map((place) => coordinateKey(place.lat, place.lng))
+  );
+  const uniqueKakaoPlaces = kakaoResults.filter(
+    (place) => !databaseCoordinates.has(coordinateKey(place.lat, place.lng))
+  );
+
+  return {
+    places: [...mergedDatabasePlaces, ...uniqueKakaoPlaces],
+    liked
+  };
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
 }

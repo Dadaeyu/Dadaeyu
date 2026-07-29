@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Star,
   Heart,
@@ -9,15 +10,30 @@ import {
   ChevronLeft,
   MapPin,
   Flag,
-  MessageCircle
+  MessageCircle,
+  PenLine
 } from "lucide-react";
 import { PLACE_DETAILS } from "@/data/placesData";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import type { TourismDetail } from "@/hooks/usePlaceSearch";
 import AccessibilitySection from "./AccessibilitySection";
+import { useAuth } from "@/context/AuthContext";
+import { isPlaceLiked, togglePlaceLike } from "@/lib/supabase/placeLikes";
 
-// ── 임시 하드코딩 템플릿 (리뷰·태그 플레이스홀더) ───────────
+// ── 임시 하드코딩 템플릿 (태그 플레이스홀더) ───────────────
 const PLACEHOLDER_DETAIL = PLACE_DETAILS[1];
+
+const REVIEW_PREVIEW_LENGTH = 60;
+// 리뷰로 취급하는 게시판("후기")의 board_id.
+const REVIEW_BOARD_ID = 1;
+
+type PlaceReviewItem = {
+  id: number;
+  title: string;
+  content: string;
+  rating: number | null;
+  created_at: string;
+};
 
 // Tour API 텍스트에 &apos; &quot; 같은 HTML 엔티티가 그대로 섞여 오는 경우가 있어,
 // {text}로 렌더링하기 전(=브라우저가 HTML로 파싱해주지 않는 경우) 직접 디코딩해준다.
@@ -45,21 +61,104 @@ function renderWithLineBreaks(text: string) {
   return lines.flatMap((line, i) => (i === 0 ? [line] : [<br key={i} />, line]));
 }
 
-// DB(tb_tourism_places) 출처 검색 결과의 상세 패널. usePlaceSearch()의 tourismDetail을 받아 표시한다.
+// DB(tb_place) 출처 검색 결과의 상세 패널. usePlaceSearch()의 tourismDetail을 받아 표시한다.
 export default function TourismDetailPanel({
   sp,
   detail,
   isLoading,
-  onBack
+  onBack,
+  onLikeChange
 }: {
   sp: SearchPlace;
   detail: TourismDetail | null;
   isLoading: boolean;
   onBack: () => void;
+  onLikeChange?: () => void;
 }) {
+  const router = useRouter();
+  const { user } = useAuth();
   const [favorited, setFavorited] = useState(false);
+  const [loginNotice, setLoginNotice] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [overviewExpanded, setOverviewExpanded] = useState(false);
+  const [reviewTotal, setReviewTotal] = useState(0);
+  const [averageRating, setAverageRating] = useState<number | null>(null);
+  const [reviews, setReviews] = useState<PlaceReviewItem[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+
+  const placeId = Number(sp.id);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReviewsLoading(true);
+    fetch(`/api/tourism/place-reviews?contentId=${encodeURIComponent(sp.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (cancelled) return;
+        setReviewTotal(json?.total ?? 0);
+        setAverageRating(json?.average_rating ?? null);
+        setReviews(json?.reviews ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setReviewTotal(0);
+          setAverageRating(null);
+          setReviews([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setReviewsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sp.id]);
+
+  const goWriteReview = () => {
+    const params = new URLSearchParams({ contentId: sp.id, board: String(REVIEW_BOARD_ID) });
+    router.push(`/community/new?${params}`);
+  };
+
+  const goMoreReviews = () => {
+    const params = new URLSearchParams({
+      tab: "board",
+      contentId: sp.id,
+      boardId: String(REVIEW_BOARD_ID)
+    });
+    router.push(`/community?${params}`);
+  };
+
+  useEffect(() => {
+    if (!user) {
+      setFavorited(false);
+      return;
+    }
+    let cancelled = false;
+    isPlaceLiked(user.id, placeId)
+      .then((liked) => {
+        if (!cancelled) setFavorited(liked);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user, placeId]);
+
+  const handleToggleFavorite = async () => {
+    if (!user) {
+      setLoginNotice(true);
+      setTimeout(() => setLoginNotice(false), 2000);
+      return;
+    }
+    const next = !favorited;
+    setFavorited(next);
+    try {
+      await togglePlaceLike(user.id, placeId);
+      onLikeChange?.();
+    } catch {
+      setFavorited(!next);
+    }
+  };
 
   const title = detail?.title ?? sp.name;
   const image = detail?.image ?? sp.image;
@@ -101,11 +200,16 @@ export default function TourismDetailPanel({
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-base leading-snug font-bold text-gray-900">{title}</h3>
               <div className="flex shrink-0 items-center gap-0.5">
-                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                <span className="text-sm font-semibold text-gray-800">4.5</span>
+                <Star
+                  className={`h-4 w-4 ${averageRating != null ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
+                />
+                <span className="text-sm font-semibold text-gray-800">
+                  {averageRating != null ? averageRating.toFixed(1) : "0"}
+                </span>
               </div>
             </div>
-            <div className="mt-2 flex flex-wrap gap-1">
+            {detail?.category && <p className="mt-0.5 text-xs text-gray-500">{detail.category}</p>}
+            {/* <div className="mt-2 flex flex-wrap gap-1">
               {PLACEHOLDER_DETAIL.tags.map((t) => (
                 <span
                   key={t}
@@ -114,15 +218,13 @@ export default function TourismDetailPanel({
                   #{t}
                 </span>
               ))}
-            </div>
+            </div> */}
           </div>
 
           {/* 액션 버튼 */}
           <div className="grid grid-cols-3 gap-2">
             <button
-              onClick={() => {
-                setFavorited((v) => !v);
-              }}
+              onClick={handleToggleFavorite}
               className={`flex flex-col items-center gap-1 rounded-xl border py-2.5 text-xs font-medium transition-colors ${
                 favorited
                   ? "border-red-300 bg-red-50 text-red-600"
@@ -140,6 +242,13 @@ export default function TourismDetailPanel({
               경로안내
             </button>
           </div>
+
+          {/* 로그인 안내 토스트 */}
+          {loginNotice && (
+            <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-gray-900 px-4 py-2.5 text-xs whitespace-nowrap text-white shadow-lg">
+              로그인 후 이용 가능합니다
+            </div>
+          )}
 
           {/* 기본 정보 */}
           <div className="space-y-1.5 text-xs text-gray-600">
@@ -183,27 +292,61 @@ export default function TourismDetailPanel({
             <div className="mb-3 flex items-center gap-2">
               <MessageCircle className="h-4 w-4 text-gray-500" />
               <h4 className="text-sm font-semibold text-gray-800">리뷰</h4>
-              <span className="text-xs text-gray-400">{PLACEHOLDER_DETAIL.reviews.length}개</span>
+              <span className="text-xs text-gray-400">{reviewTotal}개</span>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={goWriteReview}
+                  className="text-brand-600 hover:text-brand-800 flex items-center gap-1 text-xs font-medium transition-colors"
+                >
+                  <PenLine className="h-3 w-3" />
+                  리뷰 쓰기
+                </button>
+                {reviewTotal > 0 && (
+                  <button
+                    onClick={goMoreReviews}
+                    className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-600"
+                  >
+                    더보기
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="space-y-3">
-              {PLACEHOLDER_DETAIL.reviews.map((r) => (
-                <div key={r.id} className="rounded-xl border border-gray-100 p-3">
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-gray-800">{r.user}</span>
-                    <div className="flex items-center gap-0.5">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-3 w-3 ${i < r.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-200"}`}
-                        />
-                      ))}
+            {reviewsLoading ? (
+              <p className="py-4 text-center text-xs text-gray-400">불러오는 중…</p>
+            ) : reviews.length === 0 ? (
+              <p className="py-4 text-center text-xs text-gray-400">등록된 후기가 없습니다</p>
+            ) : (
+              <div className="space-y-3">
+                {reviews.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => router.push(`/community/${r.id}`)}
+                    className="block w-full rounded-xl border border-gray-100 p-3 text-left transition-colors hover:bg-gray-50"
+                  >
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <span className="truncate text-xs font-semibold text-gray-800">
+                        {r.title}
+                      </span>
+                      {r.rating != null && (
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`h-3 w-3 ${i < r.rating! ? "fill-yellow-400 text-yellow-400" : "text-gray-200"}`}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <p className="text-xs leading-relaxed text-gray-600">{r.content}</p>
-                  <p className="mt-1.5 text-xs text-gray-400">{r.date}</p>
-                </div>
-              ))}
-            </div>
+                    <p className="text-xs leading-relaxed text-gray-600">
+                      {r.content.length > REVIEW_PREVIEW_LENGTH
+                        ? `${r.content.slice(0, REVIEW_PREVIEW_LENGTH)}...`
+                        : r.content}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 제보 */}

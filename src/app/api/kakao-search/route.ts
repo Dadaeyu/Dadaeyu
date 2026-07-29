@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const query = searchParams.get("query")?.trim();
   const gu = searchParams.get("gu")?.trim();
+  const dong = searchParams.get("dong")?.trim();
   if (!query) return Response.json({ documents: [] });
 
   const params = new URLSearchParams({
@@ -42,12 +43,18 @@ export async function GET(req: NextRequest) {
   const data = await res.json();
   let documents = data.documents ?? [];
 
-  // 카카오 API는 행정구역 필터를 지원하지 않아, 주소 문자열에 구 이름이
+  // 카카오 API는 행정구역 필터를 지원하지 않아, 주소 문자열에 구/동 이름이
   // 포함되는지로 이중 체크(지번/도로명 주소)해서 걸러낸다.
   if (gu) {
     documents = documents.filter(
       (d: { address_name?: string; road_address_name?: string }) =>
         d.address_name?.includes(gu) || d.road_address_name?.includes(gu)
+    );
+  }
+  if (dong) {
+    documents = documents.filter(
+      (d: { address_name?: string; road_address_name?: string }) =>
+        d.address_name?.includes(dong) || d.road_address_name?.includes(dong)
     );
   }
 
