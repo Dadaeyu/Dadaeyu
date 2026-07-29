@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { requireAdmin } from "@/lib/supabase/require-admin";
 
 // tb_tourism_accessibility 시딩용: 공공데이터포털 무장애 관광정보(휠체어/점자블록 등)를 받아 upsert한다.
 const API_URL = "https://apis.data.go.kr/B551011/KorWithService2/detailWithTour2";
@@ -101,10 +102,14 @@ function chunk<T>(arr: T[], n: number): T[][] {
 }
 
 export async function POST() {
-  const serviceKey = process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY;
+  const admin = await requireAdmin();
+  if (!admin) return Response.json({ error: "Forbidden" }, { status: 403 });
+
+  const serviceKey =
+    process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? process.env.TOUR_API_SERVICE_KEY;
   if (!serviceKey) {
     return Response.json(
-      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY가 설정되지 않았습니다." },
+      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY 또는 TOUR_API_SERVICE_KEY가 필요합니다." },
       { status: 500 }
     );
   }

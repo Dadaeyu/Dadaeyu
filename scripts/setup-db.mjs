@@ -29,40 +29,45 @@ function loadEnv() {
 }
 
 const env = loadEnv();
-const PROJECT_REF = "rekemsnicqecouinmfwh";
+const SUPABASE_URL = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ADMIN_KEY = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SUPABASE_URL || !SUPABASE_ADMIN_KEY) {
+  throw new Error(
+    ".env.local에 Supabase URL과 SUPABASE_SECRET_KEY 또는 SUPABASE_SERVICE_ROLE_KEY가 필요합니다."
+  );
+}
+const PROJECT_REF = env.SUPABASE_PROJECT_REF || new URL(SUPABASE_URL).hostname.split(".")[0];
 const SQL_EDITOR_URL = `https://supabase.com/dashboard/project/${PROJECT_REF}/sql/new`;
+const REQUIRED_SCHEMAS = [
+  { file: "schema.sql", tables: ["tb_places"] },
+  {
+    file: "schema-tts-usage.sql",
+    tables: ["tts_monthly_usage", "tts_client_daily_usage"]
+  }
+];
 
 async function tableExists(supabase, table) {
-  const { error } = await supabase.from(table).select("id").limit(1);
+  const { error } = await supabase.from(table).select("*").limit(1);
   return !error;
 }
 
-async function applySchemaViaManagementApi(accessToken) {
-  const schema = readFileSync(resolve(root, "supabase/schema.sql"), "utf8");
-  // 주석 제거 후 statement 단위 실행
-  const statements = schema
-    .split(";")
-    .map((s) => s.replace(/--[^\n]*/g, "").trim())
-    .filter(Boolean);
+async function applySchemaViaManagementApi(accessToken, file) {
+  const query = readFileSync(resolve(root, "supabase", file), "utf8");
+  const res = await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ query })
+  });
 
-  for (const query of statements) {
-    const res = await fetch(
-      `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query: query + ";" }),
-      }
-    );
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`스키마 적용 실패: ${body}`);
-    }
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`${file} 적용 실패: ${body}`);
   }
-  console.log("✓ 스키마 적용 완료 (Management API)");
+
+  console.log(`✓ ${file} 적용 완료 (Management API)`);
 }
 
 async function runSeed() {
@@ -70,40 +75,46 @@ async function runSeed() {
   const result = spawnSync("node", ["scripts/seed-supabase.mjs"], {
     cwd: root,
     stdio: "inherit",
-    shell: true,
+    shell: true
   });
   process.exit(result.status ?? 1);
 }
 
 async function main() {
-  const supabase = createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SECRET_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ADMIN_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+
+  const schemaStates = await Promise.all(
+    REQUIRED_SCHEMAS.map(async (schema) => {
+      const tableStates = await Promise.all(
+        schema.tables.map((table) => tableExists(supabase, table))
+      );
+      return { ...schema, exists: tableStates.every(Boolean) };
+    })
   );
+  const missingSchemas = schemaStates.filter((schema) => !schema.exists);
 
-  const exists = await tableExists(supabase, "tb_places");
-
-  if (!exists) {
+  if (missingSchemas.length > 0) {
     if (env.SUPABASE_ACCESS_TOKEN) {
-      console.log("places 테이블 없음 → Management API로 스키마 적용 중...");
-      await applySchemaViaManagementApi(env.SUPABASE_ACCESS_TOKEN);
+      console.log("누락된 DB 스키마를 Management API로 적용합니다...");
+      for (const schema of missingSchemas) {
+        await applySchemaViaManagementApi(env.SUPABASE_ACCESS_TOKEN, schema.file);
+      }
     } else {
-      console.log("\n❌ public.tb_places 테이블이 아직 없습니다.\n");
+      console.log("\n❌ 필수 DB 스키마가 아직 적용되지 않았습니다.\n");
       console.log("아래 SQL을 Supabase SQL Editor에서 실행하세요:\n");
       console.log(`  ${SQL_EDITOR_URL}\n`);
-      console.log("실행할 파일: supabase/schema.sql\n");
+      console.log(
+        `실행할 파일:\n${missingSchemas.map((schema) => `  supabase/${schema.file}`).join("\n")}\n`
+      );
       console.log("실행 후 다시 시도:");
-      console.log("  npm run db:seed\n");
-      console.log("─".repeat(50));
-      console.log(readFileSync(resolve(root, "supabase/schema.sql"), "utf8"));
-      console.log("─".repeat(50));
+      console.log("  npm run db:setup\n");
       process.exit(1);
     }
-  } else {
-    console.log("✓ tb_places 테이블 확인됨");
   }
 
+  console.log("✓ 필수 DB 스키마 확인됨");
   await runSeed();
 }
 

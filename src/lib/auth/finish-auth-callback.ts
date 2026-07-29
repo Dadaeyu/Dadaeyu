@@ -1,7 +1,11 @@
 import type { EmailOtpType, SupabaseClient, User } from "@supabase/supabase-js";
 import { resolveAuthDestination } from "@/lib/auth/post-login";
 import { isOAuthUser } from "@/lib/auth/actions";
-import { ensureMemberExists, syncThemePreferencesFromMetadata } from "@/lib/supabase/ensure-member";
+import {
+  ensureMemberExists,
+  syncAccessibilityNeedsFromMetadata,
+  syncThemePreferencesFromMetadata
+} from "@/lib/supabase/ensure-member";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/auth/phone";
 
@@ -38,6 +42,7 @@ export async function completeEmailSignupOnboardingIfNeeded(user: User): Promise
     .eq("id", user.id);
 
   await syncThemePreferencesFromMetadata(user);
+  await syncAccessibilityNeedsFromMetadata(user);
 }
 
 export async function resolvePostAuthRedirect(

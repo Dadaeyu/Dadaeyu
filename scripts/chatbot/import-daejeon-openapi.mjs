@@ -7,8 +7,7 @@ const DEFAULT_LIMIT = 500;
 const DEFAULT_CSV_PATH = "outputs/chatbot-db-data-summary.csv";
 const PUBLIC_TOILET_URL = "https://apis.data.go.kr/B554695/ToiletSVC/getToiletData01";
 const CULTURE_TOUR_URL = "http://apis.data.go.kr/6300000/openapi2022/tourspot/gettourspot";
-const ACCESSIBLE_PARKING_URL =
-  "https://www.seogu.go.kr/seoguAPI/3660000/getDspsnParkLcSttus";
+const ACCESSIBLE_PARKING_URL = "https://www.seogu.go.kr/seoguAPI/3660000/getDspsnParkLcSttus";
 
 function loadEnv(filePath = ".env.local") {
   const fullPath = resolve(process.cwd(), filePath);
@@ -23,7 +22,10 @@ function loadEnv(filePath = ".env.local") {
     if (index === -1) continue;
 
     const key = trimmed.slice(0, index).trim();
-    const value = trimmed.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
+    const value = trimmed
+      .slice(index + 1)
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
     if (key && process.env[key] === undefined) {
       process.env[key] = value;
     }
@@ -100,21 +102,15 @@ function normalizeSupabaseRestUrl(rawUrl) {
 
   try {
     const parsed = new URL(rawUrl);
-    return rawUrl.includes("/rest/v1")
-      ? rawUrl.replace(/\/$/, "")
-      : `${parsed.origin}/rest/v1`;
+    return rawUrl.includes("/rest/v1") ? rawUrl.replace(/\/$/, "") : `${parsed.origin}/rest/v1`;
   } catch {
     return "";
   }
 }
 
 function getSupabaseConfig() {
-  const rawUrl =
-    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const key =
-    process.env.SUPABASE_SECRET_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    "";
+  const rawUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   const schema = process.env.SUPABASE_SCHEMA || "chatbot";
   const chunksTable = process.env.SUPABASE_CHAT_TABLE || "chunks";
   const documentsTable = process.env.SUPABASE_DOCUMENTS_TABLE || "documents";
@@ -225,7 +221,11 @@ function buildAccessibilityTags(content) {
   if (normalized.includes("점자") || normalized.includes("시각장애")) {
     tags.add("visual_impairment");
   }
-  if (normalized.includes("수유") || normalized.includes("유모차") || normalized.includes("어린이")) {
+  if (
+    normalized.includes("수유") ||
+    normalized.includes("유모차") ||
+    normalized.includes("어린이")
+  ) {
     tags.add("stroller");
   }
 
@@ -310,7 +310,9 @@ function buildAccessibleParkingRow(item) {
     `${title}은/는 대전광역시 서구 장애인주차장 위치 정보입니다.`,
     text(item.lc) ? `위치는 ${text(item.lc)}입니다.` : null,
     text(item.adstrd) ? `행정동은 ${text(item.adstrd)}입니다.` : null,
-    text(item.la) && text(item.lo) ? `좌표는 위도 ${text(item.la)}, 경도 ${text(item.lo)}입니다.` : null,
+    text(item.la) && text(item.lo)
+      ? `좌표는 위도 ${text(item.la)}, 경도 ${text(item.lo)}입니다.`
+      : null,
     "장애인 주차 가능 여부와 실제 주차면 사용 가능 여부는 현장 상황에 따라 달라질 수 있습니다."
   ].filter(Boolean);
   const tags = ["대전", "서구", "장애인주차장", "주차장", "wheelchair", "mobility_access"];
@@ -345,11 +347,9 @@ function buildAccessibleParkingRow(item) {
 function buildCultureTourRow(item) {
   const title = text(item.tourspotNm) || "대전 문화관광지";
   const address = [text(item.tourspotAddr), text(item.tourspotDtlAddr)].filter(Boolean).join(" ");
-  const rawContent = [
-    text(item.tourspotSumm),
-    text(item.pkgFclt),
-    text(item.cnvenFcltGuid)
-  ].join(" ");
+  const rawContent = [text(item.tourspotSumm), text(item.pkgFclt), text(item.cnvenFcltGuid)].join(
+    " "
+  );
   const extraTags = buildAccessibilityTags(rawContent);
   const tags = Array.from(new Set(["대전", "문화관광", "관광지", ...extraTags]));
   const lines = [
@@ -489,9 +489,7 @@ async function supabaseRequest(config, path, options = {}) {
         `${config.schema} schema is not exposed in Supabase Data API. Add it in Project Settings > API > Data API > Exposed schemas.`
       );
     }
-    throw new Error(
-      `Supabase request failed (${response.status}): ${errorText.slice(0, 500)}`
-    );
+    throw new Error(`Supabase request failed (${response.status}): ${errorText.slice(0, 500)}`);
   }
 
   if (response.status === 204) return null;
@@ -720,14 +718,8 @@ async function main() {
   loadEnv();
   const args = parseArgs(process.argv.slice(2));
 
-  const publicToiletKey = getEnv([
-    "DAEJEON_PUBLIC_TOILET_SERVICE_KEY",
-    "PUBLIC_DATA_SERVICE_KEY"
-  ]);
-  const cultureTourKey = getEnv([
-    "DAEJEON_CULTURE_TOUR_SERVICE_KEY",
-    "PUBLIC_DATA_SERVICE_KEY"
-  ]);
+  const publicToiletKey = getEnv(["DAEJEON_PUBLIC_TOILET_SERVICE_KEY", "PUBLIC_DATA_SERVICE_KEY"]);
+  const cultureTourKey = getEnv(["DAEJEON_CULTURE_TOUR_SERVICE_KEY", "PUBLIC_DATA_SERVICE_KEY"]);
   const parkingUrl = getEnv(["DAEJEON_ACCESSIBLE_PARKING_API_URL"]) || ACCESSIBLE_PARKING_URL;
 
   const [publicToilets, accessibleParking, cultureTour] = await Promise.all([

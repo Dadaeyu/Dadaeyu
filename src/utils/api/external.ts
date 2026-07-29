@@ -10,7 +10,8 @@ const KOR_TOUR_INFO_BASE_URL = "/B551011/KorService2";
 const BRFR_TOUR_INFO_BASE_URL = "/B551011/KorWithService2";
 
 const tourDefaultParams = (): Record<string, string> => ({
-  serviceKey: process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? "",
+  serviceKey:
+    process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? process.env.TOUR_API_SERVICE_KEY ?? "",
   MobileOS: "WIN",
   MobileApp: "Dadaeyu",
   _type: "json"

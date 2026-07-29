@@ -11,11 +11,12 @@ import {
   updateUserPreferences
 } from "@/lib/supabase/member";
 import ThemePreferencePicker from "@/components/ThemePreferencePicker";
+import AccessibilityNeedsPicker from "@/components/AccessibilityNeedsPicker";
 import { getSafeNextPath, isEmailSignupMember } from "@/lib/auth/actions";
-import { ageGroupFromLabel, genderFromLabel, type AgeGroup } from "@/lib/supabase/types";
+import { AGE_GROUP_UI_OPTIONS, ageGroupFromLabel, genderFromLabel } from "@/lib/supabase/types";
 
 const GENDERS = ["남성", "여성", "비공개"] as const;
-const AGES = ["10대", "20대", "30대", "40대", "50대+"] as const;
+const AGES = AGE_GROUP_UI_OPTIONS;
 
 function OnboardingForm() {
   const router = useRouter();
@@ -27,31 +28,34 @@ function OnboardingForm() {
 
   const [nickname, setNickname] = useState("");
   const [genderLabel, setGenderLabel] = useState<(typeof GENDERS)[number]>("비공개");
-  const [ageLabel, setAgeLabel] = useState<(typeof AGES)[number]>("30대");
+  const [ageLabel, setAgeLabel] = useState<(typeof AGES)[number]>("비공개");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nicknameCanSubmit, setNicknameCanSubmit] = useState(skipNickname);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [themes, setThemes] = useState<string[]>([]);
+  const [accessNeeds, setAccessNeeds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (member?.nickname) {
-      setNickname(member.nickname);
+    if (!member?.nickname) return;
+    const currentNickname = member.nickname;
+    queueMicrotask(() => {
+      setNickname(currentNickname);
       setSetupError(null);
-    }
+    });
   }, [member?.nickname]);
 
   useEffect(() => {
-    if (skipNickname) {
-      setNicknameCanSubmit(true);
-    }
-  }, [skipNickname]);
+    if (!preferences?.theme_preferences?.length) return;
+    const savedThemes = preferences.theme_preferences;
+    queueMicrotask(() => setThemes(savedThemes));
+  }, [preferences?.theme_preferences]);
 
   useEffect(() => {
-    if (preferences?.theme_preferences?.length) {
-      setThemes(preferences.theme_preferences);
+    if (preferences?.accessibility_needs?.length) {
+      queueMicrotask(() => setAccessNeeds(preferences.accessibility_needs));
     }
-  }, [preferences?.theme_preferences]);
+  }, [preferences?.accessibility_needs]);
 
   useEffect(() => {
     if (authLoading || !user || member) return;
@@ -88,13 +92,16 @@ function OnboardingForm() {
     setError(null);
 
     try {
-      if (themes.length > 0) {
-        await updateUserPreferences(user.id, { theme_preferences: themes });
+      if (themes.length > 0 || accessNeeds.length > 0) {
+        await updateUserPreferences(user.id, {
+          ...(themes.length > 0 ? { theme_preferences: themes } : {}),
+          ...(accessNeeds.length > 0 ? { accessibility_needs: accessNeeds } : {})
+        });
       }
 
       const patch: Parameters<typeof updateMember>[1] = {
         gender: genderFromLabel(genderLabel),
-        age_group: ageGroupFromLabel(ageLabel) as AgeGroup,
+        age_group: ageGroupFromLabel(ageLabel),
         onboarding_completed: true
       };
       if (!skipNickname) {
@@ -195,6 +202,12 @@ function OnboardingForm() {
 
         <ThemePreferencePicker value={themes} onChange={setThemes} disabled={loading} />
 
+        <AccessibilityNeedsPicker
+          value={accessNeeds}
+          onChange={setAccessNeeds}
+          disabled={loading}
+        />
+
         {error && (
           <p className="text-sm text-red-600" role="alert">
             {error}
@@ -203,7 +216,7 @@ function OnboardingForm() {
 
         <button
           type="submit"
-          disabled={loading || !nicknameCanSubmit}
+          disabled={loading || (!skipNickname && !nicknameCanSubmit)}
           className="bg-brand-600 hover:bg-brand-700 w-full rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50"
         >
           {loading ? "저장 중..." : "시작하기"}

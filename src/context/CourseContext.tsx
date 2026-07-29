@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useOptionalAuth } from "@/context/AuthContext";
-import { fetchMyCourses } from "@/lib/supabase/courses";
+import { courseDurationLabel, fetchMyCourses, isCoursePublic } from "@/lib/supabase/courses";
+import type { TourismMyCourse } from "@/lib/supabase/types";
 
 export interface CoursePlace {
   id: number;
@@ -36,60 +37,68 @@ interface CourseContextValue {
 
 const CourseContext = createContext<CourseContextValue | null>(null);
 
-const INITIAL_COURSES: MyCourse[] = [
-  {
-    id: 10,
-    title: "내 여행 계획",
-    duration: "2일",
-    isPrivate: true,
+function formatDetailTime(raw: string | null): string {
+  if (!raw) return "09:00";
+  if (/^\d{1,2}:\d{2}/.test(raw)) return raw.slice(0, 5);
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "09:00";
+  return d.toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Seoul"
+  });
+}
+
+function toMyCourse(course: TourismMyCourse): MyCourse {
+  const byDay = new Map<number, CoursePlace[]>();
+  for (const p of course.places) {
+    const list = byDay.get(p.day) ?? [];
+    list.push({
+      id: p.place_id,
+      name: p.title,
+      time: formatDetailTime(p.starttime),
+      duration: ""
+    });
+    byDay.set(p.day, list);
+  }
+  const days: CourseDay[] =
+    byDay.size > 0
+      ? [...byDay.entries()].sort(([a], [b]) => a - b).map(([day, places]) => ({ day, places }))
+      : [{ day: 1, places: [] }];
+
+  return {
+    id: course.course_id,
+    title: course.course_nm,
+    duration: courseDurationLabel(course),
+    isPrivate: !isCoursePublic(course),
     rating: 0,
     likes: 0,
-    tags: ["자연힐링", "먹거리"],
-    days: [
-      {
-        day: 1,
-        places: [
-          { id: 1, name: "성심당", time: "09:00", duration: "1시간" },
-          { id: 2, name: "한밭수목원", time: "11:00", duration: "2시간" },
-          { id: 3, name: "유성온천", time: "16:00", duration: "2시간" }
-        ]
-      },
-      {
-        day: 2,
-        places: [{ id: 4, name: "대청호 오백리길", time: "10:00", duration: "3시간" }]
-      }
-    ]
-  }
-];
+    tags: [],
+    days
+  };
+}
 
 export function CourseProvider({ children }: { children: ReactNode }) {
   const auth = useOptionalAuth();
-  const [myCourses, setMyCourses] = useState<MyCourse[]>(INITIAL_COURSES);
+  const [myCourses, setMyCourses] = useState<MyCourse[]>([]);
 
   useEffect(() => {
-    if (!auth?.user) return;
+    if (!auth?.user) {
+      queueMicrotask(() => setMyCourses([]));
+      return;
+    }
+    let cancelled = false;
     fetchMyCourses(auth.user.id)
-      .then((dbCourses) => {
-        if (dbCourses.length === 0) return;
-        setMyCourses((prev) => {
-          const dbAsMy: MyCourse[] = dbCourses.map((c) => ({
-            id: c.id,
-            title: c.title,
-            duration: c.duration_label ?? "1일",
-            isPrivate: !c.is_public,
-            rating: 0,
-            likes: c.like_count,
-            tags: [],
-            days: [{ day: 1, places: [] }]
-          }));
-          const merged = [...dbAsMy];
-          for (const local of prev) {
-            if (!merged.some((m) => m.id === local.id)) merged.push(local);
-          }
-          return merged;
-        });
+      .then((rows) => {
+        if (!cancelled) setMyCourses(rows.map(toMyCourse));
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setMyCourses([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [auth?.user]);
 
   const addPlaceToCourse = (courseId: number, placeName: string) => {

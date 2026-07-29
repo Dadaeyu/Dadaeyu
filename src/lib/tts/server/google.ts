@@ -43,7 +43,10 @@ export class GoogleTextToSpeechProvider implements TextToSpeechProvider {
     };
   }
 
-  async synthesize({ text }: { text: string; voice?: string }, options?: { signal?: AbortSignal }) {
+  async synthesize(
+    { text, voice: requestedVoice }: { text: string; voice?: string },
+    options?: { clientKey?: string; signal?: AbortSignal }
+  ) {
     if (!this.enabled) {
       throw new TextToSpeechProviderError("Google TTS is disabled.", 503);
     }
@@ -56,11 +59,17 @@ export class GoogleTextToSpeechProvider implements TextToSpeechProvider {
       throw new DOMException("The operation was aborted.", "AbortError");
     }
 
-    await reserveGoogleTextToSpeechUsage(text);
+    if (!options?.clientKey) {
+      throw new TextToSpeechProviderError("TTS client identity is missing.", 503);
+    }
+
+    const client = this.getClient();
+    await reserveGoogleTextToSpeechUsage(text, options.clientKey);
+    const voice = resolveVoice(requestedVoice ?? this.defaultVoice);
 
     try {
       const [response] = await withAbort(
-        this.getClient().synthesizeSpeech({
+        client.synthesizeSpeech({
           audioConfig: {
             audioEncoding: "MP3",
             speakingRate: this.speed
@@ -68,7 +77,7 @@ export class GoogleTextToSpeechProvider implements TextToSpeechProvider {
           input: { text },
           voice: {
             languageCode: "ko-KR",
-            name: this.defaultVoice
+            name: voice
           }
         }),
         options?.signal

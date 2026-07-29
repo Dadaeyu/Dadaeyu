@@ -12,7 +12,7 @@ export interface TextToSpeechProvider {
   getCapabilities(): TextToSpeechCapabilities;
   synthesize(
     input: TextToSpeechInput,
-    options?: { signal?: AbortSignal }
+    options?: { clientKey?: string; signal?: AbortSignal }
   ): Promise<TextToSpeechAudio>;
 }
 

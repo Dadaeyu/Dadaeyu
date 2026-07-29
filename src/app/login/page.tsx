@@ -27,24 +27,28 @@ function LoginForm() {
   const [message, setMessage] = useState<string | null>(
     authError === "account_suspended"
       ? "정지된 계정입니다. 관리자에게 문의해 주세요."
-      : authError === "naver_config"
-        ? "네이버 로그인 설정이 없습니다. .env.local에 NAVER_CLIENT_ID, NAVER_CLIENT_SECRET을 추가해 주세요."
-        : authError === "email_not_provided"
-          ? "네이버에서 이메일 정보를 받지 못했습니다. 네이버 개발자센터에서 이메일 제공 동의 항목을 확인해 주세요."
-          : authError === "naver_provider_id"
-            ? "네이버 로그인 연동 형식 오류입니다. 페이지를 새로고침한 뒤 다시 시도해 주세요."
-            : authError === "email_not_confirmed"
-              ? "이메일 인증이 완료되지 않았습니다. 메일함의 인증 링크를 확인해 주세요."
-              : authError === "auth_callback_failed"
-                ? "인증 링크가 만료되었거나 이미 사용되었습니다. 로그인을 시도하거나 인증 메일을 다시 받아 주세요."
-                : null
+      : authError === "account_withdrawn"
+        ? "탈퇴한 계정입니다. 같은 이메일로 다시 가입할 수 있습니다."
+        : authError === "naver_config"
+          ? "네이버 로그인 설정이 없습니다. .env.local에 NAVER_CLIENT_ID, NAVER_CLIENT_SECRET을 추가해 주세요."
+          : authError === "email_not_provided"
+            ? "네이버에서 이메일 정보를 받지 못했습니다. 네이버 개발자센터에서 이메일 제공 동의 항목을 확인해 주세요."
+            : authError === "naver_provider_id"
+              ? "네이버 로그인 연동 형식 오류입니다. 페이지를 새로고침한 뒤 다시 시도해 주세요."
+              : authError === "email_not_confirmed"
+                ? "이메일 인증이 완료되지 않았습니다. 메일함의 인증 링크를 확인해 주세요."
+                : authError === "auth_callback_failed"
+                  ? "인증 링크가 만료되었거나 이미 사용되었습니다. 로그인을 시도하거나 인증 메일을 다시 받아 주세요."
+                  : null
   );
   const [notice, setNotice] = useState<string | null>(
     authNotice === "password_reset"
       ? "비밀번호가 변경되었습니다. 새 비밀번호로 로그인해 주세요."
       : authNotice === "email_confirmed"
         ? "이메일 인증이 완료되었습니다. 로그인해 주세요."
-        : null
+        : authNotice === "withdrawn"
+          ? "회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다."
+          : null
   );
 
   const handleEmailSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -105,7 +109,7 @@ function LoginForm() {
           onChange={(e) => setEmail(e.target.value)}
           onInput={(e) => setEmail(e.currentTarget.value)}
           placeholder="이메일"
-          className="focus:ring-brand-500 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:ring-2 focus:outline-none"
+          className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full rounded-xl border px-4 py-2.5 text-sm focus:ring-2 focus:outline-none"
         />
         <input
           type="password"
@@ -113,7 +117,7 @@ function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="비밀번호"
-          className="focus:ring-brand-500 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:ring-2 focus:outline-none"
+          className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full rounded-xl border px-4 py-2.5 text-sm focus:ring-2 focus:outline-none"
         />
         <button
           type="submit"

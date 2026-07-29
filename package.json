@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev --webpack -p 3000",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3000",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "db:setup": "node scripts/setup-db.mjs",
     "db:seed": "node scripts/seed-supabase.mjs",
     "db:test": "node scripts/test-supabase.mjs",
@@ -35,11 +38,17 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.108.0",
+    "@tiptap/extension-image": "^3.27.4",
+    "@tiptap/extension-link": "^3.27.4",
+    "@tiptap/pm": "^3.27.4",
+    "@tiptap/react": "^3.27.4",
+    "@tiptap/starter-kit": "^3.27.4",
     "axios": "^1.17.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "embla-carousel-react": "^8.6.0",
     "fast-xml-parser": "^5.9.3",
+    "isomorphic-dompurify": "^3.18.0",
     "lucide-react": "^1.17.0",
     "next": "^16.2.7",
     "react": "19.2.4",
@@ -61,5 +70,18 @@
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^5"
+  },
+  "overrides": {
+    "gaxios": "7.3.0",
+    "glob": "13.0.6",
+    "next": {
+      "postcss": "8.5.24",
+      "sharp": "0.35.3"
+    },
+    "@tailwindcss/postcss": {
+      "postcss": "8.5.24"
+    },
+    "postcss": "8.5.24",
+    "rimraf": "6.1.3"
   }
 }

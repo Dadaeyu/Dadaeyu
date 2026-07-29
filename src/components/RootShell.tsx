@@ -15,6 +15,15 @@ import NoticeModal, {
   type ActiveNotice
 } from "@/components/NoticeModal";
 
+function isSnoozedToday(noticeId: number): boolean {
+  try {
+    const snooze = localStorage.getItem(snoozeStorageKey(noticeId));
+    return !!snooze && snooze === getTodayKey();
+  } catch {
+    return false;
+  }
+}
+
 export default function RootShell({
   children,
   places,
@@ -28,31 +37,27 @@ export default function RootShell({
 }) {
   const pathname = usePathname();
   const isHomePage = pathname === "/";
-  const [activeNotice, setActiveNotice] = useState<ActiveNotice | null>(null);
+  const [queue, setQueue] = useState<ActiveNotice[]>([]);
 
   useEffect(() => {
-    if (!isHomePage) return;
+    if (!isHomePage) {
+      queueMicrotask(() => setQueue([]));
+      return;
+    }
 
     let cancelled = false;
 
     fetch("/api/notices/active")
       .then(async (res) => {
         if (!res.ok) return null;
-        return (await res.json().catch(() => null)) as { notice?: ActiveNotice | null } | null;
+        return (await res.json().catch(() => null)) as { notices?: ActiveNotice[] } | null;
       })
       .then((json) => {
         if (cancelled) return;
-        const notice = json?.notice ?? null;
-        if (!notice) return;
-
-        try {
-          const snooze = localStorage.getItem(snoozeStorageKey(notice.id));
-          if (snooze && snooze === getTodayKey()) return;
-        } catch {
-          // ignore storage errors
-        }
-
-        if (isDisplayableNotice(notice)) setActiveNotice(notice);
+        const notices = json?.notices ?? [];
+        setQueue(
+          notices.filter((notice) => isDisplayableNotice(notice) && !isSnoozedToday(notice.id))
+        );
       })
       .catch(() => {});
 
@@ -60,6 +65,8 @@ export default function RootShell({
       cancelled = true;
     };
   }, [isHomePage]);
+
+  const currentNotice = queue[0] ?? null;
 
   return (
     <AuthProvider>
@@ -83,18 +90,19 @@ export default function RootShell({
               <MobileNav />
             </div>
 
-            {isHomePage && activeNotice && (
+            {isHomePage && currentNotice && (
               <NoticeModal
-                notice={activeNotice}
+                key={currentNotice.id}
+                notice={currentNotice}
                 onClose={({ snoozeToday }) => {
                   if (snoozeToday) {
                     try {
-                      localStorage.setItem(snoozeStorageKey(activeNotice.id), getTodayKey());
+                      localStorage.setItem(snoozeStorageKey(currentNotice.id), getTodayKey());
                     } catch {
                       // ignore storage errors
                     }
                   }
-                  setActiveNotice(null);
+                  setQueue((prev) => prev.slice(1));
                 }}
               />
             )}

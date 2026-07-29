@@ -7,12 +7,12 @@
  * Mintlify 디자인 시스템 토큰 (DESIGN.md 기준)
  * - 시그니처 민트 그린(brand-green) #00d4a4 는 액센트 CTA / 활성 상태에만
  * - 블랙 필(primary) #0a0a0a 이 라이트 배경의 주 CTA
- * - 본문/헤딩은 Inter, 코드는 Geist Mono
+ * - 본문/헤딩은 시스템 sans-serif, 코드는 시스템 monospace
  */
 :root {
   --font-size: 16px;
-  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: var(--font-geist-mono), "SF Mono", Menlo, Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   /* Surfaces */
   --background: #ffffff; /* canvas */
@@ -80,9 +80,9 @@
   --muted-foreground: oklch(0.708 0 0);
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
+  --destructive: #d45656;
+  --destructive-foreground: #ffffff;
+  --border: #525252;
   --input: oklch(0.269 0 0);
   --ring: oklch(0.439 0 0);
   --font-weight-medium: 500;
@@ -276,8 +276,8 @@
   --color-steel: #b0b0b0;
   --color-stone: #9ca3af;
   --color-mute: #9ca3af;
-  --color-hairline: #3d3d3d;
-  --color-hairline-soft: #2a2a2a;
+  --color-hairline: #525252;
+  --color-hairline-soft: #3d3d3d;
   --color-surface: #1f1f1f;
   --color-surface-soft: #141414;
   --color-brand-50: #0d2b24;
@@ -295,76 +295,150 @@
   --color-slate: #3a3a3c;
 }
 
-/* ── 접근성: 고대비 — 보조 텍스트·테두리만 살짝 강화 (브랜드·버튼 색 유지) */
+/* ── 접근성: 고대비 — 글자·테두리·면 구분을 분명히 (과한 순백흑·네온은 피함) */
 .high-contrast:not(.dark) {
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --secondary: #e6e6e6;
+  --secondary-foreground: #000000;
+  --muted: #e6e6e6;
+  --muted-foreground: #1f1f1f;
+  --accent: #e6e6e6;
+  --accent-foreground: #000000;
+  --border: #3d3d3d;
+  --input: #3d3d3d;
+  --ring: #0a9e7c;
+
+  --color-white: #ffffff;
+  --color-gray-400: #5c5c5c;
   --color-gray-500: #3a3a3a;
   --color-gray-600: #2a2a2a;
   --color-gray-700: #1a1a1a;
   --color-gray-800: #0a0a0a;
   --color-gray-900: #000000;
+
   --color-ink: #000000;
   --color-charcoal: #0a0a0a;
   --color-slate: #1a1a1a;
-  --color-steel: #3a3a3c;
-  --color-stone: #4a4a4c;
-  --color-mute: #404040;
-  --foreground: #0a0a0a;
-  --card-foreground: #0a0a0a;
-  --muted-foreground: #2a2a2a;
-  --secondary-foreground: #0a0a0a;
-  --accent-foreground: #0a0a0a;
-  --border: #6b6b6b;
-  --input: #6b6b6b;
-  --color-hairline: #6b6b6b;
-  --color-hairline-soft: #8a8a8a;
+  --color-steel: #2c2c2e;
+  --color-stone: #3a3a3c;
+  --color-mute: #404042;
+
+  --color-hairline: #3d3d3d;
+  --color-hairline-soft: #5a5a5a;
+  --color-surface: #e6e6e6;
+  --color-surface-soft: #efefef;
 }
 
 .dark.high-contrast {
-  --color-ink: #f5f5f5;
-  --color-charcoal: #e8e8e8;
+  --background: #050505;
+  --foreground: #f2f2f2;
+  --card: #121212;
+  --card-foreground: #f2f2f2;
+  --popover: #121212;
+  --popover-foreground: #f2f2f2;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #f2f2f2;
+  --muted: #1a1a1a;
+  --muted-foreground: #d4d4d4;
+  --accent: #1a1a1a;
+  --accent-foreground: #f2f2f2;
+  --border: #9a9a9a;
+  --input: #9a9a9a;
+  --ring: #5ecfb0;
+
+  --color-white: #121212;
+  --color-gray-50: #0a0a0a;
+  --color-gray-100: #121212;
+  --color-gray-200: #1c1c1c;
+  --color-gray-300: #2e2e2e;
+  --color-gray-400: #8a8a8a;
+  --color-gray-500: #c8c8c8;
+  --color-gray-600: #d6d6d6;
+  --color-gray-700: #e4e4e4;
+  --color-gray-800: #f0f0f0;
+  --color-gray-900: #fafafa;
+
+  --color-ink: #f2f2f2;
+  --color-charcoal: #ebebeb;
   --color-slate: #e0e0e0;
   --color-steel: #d0d0d0;
-  --color-stone: #c0c0c0;
-  --color-mute: #b8b8b8;
-  --color-gray-500: #d8d8d8;
-  --color-gray-600: #e8e8e8;
-  --color-gray-700: #f0f0f0;
-  --color-gray-800: #f5f5f5;
-  --color-gray-900: #ffffff;
-  --foreground: #f5f5f5;
-  --card-foreground: #f5f5f5;
-  --muted-foreground: #e8e8e8;
-  --secondary-foreground: #f5f5f5;
-  --accent-foreground: #f5f5f5;
-  --background: #0a0a0a;
-  --border: #8a8a8a;
-  --input: #8a8a8a;
+  --color-stone: #b8b8b8;
+  --color-mute: #adadad;
+
   --color-hairline: #9a9a9a;
-  --color-hairline-soft: #7a7a7a;
+  --color-hairline-soft: #6e6e6e;
+  --color-surface: #161616;
+  --color-surface-soft: #0c0c0c;
 }
 
 .dark.high-contrast :where([class*="from-hero-sky-from"]) {
-  --color-ink: #0a0a0a;
-  --color-charcoal: #1c1c1e;
-  --color-slate: #3a3a3c;
-  --color-steel: #5a5a5c;
+  --color-ink: #000000;
+  --color-charcoal: #0a0a0a;
+  --color-slate: #1a1a1a;
+  --color-steel: #2c2c2e;
+  --color-stone: #3a3a3c;
 }
 
+/* 입력·버튼 윤곽을 더 또렷하게 (두께만, 색은 토큰 유지) — date는 네이티브 피커 보호 */
 .high-contrast
-  :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select) {
+  :is(
+    input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="date"]):not(
+        [type="time"]
+      ):not([type="datetime-local"]),
+    textarea,
+    select
+  ) {
   border-width: 2px !important;
   border-style: solid !important;
   border-color: var(--color-hairline) !important;
+  background-color: var(--background) !important;
+  color: var(--color-ink) !important;
+}
+
+.high-contrast :is(input[type="date"], input[type="time"], input[type="datetime-local"]) {
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-color: var(--color-hairline) !important;
+  background-color: var(--background) !important;
 }
 
 .high-contrast :focus-visible {
-  outline: 2px solid var(--ring) !important;
-  outline-offset: 2px;
+  outline: 3px solid var(--ring) !important;
+  outline-offset: 3px;
 }
 
 .high-contrast a:focus-visible {
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
+}
+
+/* 반투명 헤더 → 불투명 + 하단선 강화 (가독성) */
+.high-contrast header.sticky,
+.high-contrast header[class*="sticky"] {
+  background-color: var(--background) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom-width: 2px;
+  border-bottom-color: var(--color-hairline);
+}
+
+/* 카드·패널 테두리가 배경과 확실히 구분되도록 */
+.high-contrast :where(.rounded-xl, .rounded-2xl, .rounded-lg).border,
+.high-contrast :where([class*="rounded-"])[class*="border-hairline"] {
+  border-width: 1.5px;
+  border-color: var(--color-hairline);
+}
+
+/* 보조 텍스트도 본문과 너무 가깝지 않게 — 이미 토큰으로 처리. 링크 호버만 밑줄 */
+.high-contrast a[href]:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .dark
@@ -418,6 +492,76 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /*
+   * 입력 필드: 다크모드에서 bg-white(→어두운 면) + 검정 글자/placeholder가
+   * 겹치면 안 보이는 문제 방지. ink/stone 토큰으로 통일.
+   * date/time 은 네이티브 피커가 color !important 에 깨지므로 제외.
+   */
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not(
+        [type="range"]
+      ):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not(
+        [type="date"]
+      ):not([type="time"]):not([type="datetime-local"]):not([type="month"]):not([type="week"]),
+    textarea,
+    select
+  ) {
+    color: var(--color-ink);
+  }
+
+  :where(input, textarea)::placeholder {
+    color: var(--color-stone);
+    opacity: 1;
+  }
+
+  /* 하드코딩된 text-[#0a0a0a] 등도 다크에서 덮음 (date/time 제외) */
+  .dark
+    :where(
+      input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not(
+          [type="range"]
+        ):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not(
+          [type="date"]
+        ):not([type="time"]):not([type="datetime-local"]):not([type="month"]):not([type="week"]),
+      textarea
+    ) {
+    color: var(--color-ink) !important;
+  }
+
+  .dark :where(input:not([type="date"]):not([type="time"]), textarea)::placeholder {
+    color: var(--color-stone) !important;
+    opacity: 1;
+  }
+
+  /* 네이티브 날짜 피커: 테마에 맞는 color-scheme + 아이콘 클릭 가능 */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"] {
+    color-scheme: light;
+    color: var(--color-ink);
+    min-height: 2.5rem;
+  }
+
+  .dark input[type="date"],
+  .dark input[type="time"],
+  .dark input[type="datetime-local"],
+  .dark input[type="month"],
+  .dark input[type="week"] {
+    color-scheme: dark;
+    color: var(--color-ink);
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+  }
+
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.85;
   }
 
   html {

@@ -2,16 +2,20 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TextToSpeechProviderError } from "@/lib/tts/server/provider";
+import { getGoogleTextToSpeechBillingPeriods } from "@/lib/tts/usage-period";
 
 const HARD_MONTHLY_USAGE_LIMIT = 800_000;
-const localUsage = new Map<string, number>();
+const HARD_DAILY_CLIENT_USAGE_LIMIT = 50_000;
+const localMonthlyUsage = new Map<string, number>();
+const localClientUsage = new Map<string, number>();
 
-export async function reserveGoogleTextToSpeechUsage(text: string) {
+export async function reserveGoogleTextToSpeechUsage(text: string, clientKey: string) {
   const usage = Array.from(text).length;
-  const limit = resolveMonthlyUsageLimit();
+  const monthlyLimit = resolveMonthlyUsageLimit();
+  const clientLimit = resolveDailyClientUsageLimit();
 
   if (usage <= 0) return;
-  if (usage > limit) {
+  if (usage > monthlyLimit) {
     throw new TextToSpeechProviderError("Google TTS monthly usage limit has been reached.", 402);
   }
 
@@ -19,18 +23,21 @@ export async function reserveGoogleTextToSpeechUsage(text: string) {
     const supabase = createAdminClient();
     const { data, error } = await supabase.rpc("reserve_tts_usage", {
       p_billing_period: getBillingPeriod(),
-      p_limit: limit,
+      p_client_key: clientKey,
+      p_client_limit: clientLimit,
+      p_client_period: getClientPeriod(),
+      p_limit: monthlyLimit,
       p_provider: "google",
       p_usage: usage
     });
 
     if (error) {
-      if (error.code === "PGRST202") {
-        if (process.env.NODE_ENV !== "production") {
-          reserveLocalUsage(usage, limit);
-          return;
-        }
+      if (error.code === "PGRST202" && process.env.NODE_ENV !== "production") {
+        reserveLocalUsage({ clientKey, clientLimit, monthlyLimit, usage });
+        return;
+      }
 
+      if (error.code === "PGRST202") {
         throw new TextToSpeechProviderError("Google TTS usage tracking is not installed.", 503);
       }
       throw error;
@@ -38,13 +45,16 @@ export async function reserveGoogleTextToSpeechUsage(text: string) {
 
     const reservation = Array.isArray(data) ? data[0] : data;
     if (!reservation?.allowed) {
-      throw new TextToSpeechProviderError("Google TTS monthly usage limit has been reached.", 402);
+      const status = reservation?.reason === "client_limit" ? 429 : 402;
+      throw new TextToSpeechProviderError(
+        status === 429
+          ? "Google TTS client usage limit has been reached."
+          : "Google TTS monthly usage limit has been reached.",
+        status
+      );
     }
   } catch (error) {
-    if (error instanceof TextToSpeechProviderError) {
-      throw error;
-    }
-
+    if (error instanceof TextToSpeechProviderError) throw error;
     throw new TextToSpeechProviderError("Google TTS usage tracking is unavailable.", 503);
   }
 }
@@ -56,21 +66,45 @@ function resolveMonthlyUsageLimit() {
     : HARD_MONTHLY_USAGE_LIMIT;
 }
 
-function getBillingPeriod() {
-  return new Intl.DateTimeFormat("en-CA", {
-    month: "2-digit",
-    timeZone: "Asia/Seoul",
-    year: "numeric"
-  }).format(new Date());
+function resolveDailyClientUsageLimit() {
+  const configured = Number(process.env.TTS_DAILY_USAGE_LIMIT_PER_CLIENT);
+  return Number.isFinite(configured) && configured > 0
+    ? Math.min(Math.floor(configured), HARD_DAILY_CLIENT_USAGE_LIMIT)
+    : HARD_DAILY_CLIENT_USAGE_LIMIT;
 }
 
-function reserveLocalUsage(usage: number, limit: number) {
-  const billingPeriod = getBillingPeriod();
-  const used = localUsage.get(billingPeriod) ?? 0;
+function getBillingPeriod() {
+  return getGoogleTextToSpeechBillingPeriods().billingPeriod;
+}
 
-  if (used + usage > limit) {
+function getClientPeriod() {
+  return getGoogleTextToSpeechBillingPeriods().clientPeriod;
+}
+
+function reserveLocalUsage({
+  clientKey,
+  clientLimit,
+  monthlyLimit,
+  usage
+}: {
+  clientKey: string;
+  clientLimit: number;
+  monthlyLimit: number;
+  usage: number;
+}) {
+  const { billingPeriod, clientPeriod } = getGoogleTextToSpeechBillingPeriods();
+  const monthlyKey = `google:${billingPeriod}`;
+  const dailyClientKey = `google:${clientPeriod}:${clientKey}`;
+  const usedByClient = localClientUsage.get(dailyClientKey) ?? 0;
+  const usedThisMonth = localMonthlyUsage.get(monthlyKey) ?? 0;
+
+  if (usedByClient + usage > clientLimit) {
+    throw new TextToSpeechProviderError("Google TTS client usage limit has been reached.", 429);
+  }
+  if (usedThisMonth + usage > monthlyLimit) {
     throw new TextToSpeechProviderError("Google TTS monthly usage limit has been reached.", 402);
   }
 
-  localUsage.set(billingPeriod, used + usage);
+  localClientUsage.set(dailyClientKey, usedByClient + usage);
+  localMonthlyUsage.set(monthlyKey, usedThisMonth + usage);
 }

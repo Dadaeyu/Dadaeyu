@@ -62,9 +62,30 @@ export default function Header() {
         <div className="flex shrink-0 items-center gap-2">
           {auth?.user ? (
             <>
-              <span className="text-steel hidden text-sm whitespace-nowrap md:inline">
-                <span className="text-ink font-semibold">{auth.member?.nickname ?? "회원"}</span>님
-              </span>
+              <Link
+                href="/mypage"
+                className="text-steel hover:text-ink hidden items-center gap-2 text-sm whitespace-nowrap transition-colors md:inline-flex"
+                aria-label="마이페이지"
+              >
+                <span className="border-hairline bg-surface-soft inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border">
+                  {auth.member?.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={auth.member.avatar_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-ink text-xs font-bold">
+                      {(auth.member?.nickname ?? "회").slice(0, 1)}
+                    </span>
+                  )}
+                </span>
+                <span>
+                  <span className="text-ink font-semibold">{auth.member?.nickname ?? "회원"}</span>
+                  님
+                </span>
+              </Link>
               <Button
                 variant="ghost"
                 size="sm"

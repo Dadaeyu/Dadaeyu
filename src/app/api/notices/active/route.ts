@@ -35,10 +35,11 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const notice =
-      ((data ?? []) as NoticeRow[]).find((row) => isWithinExposureWindow(row, nowMs)) ?? null;
+    const notices = ((data ?? []) as NoticeRow[]).filter((row) =>
+      isWithinExposureWindow(row, nowMs)
+    );
 
-    return NextResponse.json({ notice });
+    return NextResponse.json({ notices });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to fetch notice" },

@@ -16,6 +16,22 @@ export type PaginatedResponse<T> = {
   pageSize: number;
 };
 
+/** 커뮤니티 공개 목록: 10 / 20 / 30, 기본 10 */
+export const COMMUNITY_PAGE_SIZES = [10, 20, 30] as const;
+export const COMMUNITY_DEFAULT_PAGE_SIZE = 10;
+
+export function parseCommunityListParams(searchParams: URLSearchParams): ListParams {
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+  const rawSize = Number(searchParams.get("pageSize")) || COMMUNITY_DEFAULT_PAGE_SIZE;
+  const pageSize = (COMMUNITY_PAGE_SIZES as readonly number[]).includes(rawSize)
+    ? rawSize
+    : COMMUNITY_DEFAULT_PAGE_SIZE;
+  const q = (searchParams.get("q") ?? "").trim();
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  return { page, pageSize, q, from, to };
+}
+
 export function parseListParams(
   searchParams: URLSearchParams,
   defaultPageSize = DEFAULT_PAGE_SIZE

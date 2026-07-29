@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getServerSupabaseConfig } from "@/lib/supabase/config";
 import {
@@ -128,6 +129,11 @@ const CONTENT_TYPE_LABELS: Record<number, string> = {
 const PLACE_PAGE_SIZE = 500;
 const RELATED_ROW_BATCH_SIZE = 150;
 let homeDataClient: SupabaseClient | null = null;
+const getCachedBaseHomePlaces = unstable_cache(
+  async () => fetchNormalizedHomePlaces(),
+  ["home-base-places-v1"],
+  { revalidate: 300, tags: ["home-places"] }
+);
 
 export class HomeDataError extends Error {
   constructor(
@@ -148,10 +154,27 @@ export async function loadHomePlaces({
   location: HomeLocation | null;
   query: string;
 }): Promise<HomeDataResponse> {
-  const places = await fetchAllTourismPlaces();
-  if (!places.length) {
+  const normalizedPlaces = await getCachedBaseHomePlaces();
+  if (!normalizedPlaces.length) {
     return { places: [], facilities: [], source: "한국관광공사 관광·무장애 여행정보" };
   }
+
+  const allRankedPlaces = rankHomePlaces(normalizedPlaces, needIds, location, query);
+  const displayPlaces =
+    !query && !needIds.length && !location
+      ? rotateDailyFeaturedPlace(allRankedPlaces, new Date())
+      : allRankedPlaces;
+  const rankedPlaces = displayPlaces.slice(0, 16);
+  return {
+    places: rankedPlaces,
+    facilities: buildEssentialFacilities(allRankedPlaces),
+    source: "한국관광공사 관광·무장애 여행정보"
+  };
+}
+
+async function fetchNormalizedHomePlaces(): Promise<HomePlace[]> {
+  const places = await fetchAllTourismPlaces();
+  if (!places.length) return [];
 
   const contentIds = places.map((place) => place.contentid);
   const [detailRows, accessibilityRows] = await Promise.all([
@@ -164,7 +187,7 @@ export async function loadHomePlaces({
     accessibilityRows.map((accessibility) => [accessibility.content_id, accessibility])
   );
 
-  const normalizedPlaces = places.map((place): HomePlace => {
+  return places.map((place): HomePlace => {
     const detail = detailsById.get(place.contentid);
     const accessibilityRow = accessibilityById.get(place.contentid);
     return {
@@ -188,18 +211,6 @@ export async function loadHomePlaces({
       accessibility: buildAccessibility(accessibilityRow)
     };
   });
-
-  const allRankedPlaces = rankHomePlaces(normalizedPlaces, needIds, location, query);
-  const displayPlaces =
-    !query && !needIds.length && !location
-      ? rotateDailyFeaturedPlace(allRankedPlaces, new Date())
-      : allRankedPlaces;
-  const rankedPlaces = displayPlaces.slice(0, 16);
-  return {
-    places: rankedPlaces,
-    facilities: buildEssentialFacilities(allRankedPlaces),
-    source: "한국관광공사 관광·무장애 여행정보"
-  };
 }
 
 async function fetchAllTourismPlaces(): Promise<TourismPlaceRow[]> {

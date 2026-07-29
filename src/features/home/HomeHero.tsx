@@ -194,6 +194,38 @@ export function HomeFeaturedPlace({ experience }: { experience: HomeExperience }
   const place = experience.data?.places[0] ?? null;
 
   if (!place) {
+    if (experience.loadState !== "loading") {
+      return (
+        <section aria-labelledby="featured-place-title">
+          <h2
+            id="featured-place-title"
+            className="text-ink text-xl font-semibold tracking-[-0.02em] sm:text-2xl"
+          >
+            오늘 가볼 만한 곳
+          </h2>
+          <div className="border-hairline bg-surface mt-3 rounded-[1.75rem] border px-5 py-8 text-center sm:px-8">
+            <p className="text-ink font-semibold">
+              {experience.loadState === "error"
+                ? "추천 장소를 불러오지 못했어요."
+                : "조건에 맞는 추천 장소가 아직 없어요."}
+            </p>
+            <p className="text-slate mt-2 text-sm leading-6">
+              {experience.loadError ?? "검색어나 도움 조건을 바꿔서 다시 찾아보세요."}
+            </p>
+            {experience.loadState === "error" ? (
+              <button
+                type="button"
+                onClick={experience.retry}
+                className="bg-brand-700 mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold text-white"
+              >
+                다시 불러오기
+              </button>
+            ) : null}
+          </div>
+        </section>
+      );
+    }
+
     return (
       <section aria-labelledby="featured-place-title" aria-busy="true">
         <h2 id="featured-place-title" className="text-brand-800 text-sm font-semibold">

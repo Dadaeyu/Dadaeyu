@@ -38,15 +38,13 @@ function toPlaceDetail(row: DbPlace, reviews: DbPlaceReview[]): PlaceDetail {
     address: row.address ?? "",
     hours: row.hours ?? "",
     phone: row.phone ?? "",
-    reviews: reviews.map(
-      (r): Review => ({
-        id: r.id,
-        user: r.user_name,
-        rating: r.rating,
-        content: r.content,
-        date: r.review_date
-      })
-    )
+    reviews: reviews.map((r): Review => ({
+      id: r.id,
+      user: r.user_name,
+      rating: r.rating,
+      content: r.content,
+      date: r.review_date
+    }))
   };
 }
 

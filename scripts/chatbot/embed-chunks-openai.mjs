@@ -20,7 +20,10 @@ function loadEnv(filePath = ".env.local") {
     if (index === -1) continue;
 
     const key = trimmed.slice(0, index).trim();
-    const value = trimmed.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
+    const value = trimmed
+      .slice(index + 1)
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
     if (key && process.env[key] === undefined) {
       process.env[key] = value;
     }
@@ -55,21 +58,15 @@ function normalizeSupabaseRestUrl(rawUrl) {
 
   try {
     const parsed = new URL(rawUrl);
-    return rawUrl.includes("/rest/v1")
-      ? rawUrl.replace(/\/$/, "")
-      : `${parsed.origin}/rest/v1`;
+    return rawUrl.includes("/rest/v1") ? rawUrl.replace(/\/$/, "") : `${parsed.origin}/rest/v1`;
   } catch {
     return "";
   }
 }
 
 function getSupabaseConfig() {
-  const rawUrl =
-    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const key =
-    process.env.SUPABASE_SECRET_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    "";
+  const rawUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
   return {
     key: key.trim(),
@@ -111,9 +108,7 @@ async function supabaseRequest(config, path, options = {}) {
         "chatbot.chunks.embedding column is not ready. Run scripts/chatbot/sql/setup-pgvector-openai-1536.sql in Supabase SQL Editor before embedding."
       );
     }
-    throw new Error(
-      `Supabase request failed (${response.status}): ${text.slice(0, 500)}`
-    );
+    throw new Error(`Supabase request failed (${response.status}): ${text.slice(0, 500)}`);
   }
 
   if (response.status === 204) return null;
@@ -128,11 +123,9 @@ async function fetchChunks(config, limit) {
     embedding: "is.null"
   });
 
-  return supabaseRequest(
-    config,
-    `/${encodeURIComponent(config.table)}?${params.toString()}`,
-    { method: "GET" }
-  );
+  return supabaseRequest(config, `/${encodeURIComponent(config.table)}?${params.toString()}`, {
+    method: "GET"
+  });
 }
 
 async function createEmbeddings({ apiKey, dimensions, model }, inputs) {
@@ -155,9 +148,7 @@ async function createEmbeddings({ apiKey, dimensions, model }, inputs) {
   }
 
   const data = await response.json();
-  return data.data
-    .sort((a, b) => a.index - b.index)
-    .map((item) => item.embedding);
+  return data.data.sort((a, b) => a.index - b.index).map((item) => item.embedding);
 }
 
 async function updateChunkEmbedding(config, id, embedding) {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { validateNoticeFields } from "@/lib/notices/validation";
+import { isEndBeforeStart, resolveEndAfterStartChange } from "@/lib/date-range";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { AdminFormShell, AdminListShell } from "./AdminListShell";
 import { AdminSearchBar } from "./AdminSearchBar";
@@ -126,7 +127,7 @@ export function NoticesSection() {
   const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState<NoticeFormState>(EMPTY_FORM);
   const [searchInput, setSearchInput] = useState(q);
-  const [activePopupId, setActivePopupId] = useState<number | null>(null);
+  const [activePopupIds, setActivePopupIds] = useState<number[]>([]);
 
   const activeFilter = filterValue("active");
   const isEditing = mode === "edit" && editingId !== null;
@@ -179,32 +180,38 @@ export function NoticesSection() {
   }, []);
 
   useEffect(() => {
-    if (mode === "list") loadList();
+    if (mode === "list") queueMicrotask(() => void loadList());
   }, [mode, loadList]);
 
   useEffect(() => {
     if (mode !== "list") return;
     fetch("/api/notices/active")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) =>
-        setActivePopupId((data as { notice?: { id: number } | null })?.notice?.id ?? null)
-      )
-      .catch(() => setActivePopupId(null));
+      .then((data) => {
+        const notices = (data as { notices?: { id: number }[] } | null)?.notices ?? [];
+        setActivePopupIds(notices.map((n) => n.id));
+      })
+      .catch(() => setActivePopupIds([]));
   }, [mode, items]);
 
   useEffect(() => {
-    if (isEditing && editingId) loadForEdit(editingId);
-    else if (isCreating) setForm(EMPTY_FORM);
+    queueMicrotask(() => {
+      if (isEditing && editingId) void loadForEdit(editingId);
+      else if (isCreating) setForm(EMPTY_FORM);
+    });
   }, [isEditing, isCreating, editingId, loadForEdit]);
 
   useEffect(() => {
+    if (mode !== "list") return;
+    if (searchInput === q) return;
     const t = setTimeout(() => setQuery(searchInput), 300);
     return () => clearTimeout(t);
-  }, [searchInput, setQuery]);
+  }, [mode, searchInput, q, setQuery]);
 
   useEffect(() => {
-    setSearchInput(q);
-  }, [q]);
+    if (mode !== "list") return;
+    queueMicrotask(() => setSearchInput(q));
+  }, [mode, q]);
 
   const validateForm = (): string | null => {
     const payload = formToPayload(form);
@@ -282,16 +289,16 @@ export function NoticesSection() {
   };
 
   const handleStartsAtChange = (value: string) => {
-    setForm((prev) => {
-      const next = { ...prev, startsAt: value };
-      if (next.endsAt && value && new Date(next.endsAt) <= new Date(value)) next.endsAt = "";
-      return next;
-    });
+    setForm((prev) => ({
+      ...prev,
+      startsAt: value,
+      endsAt: resolveEndAfterStartChange(value, prev.endsAt, false)
+    }));
     setFormError(null);
   };
 
   const handleEndsAtChange = (value: string) => {
-    if (form.startsAt && value && new Date(value) <= new Date(form.startsAt)) {
+    if (isEndBeforeStart(form.startsAt, value, false)) {
       setFormError("종료일은 시작일보다 이후여야 합니다.");
       return;
     }
@@ -335,6 +342,9 @@ export function NoticesSection() {
               className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
               min={0}
             />
+            <p className="text-stone text-xs">
+              숫자가 클수록 먼저 노출됩니다. 여러 팝업을 동시에 활성화할 수 있습니다.
+            </p>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">시작(선택)</label>
@@ -375,8 +385,8 @@ export function NoticesSection() {
             checked={form.activateNow}
             onChange={(e) => setForm((prev) => ({ ...prev, activateNow: e.target.checked }))}
           />
-          {isEditing ? "활성 팝업으로 유지" : "저장 후 바로 활성화"} (기존 활성 팝업은 자동
-          비활성화)
+          {isEditing ? "활성 팝업으로 유지" : "저장 후 바로 활성화"} (다른 활성 팝업과 함께
+          노출됩니다)
         </label>
       </AdminFormShell>
     );
@@ -394,9 +404,12 @@ export function NoticesSection() {
       onCreateClick={goCreate}
       createLabel="새 팝업"
       headerExtra={
-        activePopupId ? (
+        activePopupIds.length > 0 ? (
           <span className="text-stone text-sm">
-            앱 노출 중: <span className="text-ink font-semibold">#{activePopupId}</span>
+            앱 노출 {activePopupIds.length}건:{" "}
+            <span className="text-ink font-semibold">
+              {activePopupIds.map((id) => `#${id}`).join(", ")}
+            </span>
           </span>
         ) : (
           <span className="text-stone text-sm">현재 앱에 노출되는 팝업 없음</span>

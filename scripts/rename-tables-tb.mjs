@@ -23,7 +23,7 @@ const sqlReplacements = [
   ["public.post_likes", "public.tb_post_likes"],
   ["public.members", "public.tb_members"],
   ["public.courses", "public.tb_courses"],
-  ["public.places", "public.tb_places"],
+  ["public.places", "public.tb_places"]
 ];
 
 const codeReplacements = [
@@ -49,7 +49,7 @@ const codeReplacements = [
   ["'user_favorites'", "'tb_user_favorites'"],
   ["'members'", "'tb_members'"],
   ["'courses'", "'tb_courses'"],
-  ["'places'", "'tb_places'"],
+  ["'places'", "'tb_places'"]
 ];
 
 function walk(dir, out = []) {
@@ -71,7 +71,7 @@ function apply(content, reps) {
 const targets = [
   ...walk(join(root, "supabase")).filter((f) => f.endsWith(".sql")),
   ...walk(join(root, "src")).filter((f) => /\.(ts|tsx)$/.test(f)),
-  ...walk(join(root, "scripts")).filter((f) => f.endsWith(".mjs")),
+  ...walk(join(root, "scripts")).filter((f) => f.endsWith(".mjs"))
 ].filter((f) => !f.endsWith("rename-tables-tb.mjs"));
 
 let changed = 0;

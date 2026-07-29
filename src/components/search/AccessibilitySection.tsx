@@ -92,10 +92,9 @@ export default function AccessibilitySection({
                           <span className="bg-brand-500 h-1.5 w-1.5 shrink-0 rounded-full" />
                           <span className="text-xs font-semibold text-gray-800">{item.label}</span>
                         </div>
-                        <p
-                          className="pl-3 text-xs leading-relaxed text-gray-600"
-                          dangerouslySetInnerHTML={{ __html: item.text }}
-                        />
+                        <p className="pl-3 text-xs leading-relaxed text-gray-600">
+                          {stripHtml(item.text)}
+                        </p>
                       </div>
                     ))}
                   </div>

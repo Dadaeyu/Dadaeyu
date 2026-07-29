@@ -4,7 +4,12 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { formatCommunityDate, renderMultilineText } from "@/lib/community/format";
+import {
+  formatCommunityDate,
+  looksLikeHtml,
+  renderMultilineText,
+  sanitizeCommunityHtml
+} from "@/lib/community/format";
 
 type Props = {
   backHref: string;
@@ -26,7 +31,9 @@ export function CommunityArticleDetail({
   content
 }: Props) {
   const router = useRouter();
-  const lines = renderMultilineText(content);
+  const isHtml = looksLikeHtml(content);
+  const lines = isHtml ? [] : renderMultilineText(content);
+  const safeHtml = isHtml ? sanitizeCommunityHtml(content) : "";
 
   return (
     <div className="space-y-6">
@@ -49,11 +56,18 @@ export function CommunityArticleDetail({
         {meta && (
           <div className="text-stone border-hairline-soft mb-5 border-b pb-4 text-sm">{meta}</div>
         )}
-        <div className="text-steel space-y-3 text-sm leading-relaxed md:text-base">
-          {lines.map((line, i) => (
-            <p key={i}>{line || "\u00A0"}</p>
-          ))}
-        </div>
+        {isHtml ? (
+          <div
+            className="prose prose-sm text-steel md:prose-base [&_a]:text-brand-600 max-w-none text-sm leading-relaxed md:text-base [&_a]:underline [&_img]:my-3 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-lg"
+            dangerouslySetInnerHTML={{ __html: safeHtml }}
+          />
+        ) : (
+          <div className="text-steel space-y-3 text-sm leading-relaxed md:text-base">
+            {lines.map((line, i) => (
+              <p key={i}>{line || "\u00A0"}</p>
+            ))}
+          </div>
+        )}
       </article>
     </div>
   );
@@ -71,7 +85,7 @@ export function CommunityNoticeDetailView({
       badge={
         notice.pinned ? (
           <Badge tone="brand" shape="tag">
-            중요 공지
+            상단 고정
           </Badge>
         ) : undefined
       }
@@ -92,6 +106,7 @@ export function CommunityEventDetailView({
     badge_label: string;
     badge_color: string;
     cover_gradient: string;
+    cover_image_url?: string | null;
     period_label: string;
   };
 }) {
@@ -101,9 +116,18 @@ export function CommunityEventDetailView({
       title={event.title}
       hero={
         <div
-          className={`flex h-40 items-center justify-center rounded-lg bg-gradient-to-br ${event.cover_gradient}`}
+          className={`relative flex h-40 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br ${event.cover_gradient}`}
         >
-          <span className="text-6xl">{event.emoji}</span>
+          {event.cover_image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={event.cover_image_url}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <span className="text-6xl">{event.emoji}</span>
+          )}
         </div>
       }
       badge={

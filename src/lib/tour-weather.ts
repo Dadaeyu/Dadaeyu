@@ -1,9 +1,5 @@
 export type TourWeatherStatus =
-  | "not_requested"
-  | "not_configured"
-  | "ready"
-  | "empty"
-  | "unavailable";
+  "not_requested" | "not_configured" | "ready" | "empty" | "unavailable";
 
 export type TourWeatherItem = {
   cityAreaId: string | null;

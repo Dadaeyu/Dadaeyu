@@ -20,17 +20,14 @@ async function tryConfirmEmail(env, userId) {
   const sql = `UPDATE auth.users SET email_confirmed_at = timezone('utc', now()) WHERE id = '${userId}'`;
 
   if (env.SUPABASE_ACCESS_TOKEN) {
-    const res = await fetch(
-      `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${env.SUPABASE_ACCESS_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query: sql }),
-      }
-    );
+    const res = await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.SUPABASE_ACCESS_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ query: sql })
+    });
     if (res.ok) {
       console.log("✓ 이메일 인증 완료 (Management API)");
       return;
@@ -58,22 +55,24 @@ function loadEnv() {
 
 async function main() {
   const env = loadEnv();
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const secretKey = env.SUPABASE_SECRET_KEY;
+  const url = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+  const secretKey = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !secretKey) {
-    console.error("❌ .env.local에 NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY가 필요합니다.");
+    console.error(
+      "❌ .env.local에 Supabase URL과 SUPABASE_SECRET_KEY 또는 SUPABASE_SERVICE_ROLE_KEY가 필요합니다."
+    );
     process.exit(1);
   }
 
   const supabase = createClient(url, secretKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
+    auth: { autoRefreshToken: false, persistSession: false }
   });
 
   // 기존 계정 확인
   const { data: listData, error: listError } = await supabase.auth.admin.listUsers({
     page: 1,
-    perPage: 1000,
+    perPage: 1000
   });
 
   if (listError) {
@@ -82,9 +81,7 @@ async function main() {
   }
 
   const emailLower = ADMIN_EMAIL.toLowerCase();
-  const existing = listData.users.find(
-    (u) => u.email?.toLowerCase() === emailLower
-  );
+  const existing = listData.users.find((u) => u.email?.toLowerCase() === emailLower);
 
   let userId;
 
@@ -94,7 +91,7 @@ async function main() {
 
     const { error: passwordError } = await supabase.auth.admin.updateUserById(userId, {
       password: ADMIN_PASSWORD,
-      user_metadata: { nickname: ADMIN_NICKNAME },
+      user_metadata: { nickname: ADMIN_NICKNAME }
     });
 
     if (passwordError) {
@@ -108,7 +105,7 @@ async function main() {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       email_confirm: false,
-      user_metadata: { nickname: ADMIN_NICKNAME },
+      user_metadata: { nickname: ADMIN_NICKNAME }
     });
 
     if (createError || !created.user) {
@@ -133,7 +130,7 @@ async function main() {
       nickname: ADMIN_NICKNAME,
       role: "admin",
       status: "active",
-      onboarding_completed: true,
+      onboarding_completed: true
     });
 
     if (insertError) {
@@ -150,7 +147,7 @@ async function main() {
         role: "admin",
         status: "active",
         onboarding_completed: true,
-        nickname: member.nickname || ADMIN_NICKNAME,
+        nickname: member.nickname || ADMIN_NICKNAME
       })
       .eq("id", userId);
 

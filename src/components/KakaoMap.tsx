@@ -2,7 +2,7 @@
 
 // 카카오맵 SDK 래퍼: 마커/툴팁/경로선/내 위치 표시를 관리하는 지도 컴포넌트.
 import { useEffect, useRef, useState } from "react";
-import Script from "next/script";
+import { loadKakaoMap } from "@/lib/kakao/loadKakaoMap";
 
 export interface KakaoPlaceResult {
   id: string;
@@ -105,6 +105,50 @@ function createMyLocationEl(): HTMLDivElement {
   return el;
 }
 
+function createTooltipEl(tooltip: TooltipInfo, onClose: (() => void) | undefined): HTMLDivElement {
+  const container = document.createElement("div");
+  const card = document.createElement("div");
+  card.style.cssText =
+    "position:relative;background:white;border-radius:12px;padding:10px 32px 10px 14px;box-shadow:0 4px 20px rgba(0,0,0,0.18);border:1px solid #e5e7eb;min-width:180px;max-width:240px;cursor:default;";
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.textContent = "✕";
+  closeButton.setAttribute("aria-label", `${tooltip.name} 정보 닫기`);
+  closeButton.style.cssText =
+    "position:absolute;top:7px;right:9px;background:none;border:none;cursor:pointer;color:#9ca3af;font-size:13px;line-height:1;padding:2px 4px;";
+  closeButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onClose?.();
+  });
+
+  const name = document.createElement("p");
+  name.textContent = tooltip.name;
+  name.style.cssText =
+    "font-weight:700;font-size:13px;color:#111827;margin:0 0 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+
+  const address = document.createElement("p");
+  address.textContent = tooltip.address;
+  address.style.cssText = "font-size:11px;color:#6b7280;margin:0 0 2px 0;line-height:1.4;";
+
+  card.append(closeButton, name, address);
+
+  if (tooltip.phone) {
+    const phone = document.createElement("p");
+    phone.textContent = tooltip.phone;
+    phone.style.cssText = "font-size:11px;color:#0891b2;margin:0;";
+    card.append(phone);
+  }
+
+  const pointer = document.createElement("div");
+  pointer.style.cssText =
+    "position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid white;";
+  card.append(pointer);
+  container.append(card);
+  container.addEventListener("click", (event) => event.stopPropagation());
+  return container;
+}
+
 // ── 컴포넌트 ───────────────────────────────────────────────
 export default function KakaoMap({
   markers = [],
@@ -119,9 +163,9 @@ export default function KakaoMap({
   myLocation = null,
   focusMyLocationTrigger = 0
 }: Props) {
-  const mapKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ?? process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
+  const onDeselectRef = useRef(onDeselect);
   const overlaysRef = useRef<kakao.maps.CustomOverlay[]>([]);
   const markerElemsRef = useRef(new Map<string, HTMLDivElement>());
   const polylineRef = useRef<kakao.maps.Polyline | null>(null);
@@ -130,19 +174,35 @@ export default function KakaoMap({
   const [mapInitCount, setMapInitCount] = useState(0);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
 
-  const initMap = () => {
-    if (!containerRef.current || !window.kakao?.maps) return;
-    const K = window.kakao.maps;
-    const map = new K.Map(containerRef.current, {
-      center: new K.LatLng(center.lat, center.lng),
-      level
-    });
-    mapRef.current = map;
-    map.addControl(new K.ZoomControl(), K.ControlPosition.TOPRIGHT);
+  useEffect(() => {
+    onDeselectRef.current = onDeselect;
+  }, [onDeselect]);
 
-    K.event.addListener(map, "click", () => onDeselect?.());
-    setMapInitCount((c) => c + 1);
-  };
+  useEffect(() => {
+    let cancelled = false;
+
+    loadKakaoMap()
+      .then((kakaoSdk) => {
+        if (cancelled || !containerRef.current || mapRef.current) return;
+        setMapLoadFailed(false);
+        const K = kakaoSdk.maps;
+        const map = new K.Map(containerRef.current, {
+          center: new K.LatLng(center.lat, center.lng),
+          level
+        });
+        mapRef.current = map;
+        map.addControl(new K.ZoomControl(), K.ControlPosition.TOPRIGHT);
+        K.event.addListener(map, "click", () => onDeselectRef.current?.());
+        setMapInitCount((count) => count + 1);
+      })
+      .catch(() => {
+        if (!cancelled) setMapLoadFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [center.lat, center.lng, level]);
 
   // 마커 동기화
   useEffect(() => {
@@ -197,21 +257,7 @@ export default function KakaoMap({
 
     if (!tooltip) return;
 
-    const el = document.createElement("div");
-    el.innerHTML = `
-      <div style="position:relative;background:white;border-radius:12px;padding:10px 32px 10px 14px;box-shadow:0 4px 20px rgba(0,0,0,0.18);border:1px solid #e5e7eb;min-width:180px;max-width:240px;cursor:default;">
-        <button data-close style="position:absolute;top:7px;right:9px;background:none;border:none;cursor:pointer;color:#9ca3af;font-size:13px;line-height:1;padding:2px 4px;">✕</button>
-        <p style="font-weight:700;font-size:13px;color:#111827;margin:0 0 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${tooltip.name}</p>
-        <p style="font-size:11px;color:#6b7280;margin:0 0 2px 0;line-height:1.4;">${tooltip.address}</p>
-        ${tooltip.phone ? `<p style="font-size:11px;color:#0891b2;margin:0;">${tooltip.phone}</p>` : ""}
-        <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid white;"></div>
-      </div>`;
-
-    el.querySelector("[data-close]")?.addEventListener("click", (e) => {
-      e.stopPropagation();
-      onCloseTooltip?.();
-    });
-    el.addEventListener("click", (e) => e.stopPropagation());
+    const el = createTooltipEl(tooltip, onCloseTooltip);
 
     const overlay = new K.CustomOverlay({
       position: new K.LatLng(tooltip.lat, tooltip.lng),
@@ -258,7 +304,7 @@ export default function KakaoMap({
       line.setMap(mapRef.current);
       polylineRef.current = line;
     }
-  }, [navTarget, myLocation]);
+  }, [mapInitCount, myLocation, navTarget]);
 
   // 내 위치 마커 — myLocation이 바뀔 때마다 다시 그리고, null이면 제거
   useEffect(() => {
@@ -287,21 +333,12 @@ export default function KakaoMap({
     const K = window.kakao.maps;
     mapRef.current.panTo(new K.LatLng(myLocation.lat, myLocation.lng));
     mapRef.current.setLevel(4, { animate: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusMyLocationTrigger]);
+  }, [focusMyLocationTrigger, mapInitCount, myLocation]);
 
   return (
     <>
-      {mapKey ? (
-        <Script
-          src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${mapKey}&libraries=services&autoload=false`}
-          strategy="afterInteractive"
-          onReady={() => window.kakao.maps.load(initMap)}
-          onError={() => setMapLoadFailed(true)}
-        />
-      ) : null}
       <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
-      {!mapKey || mapLoadFailed ? (
+      {mapLoadFailed ? (
         <div className="bg-surface text-slate absolute inset-0 grid place-items-center px-6 text-center">
           <div className="max-w-sm">
             <p className="text-ink text-lg font-semibold">지도를 불러올 수 없어요</p>

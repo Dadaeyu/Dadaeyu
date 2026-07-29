@@ -43,7 +43,10 @@ create table if not exists public.tb_community_events (
   badge_label text not null default '',
   badge_color text not null default 'bg-brand-100 text-brand-700',
   cover_gradient text not null default 'from-brand-400 to-brand-500',
+  cover_image_url text,
   period_label text not null default '',
+  period_start date,
+  period_end date,
   is_visible boolean not null default true,
   sort_order int not null default 0,
   created_at timestamptz not null default now(),
@@ -107,7 +110,7 @@ select * from (values
   ),
   (
     '무장애 정보 제보 포인트 지급 정책 변경 안내',
-    '정보 제보 포인트 지급 기준이 아래와 같이 변경됩니다.' || E'\n\n' || '· 반영 완료 시 100P 지급' || E'\n' || '· 중복 제보는 1회만 인정' || E'\n' || '· 허위 제보는 제재 대상',
+    '정보 제보 포인트 지급 기준이 아래와 같이 변경됩니다.' || E'\n\n' || '· 반영 완료 시 50P 지급' || E'\n' || '· 중복 제보는 1회만 인정' || E'\n' || '· 허위 제보는 제재 대상',
     true,
     '2026-05-25T00:00:00+09'::timestamptz,
     1
@@ -160,7 +163,7 @@ insert into public.tb_community_faq (question, answer, sort_order)
 select * from (values
   (
     '무장애 여행 정보는 어떻게 제보하나요?',
-    '장소 상세 페이지 하단의 「정보 제보」 버튼을 눌러 잘못된 정보나 추가 정보를 작성하시면 됩니다. 검토 후 반영되면 포인트가 지급됩니다.',
+    '장소 상세 페이지 하단의 「정보 제보」 버튼을 눌러 잘못된 정보나 추가 정보를 작성하시면 됩니다. 검토 후 반영되면 50P가 지급됩니다.',
     0
   ),
   (

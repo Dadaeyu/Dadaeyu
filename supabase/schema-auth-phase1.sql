@@ -20,7 +20,7 @@ create table if not exists public.tb_members (
     check (gender in ('male', 'female', 'undisclosed')),
   age_group text check (age_group in ('10s', '20s', '30s', '40s', '50s_plus')),
   role text not null default 'user' check (role in ('user', 'admin')),
-  status text not null default 'active' check (status in ('active', 'suspended')),
+  status text not null default 'active' check (status in ('active', 'suspended', 'withdrawn')),
   community_points int not null default 0 check (community_points >= 0),
   community_level int not null default 1,
   onboarding_completed boolean not null default false,

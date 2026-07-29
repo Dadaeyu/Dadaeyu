@@ -43,9 +43,9 @@ export default async function OpenApiServerTestPage() {
   let data: TourResponse | null = null;
   let errorMessage = "";
 
-  if (!process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY) {
+  if (!process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY && !process.env.TOUR_API_SERVICE_KEY) {
     errorMessage =
-      ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY 설정되지 않았습니다. 서버를 재시작하세요.";
+      ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY 또는 TOUR_API_SERVICE_KEY를 설정하고 서버를 재시작하세요.";
   } else {
     try {
       data = await brfrTourInfoApi.areaBasedList<TourResponse>({

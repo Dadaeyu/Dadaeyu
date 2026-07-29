@@ -12,32 +12,26 @@ export function useNicknameAvailability(
   userId: string | undefined,
   initialNickname?: string
 ) {
-  const [status, setStatus] = useState<NicknameAvailabilityStatus>("idle");
+  const trimmed = normalizeNickname(nickname);
+  const requestKey = `${trimmed}:${userId ?? ""}:${initialNickname ?? ""}`;
+  const [result, setResult] = useState<{
+    key: string;
+    status: "available" | "taken" | "idle";
+  } | null>(null);
 
   useEffect(() => {
-    const trimmed = normalizeNickname(nickname);
-
-    if (trimmed.length < NICKNAME_MIN_LENGTH) {
-      setStatus(trimmed.length === 0 ? "idle" : "invalid");
-      return;
-    }
-
-    if (initialNickname && trimmed === normalizeNickname(initialNickname)) {
-      setStatus("available");
-      return;
-    }
-
-    setStatus("checking");
+    if (trimmed.length < NICKNAME_MIN_LENGTH) return;
+    if (initialNickname && trimmed === normalizeNickname(initialNickname)) return;
     let cancelled = false;
 
     const timer = setTimeout(async () => {
       try {
         const available = await isNicknameAvailable(trimmed, userId);
         if (!cancelled) {
-          setStatus(available ? "available" : "taken");
+          setResult({ key: requestKey, status: available ? "available" : "taken" });
         }
       } catch {
-        if (!cancelled) setStatus("idle");
+        if (!cancelled) setResult({ key: requestKey, status: "idle" });
       }
     }, DEBOUNCE_MS);
 
@@ -45,7 +39,18 @@ export function useNicknameAvailability(
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [nickname, userId, initialNickname]);
+  }, [initialNickname, requestKey, trimmed, userId]);
+
+  const status: NicknameAvailabilityStatus =
+    trimmed.length < NICKNAME_MIN_LENGTH
+      ? trimmed.length === 0
+        ? "idle"
+        : "invalid"
+      : initialNickname && trimmed === normalizeNickname(initialNickname)
+        ? "available"
+        : result?.key === requestKey
+          ? result.status
+          : "checking";
 
   const canSubmit = status === "available";
 

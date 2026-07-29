@@ -50,7 +50,7 @@ export function ReportsSection() {
   }, []);
 
   useEffect(() => {
-    loadReports();
+    queueMicrotask(() => void loadReports());
   }, [loadReports]);
 
   const updateStatus = async (id: number, status: ReportStatus) => {
@@ -143,7 +143,7 @@ export function ReportsSection() {
                     onChange={(e) => setNoteEdits((prev) => ({ ...prev, [r.id]: e.target.value }))}
                     placeholder="관리자 메모 (상태 변경 시 저장)"
                     rows={2}
-                    className="border-hairline mt-3 w-full rounded-lg border p-2 text-xs"
+                    className="border-hairline bg-background text-ink placeholder:text-stone mt-3 w-full rounded-lg border p-2 text-xs"
                   />
                 </div>
 

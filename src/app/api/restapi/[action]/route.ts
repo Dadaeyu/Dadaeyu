@@ -4,9 +4,9 @@ import { brfrTourInfoApi } from "@/utils/api/external";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, { params }: { params: Promise<{ action: string }> }) {
-  if (!process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY) {
+  if (!process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY && !process.env.TOUR_API_SERVICE_KEY) {
     return NextResponse.json(
-      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY가 설정되지 않았습니다." },
+      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY 또는 TOUR_API_SERVICE_KEY가 필요합니다." },
       { status: 500 }
     );
   }

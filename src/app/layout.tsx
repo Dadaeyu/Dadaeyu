@@ -1,22 +1,9 @@
 import type { Metadata } from "next";
-import { Inter, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import RootShell from "@/components/RootShell";
 import { fetchPlacesFromDb } from "@/lib/supabase/places";
 import { A11Y_STORAGE_KEY } from "@/lib/accessibility";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap"
-});
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
-  display: "swap"
-});
 
 export const metadata: Metadata = {
   title: "다대유 - 대전 무장애 여행",
@@ -46,7 +33,7 @@ export default async function RootLayout({
   const dbData = await fetchPlacesFromDb();
 
   return (
-    <html lang="ko" className={`${inter.variable} ${geistMono.variable}`} suppressHydrationWarning>
+    <html lang="ko" suppressHydrationWarning>
       <body>
         <Script
           id="a11y-init"

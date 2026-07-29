@@ -33,7 +33,6 @@ export default function ThemePreferencePicker({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     fetchThemePreferenceOptions()
       .then((themes) => {
         if (!cancelled) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { brfrTourInfoApi, korTourInfoApi } from "@/utils/api/external";
+import { requireAdmin } from "@/lib/supabase/require-admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -662,13 +663,17 @@ type SyncTarget = keyof typeof SYNC_FNS;
 const ALL_ORDER: SyncTarget[] = ["place", "detail", "barrierfree"];
 
 export async function POST(request: Request) {
-  const serviceKey = process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY;
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const serviceKey =
+    process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? process.env.TOUR_API_SERVICE_KEY;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
 
   if (!serviceKey) {
     return NextResponse.json(
-      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY가 설정되지 않았습니다." },
+      { error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY 또는 TOUR_API_SERVICE_KEY가 필요합니다." },
       { status: 500 }
     );
   }

@@ -1,4 +1,8 @@
 import { createTextToSpeechProvider, TextToSpeechProviderError } from "@/lib/tts/server";
+import {
+  isAllowedTextToSpeechOrigin,
+  resolveTextToSpeechClientKey
+} from "@/lib/tts/server/client-identity";
 import { enforceTextToSpeechRateLimit } from "@/lib/tts/server/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +45,10 @@ export function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!isAllowedTextToSpeechOrigin(request)) {
+    return Response.json({ message: "허용되지 않은 요청이에요." }, { status: 403 });
+  }
+
   let body: unknown;
 
   try {
@@ -72,7 +80,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const rateLimit = enforceTextToSpeechRateLimit(request);
+    const clientKey = await resolveTextToSpeechClientKey(request);
+    const rateLimit = enforceTextToSpeechRateLimit(clientKey);
     if (!rateLimit.allowed) {
       return Response.json(
         { message: "음성 요청이 많아요. 잠시 뒤 다시 시도해 주세요." },
@@ -84,7 +93,7 @@ export async function POST(request: Request) {
     }
 
     const provider = createTextToSpeechProvider();
-    const audio = await provider.synthesize({ text, voice }, { signal: request.signal });
+    const audio = await provider.synthesize({ text, voice }, { clientKey, signal: request.signal });
 
     return new Response(audio.stream, {
       headers: {
