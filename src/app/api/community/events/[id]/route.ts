@@ -17,7 +17,7 @@ export async function GET(_request: Request, { params }: Params) {
     const { data, error } = await supabase
       .from("tb_community_events")
       .select(
-        "id, title, summary, content, emoji, badge_label, badge_color, cover_gradient, period_label"
+        "id, title, summary, content, emoji, badge_label, badge_color, cover_gradient, cover_image_url, period_label"
       )
       .eq("id", eventId)
       .eq("is_visible", true)

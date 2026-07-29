@@ -219,7 +219,7 @@ export default function Chatbot({ onClose }: Props) {
           placeholder="메시지를 입력하세요..."
           aria-label="질문 입력"
           disabled={isLoading}
-          className="border-hairline bg-surface-soft placeholder:text-stone focus:border-brand-400 min-w-0 flex-1 rounded-lg border px-4 py-3 text-sm transition-colors outline-none focus:bg-white disabled:opacity-60"
+          className="border-hairline bg-background text-ink placeholder:text-stone focus:border-brand-400 focus:bg-surface min-w-0 flex-1 rounded-lg border px-4 py-3 text-sm transition-colors outline-none disabled:opacity-60"
         />
         <button
           type="submit"

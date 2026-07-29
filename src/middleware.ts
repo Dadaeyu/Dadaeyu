@@ -78,18 +78,22 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (isProtectedPath(pathname) && user) {
-    const { data: member } = await supabase
+  if (user && !pathname.startsWith("/api/") && !pathname.startsWith("/auth/")) {
+    const { data: memberStatus } = await supabase
       .from("tb_members")
       .select("status")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (member?.status === "suspended") {
+    if (memberStatus?.status === "suspended" || memberStatus?.status === "withdrawn") {
       await supabase.auth.signOut();
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
-      loginUrl.searchParams.set("error", "account_suspended");
+      loginUrl.search = "";
+      loginUrl.searchParams.set(
+        "error",
+        memberStatus.status === "withdrawn" ? "account_withdrawn" : "account_suspended"
+      );
       return NextResponse.redirect(loginUrl);
     }
   }

@@ -84,9 +84,7 @@ export default function Map() {
   const displayPlaces = searchPlaces.length > 0 ? searchPlaces : topRatedPlaces;
   // 상위 평점 장소는 목록에 5개 다 보여주되, 지도 마커는 클릭해서 선택하기 전까진 띄우지 않는다.
   const markerPlaces =
-    searchPlaces.length > 0
-      ? searchPlaces
-      : topRatedPlaces.filter((p) => p.id === searchDetailId);
+    searchPlaces.length > 0 ? searchPlaces : topRatedPlaces.filter((p) => p.id === searchDetailId);
   const detailPlace = PLACES.find((p) => p.id === detailId);
 
   return (
@@ -128,7 +126,7 @@ export default function Map() {
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch(keyword)}
-                  className="focus:ring-brand-500 w-full rounded-lg border border-gray-200 py-2 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
+                  className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full rounded-lg border py-2 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
                 />
               </div>
             </div>
@@ -167,15 +165,15 @@ export default function Map() {
         <div
           className={`${mapOnly ? "" : "md:hidden"} absolute top-3 right-3 left-3 z-20 flex gap-2`}
         >
-          <div className="relative flex-1 rounded-xl border border-gray-100 bg-white shadow-lg">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <div className="border-hairline bg-background relative flex-1 rounded-xl border shadow-lg">
+            <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
             <input
               type="text"
               placeholder={isSearching ? "검색 중..." : "장소 검색 (Enter)"}
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch(keyword)}
-              className="w-full rounded-xl bg-transparent py-2.5 pr-4 pl-9 text-sm focus:outline-none"
+              className="text-ink placeholder:text-stone w-full rounded-xl bg-transparent py-2.5 pr-4 pl-9 text-sm focus:outline-none"
             />
           </div>
           {!mapOnly && (

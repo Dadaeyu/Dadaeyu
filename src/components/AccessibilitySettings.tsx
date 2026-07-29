@@ -12,7 +12,7 @@ const settingsConfig = [
   {
     key: "highContrast" as const,
     label: "고대비",
-    description: "글자·테두리 대비 살짝 강화",
+    description: "글자·테두리·면 구분을 더 또렷하게",
     toggle: "toggleHighContrast" as const
   },
   {

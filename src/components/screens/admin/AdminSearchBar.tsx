@@ -16,7 +16,7 @@ export function AdminSearchBar({ value, onChange, placeholder = "검색" }: Admi
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="border-hairline focus:ring-navy-400 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
+        className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-navy-400 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
       />
     </div>
   );

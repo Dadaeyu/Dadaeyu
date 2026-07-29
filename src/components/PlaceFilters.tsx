@@ -3,6 +3,7 @@
 // 장소 필터(접근성/인원수/테마/위치/일정/별점/즐겨찾기) 상태 훅과 필터 UI 필드 모음.
 import { useState } from "react";
 import { ChevronDown, Plus, Minus, Star, Heart } from "lucide-react";
+import { resolveEndAfterStartChange } from "@/lib/date-range";
 
 export const THEMES = ["빵지순례", "먹거리", "과학", "자연힐링", "문화예술", "역사근대", "축제"];
 export const AGE_GROUPS = ["영유아", "어린이", "청소년", "성인", "고령자"];
@@ -196,15 +197,25 @@ export function FilterFields({
           <input
             type="date"
             value={filters.dateFrom}
-            onChange={(e) => set("dateFrom", e.target.value)}
+            max={filters.dateTo || undefined}
+            onChange={(e) => {
+              const dateFrom = e.target.value;
+              set("dateFrom", dateFrom);
+              const nextTo = resolveEndAfterStartChange(dateFrom, filters.dateTo, true);
+              if (nextTo !== filters.dateTo) set("dateTo", nextTo);
+            }}
             className={`border-hairline flex-1 rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 min-w-0 focus:ring-2 focus:outline-none`}
           />
           <span className="text-stone shrink-0 text-xs">~</span>
           <input
             type="date"
             value={filters.dateTo}
-            min={filters.dateFrom}
-            onChange={(e) => set("dateTo", e.target.value)}
+            min={filters.dateFrom || undefined}
+            onChange={(e) => {
+              const dateTo = e.target.value;
+              if (filters.dateFrom && dateTo && dateTo < filters.dateFrom) return;
+              set("dateTo", dateTo);
+            }}
             className={`border-hairline flex-1 rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 min-w-0 focus:ring-2 focus:outline-none`}
           />
         </div>

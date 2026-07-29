@@ -9,6 +9,7 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { AdminFormShell, AdminListShell } from "./AdminListShell";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { useAdminListMode } from "./useAdminListMode";
+import { RichTextEditor } from "@/components/admin/RichTextEditor";
 
 type CommunityNotice = {
   id: number;
@@ -92,6 +93,8 @@ export function CommunityNoticesSection() {
   const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [searchInput, setSearchInput] = useState(q);
+  /** 수정 모드에서 TipTap이 API 로드 완료 후에만 마운트되도록 */
+  const [hydratedEditId, setHydratedEditId] = useState<number | null>(null);
 
   const visibleFilter = filterValue("visible");
   const pinnedFilter = filterValue("pinned");
@@ -128,6 +131,7 @@ export function CommunityNoticesSection() {
   const loadForEdit = useCallback(async (id: number) => {
     setLoading(true);
     setError(null);
+    setHydratedEditId(null);
     try {
       const res = await fetch(`/api/admin/community-notices?id=${id}`);
       const json = (await res.json().catch(() => ({}))) as {
@@ -138,8 +142,10 @@ export function CommunityNoticesSection() {
       const notice = json.items?.[0];
       if (!notice) throw new Error("공지를 찾을 수 없습니다.");
       setForm(noticeToForm(notice));
+      setHydratedEditId(id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "로드 실패");
+      setHydratedEditId(null);
     } finally {
       setLoading(false);
     }
@@ -150,18 +156,28 @@ export function CommunityNoticesSection() {
   }, [mode, loadList]);
 
   useEffect(() => {
-    if (isEditing && editingId) loadForEdit(editingId);
-    else if (isCreating) setForm(EMPTY_FORM);
+    if (isEditing && editingId) {
+      setForm(EMPTY_FORM);
+      void loadForEdit(editingId);
+    } else if (isCreating) {
+      setForm(EMPTY_FORM);
+      setHydratedEditId(null);
+    } else {
+      setHydratedEditId(null);
+    }
   }, [isEditing, isCreating, editingId, loadForEdit]);
 
   useEffect(() => {
+    if (mode !== "list") return;
+    if (searchInput === q) return;
     const t = setTimeout(() => setQuery(searchInput), 300);
     return () => clearTimeout(t);
-  }, [searchInput, setQuery]);
+  }, [mode, searchInput, q, setQuery]);
 
   useEffect(() => {
+    if (mode !== "list") return;
     setSearchInput(q);
-  }, [q]);
+  }, [mode, q]);
 
   const submit = async () => {
     const validationError = validateTitleContent(form.title, form.content);
@@ -243,23 +259,34 @@ export function CommunityNoticesSection() {
           value={form.title}
           onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
           placeholder="제목"
-          className="border-hairline focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+          className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
         />
-        <textarea
-          value={form.content}
-          onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-          placeholder="상세 내용"
-          rows={8}
-          className="border-hairline focus:ring-navy-400 w-full resize-y rounded-lg border px-3 py-2 text-sm leading-relaxed focus:ring-2 focus:outline-none"
-        />
+        {isCreating || (isEditing && hydratedEditId === editingId) ? (
+          <RichTextEditor
+            key={editingId ?? "new-notice"}
+            value={form.content}
+            onChange={(html) => setForm((f) => ({ ...f, content: html }))}
+            uploadKind="notice"
+            disabled={saving || loading}
+          />
+        ) : (
+          <div className="border-hairline text-stone rounded-lg border px-3 py-10 text-center text-sm">
+            본문 불러오는 중…
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
-          <label className="text-steel flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.pinned}
-              onChange={(e) => setForm((f) => ({ ...f, pinned: e.target.checked }))}
-            />
-            중요 공지
+          <label className="text-steel flex flex-col gap-1 text-sm">
+            <span className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.pinned}
+                onChange={(e) => setForm((f) => ({ ...f, pinned: e.target.checked }))}
+              />
+              상단 고정
+            </span>
+            <span className="text-stone text-xs">
+              선택 시 커뮤니티 공지 목록 맨 위에 핀으로 표시됩니다.
+            </span>
           </label>
           <label className="text-steel flex items-center gap-2 text-sm">
             <input
@@ -363,7 +390,7 @@ export function CommunityNoticesSection() {
                   <td className="text-stone px-4 py-3">#{notice.id}</td>
                   <td className="text-ink px-4 py-3 font-semibold">{notice.title}</td>
                   <td className="px-4 py-3">
-                    {notice.pinned ? <Badge tone="brand">중요</Badge> : "—"}
+                    {notice.pinned ? <Badge tone="brand">고정</Badge> : "—"}
                   </td>
                   <td className="px-4 py-3">
                     {notice.is_visible ? (

@@ -18,7 +18,7 @@ import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import type { TourismDetail } from "@/hooks/usePlaceSearch";
 import AccessibilitySection from "./AccessibilitySection";
 import { useAuth } from "@/context/AuthContext";
-import { isPlaceLiked, togglePlaceLike } from "@/lib/supabase/placeLikes";
+import { isPlaceLiked } from "@/lib/supabase/placeLikes";
 
 // ── 임시 하드코딩 템플릿 (태그 플레이스홀더) ───────────────
 const PLACEHOLDER_DETAIL = PLACE_DETAILS[1];
@@ -153,7 +153,17 @@ export default function TourismDetailPanel({
     const next = !favorited;
     setFavorited(next);
     try {
-      await togglePlaceLike(user.id, placeId);
+      const res = await fetch("/api/places/favorite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ place_id: placeId })
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        favorited?: boolean;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error ?? "즐겨찾기 실패");
+      if (typeof json.favorited === "boolean") setFavorited(json.favorited);
       onLikeChange?.();
     } catch {
       setFavorited(!next);
@@ -324,7 +334,9 @@ export default function TourismDetailPanel({
                     className="block w-full rounded-xl border border-gray-100 p-3 text-left transition-colors hover:bg-gray-50"
                   >
                     <div className="mb-1.5 flex items-center justify-between gap-2">
-                      <span className="truncate text-xs font-semibold text-gray-800">{r.title}</span>
+                      <span className="truncate text-xs font-semibold text-gray-800">
+                        {r.title}
+                      </span>
                       {r.rating != null && (
                         <div className="flex shrink-0 items-center gap-0.5">
                           {Array.from({ length: 5 }).map((_, i) => (

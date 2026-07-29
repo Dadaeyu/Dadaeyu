@@ -16,16 +16,6 @@ type NoticePayload = {
   priority?: number;
 };
 
-async function deactivateOtherNotices(
-  supabase: ReturnType<typeof createAdminClient>,
-  keepId?: number
-) {
-  let q = supabase.from("tb_notices").update({ is_active: false }).eq("is_active", true);
-  if (keepId != null) q = q.neq("id", keepId);
-  const { error } = await q;
-  if (error) throw error;
-}
-
 function normalizeOptionalDate(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
@@ -118,10 +108,6 @@ export async function POST(request: Request) {
   try {
     const supabase = createAdminClient();
 
-    if (is_active) {
-      await deactivateOtherNotices(supabase);
-    }
-
     const { data, error } = await supabase
       .from("tb_notices")
       .insert({
@@ -205,10 +191,6 @@ export async function PATCH(request: Request) {
     }
     if (updates.content !== undefined && !merged.content) {
       return NextResponse.json({ error: "내용을 입력해 주세요." }, { status: 400 });
-    }
-
-    if (updates.is_active === true) {
-      await deactivateOtherNotices(supabase, id);
     }
 
     const { data, error } = await supabase

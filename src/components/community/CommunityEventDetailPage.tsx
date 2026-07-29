@@ -14,6 +14,7 @@ export default function CommunityEventDetailPage({ id }: { id: string }) {
     badge_label: string;
     badge_color: string;
     cover_gradient: string;
+    cover_image_url?: string | null;
     period_label: string;
   } | null>(null);
 
@@ -33,6 +34,7 @@ export default function CommunityEventDetailPage({ id }: { id: string }) {
             badge_label: string;
             badge_color: string;
             cover_gradient: string;
+            cover_image_url?: string | null;
             period_label: string;
           };
           error?: string;

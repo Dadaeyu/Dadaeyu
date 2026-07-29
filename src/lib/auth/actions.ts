@@ -17,6 +17,7 @@ export interface SignUpProfile {
   nickname: string;
   phone: string;
   theme_preferences?: string[];
+  accessibility_needs?: string[];
 }
 
 export async function signInWithEmail(email: string, password: string) {
@@ -59,6 +60,9 @@ export async function signUpWithEmail(
         phone: profile.phone,
         ...(profile.theme_preferences?.length
           ? { theme_preferences: profile.theme_preferences }
+          : {}),
+        ...(profile.accessibility_needs?.length
+          ? { accessibility_needs: profile.accessibility_needs }
           : {})
       },
       emailRedirectTo: redirectTo.toString()

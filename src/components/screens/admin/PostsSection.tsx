@@ -92,13 +92,16 @@ export function PostsSection() {
   }, [isViewing, editingId, loadForView]);
 
   useEffect(() => {
+    if (mode !== "list") return;
+    if (searchInput === q) return;
     const t = setTimeout(() => setQuery(searchInput), 300);
     return () => clearTimeout(t);
-  }, [searchInput, setQuery]);
+  }, [mode, searchInput, q, setQuery]);
 
   useEffect(() => {
+    if (mode !== "list") return;
     setSearchInput(q);
-  }, [q]);
+  }, [mode, q]);
 
   const deletePost = async (id: number) => {
     if (!confirm("이 게시물을 삭제할까요? 되돌릴 수 없습니다.")) return;

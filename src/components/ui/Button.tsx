@@ -17,7 +17,8 @@ const buttonVariants = cva(
         accent: "bg-brand-500 text-primary hover:bg-brand-600 active:bg-brand-600",
         // 다크 밴드 위 화이트 필
         onDark: "bg-white text-primary hover:bg-white/90",
-        destructive: "bg-destructive text-white hover:bg-destructive/90",
+        // brand-error — 다크모드 CSS --destructive 는 배경에 묻혀 고정 레드 사용
+        destructive: "bg-red-500 text-white hover:bg-red-600 active:bg-red-600",
         // 아웃라인 필
         outline: "border border-hairline bg-background text-foreground hover:bg-surface",
         secondary: "border border-hairline bg-background text-foreground hover:bg-surface",

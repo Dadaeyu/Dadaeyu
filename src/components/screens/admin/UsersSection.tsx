@@ -5,7 +5,8 @@ import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { COMMUNITY_LEVEL_LABELS, type UserRole, type UserStatus } from "@/lib/supabase/types";
+import { type UserRole, type UserStatus } from "@/lib/supabase/types";
+import { CommunityLevelBadge } from "@/components/community/CommunityLevelBadge";
 import { formatDate } from "./helpers";
 
 type AdminUser = {
@@ -138,7 +139,7 @@ export function UsersSection() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="닉네임 또는 이메일 검색"
-            className="border-hairline focus:ring-navy-400 w-full rounded-lg border bg-white px-4 py-2.5 pr-4 pl-9 text-sm text-[#0a0a0a] focus:ring-2 focus:outline-none"
+            className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-navy-400 w-full rounded-lg border px-4 py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
           />
         </div>
         <div className="flex shrink-0 gap-2">
@@ -209,9 +210,9 @@ export function UsersSection() {
                       {formatDate(u.created_at)}
                     </td>
                     <td className="px-4 py-3.5 text-center align-middle">
-                      <span className="bg-surface text-steel inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap">
-                        {COMMUNITY_LEVEL_LABELS[u.community_level] ?? `Lv.${u.community_level}`}
-                      </span>
+                      <div className="flex justify-center">
+                        <CommunityLevelBadge level={u.community_level} size="sm" />
+                      </div>
                     </td>
                     <td className="px-4 py-3.5 text-center align-middle">
                       <Badge tone={u.role === "admin" ? "brand" : "neutral"}>
@@ -219,48 +220,66 @@ export function UsersSection() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3.5 text-center align-middle">
-                      <Badge tone={u.status === "active" ? "brand" : "error"}>
-                        {u.status === "active" ? "정상" : "정지"}
+                      <Badge
+                        tone={
+                          u.status === "active"
+                            ? "brand"
+                            : u.status === "withdrawn"
+                              ? "neutral"
+                              : "error"
+                        }
+                      >
+                        {u.status === "active"
+                          ? "정상"
+                          : u.status === "withdrawn"
+                            ? "탈퇴"
+                            : "정지"}
                       </Badge>
                     </td>
                     <td className="px-4 py-3.5 text-center align-middle">
                       <div className="flex items-center justify-center gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={saving}
-                          className="h-8 px-2.5 text-xs whitespace-nowrap"
-                          onClick={() =>
-                            patchUser(u.id, {
-                              role: u.role === "admin" ? "user" : "admin"
-                            })
-                          }
-                        >
-                          {u.role === "admin" ? "일반 전환" : "관리자 지정"}
-                        </Button>
-                        {u.status === "active" ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={saving}
-                            className="h-8 px-2.5 text-xs whitespace-nowrap"
-                            onClick={() => {
-                              setSuspendTarget(u);
-                              setSuspendReason("");
-                            }}
-                          >
-                            정지
-                          </Button>
+                        {u.status === "withdrawn" ? (
+                          <span className="text-stone text-xs">—</span>
                         ) : (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={saving}
-                            className="h-8 px-2.5 text-xs whitespace-nowrap"
-                            onClick={() => patchUser(u.id, { status: "active" })}
-                          >
-                            해제
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={saving}
+                              className="h-8 px-2.5 text-xs whitespace-nowrap"
+                              onClick={() =>
+                                patchUser(u.id, {
+                                  role: u.role === "admin" ? "user" : "admin"
+                                })
+                              }
+                            >
+                              {u.role === "admin" ? "일반 전환" : "관리자 지정"}
+                            </Button>
+                            {u.status === "active" ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={saving}
+                                className="h-8 px-2.5 text-xs whitespace-nowrap"
+                                onClick={() => {
+                                  setSuspendTarget(u);
+                                  setSuspendReason("");
+                                }}
+                              >
+                                정지
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={saving}
+                                className="h-8 px-2.5 text-xs whitespace-nowrap"
+                                onClick={() => patchUser(u.id, { status: "active" })}
+                              >
+                                해제
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>
@@ -285,7 +304,7 @@ export function UsersSection() {
               onChange={(e) => setSuspendReason(e.target.value)}
               rows={3}
               placeholder="정지 사유를 입력하세요"
-              className="border-hairline mb-4 w-full rounded-lg border bg-white p-3 text-sm text-[#0a0a0a]"
+              className="border-hairline bg-background text-ink placeholder:text-stone mb-4 w-full rounded-lg border p-3 text-sm"
             />
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setSuspendTarget(null)} disabled={saving}>

@@ -13,7 +13,7 @@ export default function PhoneField({
   value,
   onChange,
   required = true,
-  inputClassName = "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+  inputClassName = "border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
 }: PhoneFieldProps) {
   const digits = normalizePhone(value);
   const valid = digits.length === 0 ? null : isValidPhone(value);

@@ -35,9 +35,21 @@ export function useAdminListMode() {
   const pushParams = useCallback(
     (updates: Record<string, string | null>) => {
       const qs = buildUrl(updates);
-      router.push(`${pathname}${qs}`);
+      const next = `${pathname}${qs}`;
+      const current = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+      if (next === current) return;
+      router.push(next);
     },
-    [router, pathname, buildUrl]
+    [router, pathname, buildUrl, searchParams]
+  );
+
+  const setQuery = useCallback(
+    (value: string) => {
+      const next = value.trim();
+      if (next === q) return;
+      pushParams({ q: next || null, page: null });
+    },
+    [pushParams, q]
   );
 
   const goList = useCallback(() => {
@@ -65,13 +77,6 @@ export function useAdminListMode() {
   const setPage = useCallback(
     (zeroBasedPage: number) => {
       pushParams({ page: zeroBasedPage <= 0 ? null : String(zeroBasedPage + 1) });
-    },
-    [pushParams]
-  );
-
-  const setQuery = useCallback(
-    (value: string) => {
-      pushParams({ q: value.trim() || null, page: null });
     },
     [pushParams]
   );
