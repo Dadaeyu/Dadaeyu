@@ -9,6 +9,22 @@ import {
   asksForSingleRecommendation,
   selectDiverseItems
 } from "@/lib/chat/recommendationDiversity";
+import {
+  CHAT_MAX_BODY_BYTES,
+  CHAT_MAX_MESSAGE_LENGTH,
+  getRequestBodySizeBytes,
+  isAllowedChatOrigin,
+  isChatBodySizeAllowed,
+  isChatMessageLengthAllowed,
+  isValidChatClassifierEnvelope,
+  resolveChatRateLimitPerMinute,
+  stripChatDebugForPolicy
+} from "@/lib/chat/request-policy";
+import { resolveChatClientKey, ChatIdentityError } from "@/lib/chat/server/request-identity";
+import { reserveChatUsage, ChatUsageError } from "@/lib/chat/server/usage";
+import { createFixedWindowRateLimiter } from "@/lib/server/fixed-window-rate-limit";
+import { readBoundedRequestBody } from "@/lib/server/read-bounded-request-body";
+import { createTimeoutSignal } from "@/lib/server/timeout-signal";
 
 type Confidence = "high" | "medium" | "low";
 
@@ -161,12 +177,19 @@ const VECTOR_READINESS_TTL_MS = 60_000;
 const MAX_HISTORY_ITEMS = 10;
 const MAX_HISTORY_CONTENT_LENGTH = 1_000;
 const MAX_CONTEXT_PLACE_TITLES = 5;
+const EXTERNAL_FETCH_TIMEOUT_MS = 20_000;
 const SITE_GUIDE_CHIPS = ["왜 만들었어?", "어떻게 질문하면 돼?", "데이터 출처는 어디야?"];
 const FALLBACK_CHIPS = [
   "다대유는 어떤 사이트야?",
   "대전어린이회관 휠체어 가능해?",
   "대전한밭도서관 접근성 알려줘"
 ];
+
+const chatRateLimiter = createFixedWindowRateLimiter({
+  maxRequests: resolveChatRateLimitPerMinute,
+  maxTrackedClients: 1_000,
+  windowMs: 60_000
+});
 
 let vectorReadinessCache: {
   checkedAt: number;
@@ -218,6 +241,16 @@ const ACCESSIBILITY_RULES: Record<string, { tags: string[]; fields: string[]; te
     tags: ["wheelchair", "mobility_access"],
     fields: ["parking", "publictransport", "route", "exit", "elevator", "restroom"],
     terms: ["이동약자", "장애인", "경사로", "엘리베이터", "화장실", "접근로"]
+  },
+  short_distance: {
+    tags: ["mobility_access"],
+    fields: ["parking", "publictransport", "route", "exit", "elevator", "restroom"],
+    terms: ["짧은 동선", "가까운", "근처", "이동거리", "동선", "휴식"]
+  },
+  easy_explanation: {
+    tags: [],
+    fields: ["parking", "publictransport", "route", "exit", "elevator", "restroom"],
+    terms: ["쉬운 설명", "간단히", "핵심", "안내", "정보"]
   },
   elderly: {
     tags: ["mobility_access"],
@@ -271,6 +304,8 @@ const systemPrompt = [
   "날씨 데이터가 제공되지 않으면 현재 날씨를 알고 있다고 말하지 않는다.",
   "장소를 추천할 때는 접근성만 나열하지 말고, 각 장소가 어떤 곳인지, 가서 무엇을 볼 수 있는지, 누구에게 맞는지, 왜 가볼 만한지도 함께 말한다.",
   "말풍선 답변은 긴 상세 설명이 아니라 추천 판단 요약이다. 자세한 관광정보와 접근성 목록은 아래 추천 카드에서 확인하게 한다.",
+  "사용자가 쉬운 설명을 원하면 행정 용어를 피하고, 핵심 결론과 방문 전 확인할 점을 짧은 문장으로 나눈다.",
+  "사용자가 짧은 동선이나 가까운 곳을 원하면 출입통로, 엘리베이터, 주차, 대중교통처럼 이동 부담을 줄이는 근거를 우선한다.",
   "추천 장소 설명은 관광지 성격과 '가서 할 수 있는 것'을 먼저 짧게 말하고, 그다음 사용자의 접근성 조건과 직접 관련된 핵심 근거만 붙인다.",
   "추천 답변에서는 관광지 정보와 접근성 정보가 모두 보여야 하지만, 본문에는 장소별 핵심 1~2문장만 쓴다.",
   "운영시간, 요금, 주차, 편의시설, 문의처는 본문에 길게 나열하지 말고 카드에서 확인하도록 안내한다.",
@@ -296,7 +331,7 @@ const classifierPrompt = [
   "코딩, 과제, 투자, 정치, 일반 잡담, 여행과 무관한 지식 질문은 in_scope를 false로 둔다.",
   "scope_reason은 범위 판단 이유를 한국어 짧은 문장으로 쓴다.",
   "intent는 recommend_place, check_accessibility, ask_info 중 하나다.",
-  "accessibility_needs는 wheelchair, stroller, elderly, visual_impairment, hearing_impairment, mobility_access 중 필요한 값만 넣는다.",
+  "accessibility_needs는 wheelchair, stroller, elderly, visual_impairment, hearing_impairment, mobility_access, short_distance, easy_explanation 중 필요한 값만 넣는다.",
   "날씨, 오늘, 비, 더위, 추위, 미세먼지처럼 현재 조건이 필요하면 weather_sensitive를 true로 둔다.",
   "대전 앱이므로 location이 없으면 대전으로 둔다.",
   "place_name은 특정 장소명이 있으면 문자열, 없으면 null이다.",
@@ -312,6 +347,39 @@ function createErrorResponse(message: string): ChatResponse {
     confidence: "low",
     sources: []
   };
+}
+
+function createUnavailableResponse(message: string): ChatResponse {
+  return {
+    message,
+    chips: FALLBACK_CHIPS,
+    confidence: "low",
+    sources: []
+  };
+}
+
+function jsonChatResponse(response: ChatResponse, init?: ResponseInit) {
+  return NextResponse.json(stripChatDebugForPolicy(response), init);
+}
+
+function jsonChatError(message: string, status: number, retryAfterSeconds?: number) {
+  return NextResponse.json(
+    { error: message },
+    {
+      headers: retryAfterSeconds ? { "Retry-After": String(retryAfterSeconds) } : undefined,
+      status
+    }
+  );
+}
+
+function getPublicChatGuardMessage(error: ChatIdentityError | ChatUsageError) {
+  if (error.status === 429) {
+    return "오늘 이 요청 식별값에서 사용할 수 있는 챗봇 요청 횟수를 넘었어요. 잠시 뒤 다시 이용해 주세요.";
+  }
+  if (error.status === 402) {
+    return "현재 챗봇 사용량이 한도에 도달했어요. 나중에 다시 이용해 주세요.";
+  }
+  return "현재 챗봇을 안전하게 처리하기 위한 서버 설정을 확인하는 중이에요. 잠시 뒤 다시 이용해 주세요.";
 }
 
 function createStaticSiteFaqResponse(message: string): ChatResponse | null {
@@ -900,6 +968,9 @@ function getRecommendationLead(analysis: QueryAnalysis, location: string) {
   if (analysis.accessibility_needs.includes("stroller")) {
     return "유모차로 방문할 곳을 찾는다면";
   }
+  if (analysis.accessibility_needs.includes("short_distance")) {
+    return "이동거리가 짧은 곳을 찾는다면";
+  }
   if (
     analysis.accessibility_needs.includes("wheelchair") ||
     analysis.accessibility_needs.includes("mobility_access")
@@ -922,11 +993,13 @@ function getRecommendationLead(analysis: QueryAnalysis, location: string) {
 function getPreferredAccessibilityFact(items: string[], needs: string[]) {
   const preferredLabels = needs.includes("stroller")
     ? ["유모차", "엘리베이터", "출입통로", "수유실"]
-    : needs.includes("visual_impairment")
-      ? ["점자블록", "보조견", "안내요원", "오디오 가이드"]
-      : needs.includes("hearing_impairment")
-        ? ["수화", "자막", "청각"]
-        : ["출입통로", "엘리베이터", "장애인 주차", "장애인 화장실"];
+    : needs.includes("short_distance")
+      ? ["출입통로", "엘리베이터", "장애인 주차", "주차", "휴식"]
+      : needs.includes("visual_impairment")
+        ? ["점자블록", "보조견", "안내요원", "오디오 가이드"]
+        : needs.includes("hearing_impairment")
+          ? ["수화", "자막", "청각"]
+          : ["출입통로", "엘리베이터", "장애인 주차", "장애인 화장실"];
 
   return (
     preferredLabels
@@ -1476,9 +1549,9 @@ async function classifyQuestion({
   history: ChatHistoryItem[];
   message: string;
   model: string;
-}): Promise<QueryAnalysis> {
+}): Promise<QueryAnalysis | null> {
   try {
-    const response = await fetch(DEEPSEEK_CHAT_URL, {
+    const response = await fetchWithTimeout(DEEPSEEK_CHAT_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -1507,15 +1580,16 @@ async function classifyQuestion({
       })
     });
 
-    if (!response.ok) {
-      return fallbackAnalysis(message);
-    }
+    if (!response.ok) return null;
 
     const data = (await response.json()) as DeepSeekChatResponse;
     const content = data.choices?.[0]?.message?.content;
-    return normalizeAnalysis(content ? JSON.parse(content) : null, message);
+    if (!content) return null;
+    const parsed = JSON.parse(content) as unknown;
+    if (!isValidChatClassifierEnvelope(parsed)) return null;
+    return normalizeAnalysis(parsed, message);
   } catch {
-    return fallbackAnalysis(message);
+    return null;
   }
 }
 
@@ -1535,7 +1609,9 @@ function normalizeAnalysis(value: unknown, message: string): QueryAnalysis {
     "elderly",
     "visual_impairment",
     "hearing_impairment",
-    "mobility_access"
+    "mobility_access",
+    "short_distance",
+    "easy_explanation"
   ]);
   const accessibilityNeeds = Array.isArray(record.accessibility_needs)
     ? record.accessibility_needs
@@ -1595,7 +1671,13 @@ function fallbackAnalysis(message: string): QueryAnalysis {
           ? "check_accessibility"
           : "ask_info",
     accessibility_needs:
-      message.includes("휠체어") || message.includes("장애인") ? ["wheelchair"] : [],
+      message.includes("짧은 동선") || message.includes("가까운") || message.includes("근처")
+        ? ["short_distance"]
+        : message.includes("쉬운 설명") || message.includes("쉽게") || message.includes("간단")
+          ? ["easy_explanation"]
+          : message.includes("휠체어") || message.includes("장애인")
+            ? ["wheelchair"]
+            : [],
     weather_sensitive:
       message.includes("오늘") || message.includes("날씨") || message.includes("비"),
     place_name: null,
@@ -1612,7 +1694,9 @@ function normalizeProfileAccessibilityNeeds(value: unknown): string[] {
     "elderly",
     "visual_impairment",
     "hearing_impairment",
-    "mobility_access"
+    "mobility_access",
+    "short_distance",
+    "easy_explanation"
   ]);
   return Array.from(
     new Set(
@@ -1834,6 +1918,13 @@ function normalizeForSearch(value: string) {
   return value.toLocaleLowerCase("ko-KR").replace(/\s+/g, " ").trim();
 }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}) {
+  return fetch(input, {
+    ...init,
+    signal: createTimeoutSignal(EXTERNAL_FETCH_TIMEOUT_MS, init.signal ?? undefined)
+  });
+}
+
 async function createQueryEmbedding({
   apiKey,
   dimensions,
@@ -1845,7 +1936,7 @@ async function createQueryEmbedding({
   input: string;
   model: string;
 }) {
-  const response = await fetch(OPENAI_EMBEDDINGS_URL, {
+  const response = await fetchWithTimeout(OPENAI_EMBEDDINGS_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -1933,7 +2024,7 @@ async function enrichRowsWithMatchingTitles(
   });
 
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${config.url}/${encodeURIComponent(config.table)}?${params.toString()}`,
       {
         headers: getSupabaseHeaders(config, { Accept: "application/json" }),
@@ -2075,7 +2166,7 @@ async function fetchVectorReadiness(
   });
 
   try {
-    const embeddedRowsResponse = await fetch(
+    const embeddedRowsResponse = await fetchWithTimeout(
       `${config.url}/${encodeURIComponent(config.table)}?${params.toString()}`,
       {
         headers: getSupabaseHeaders(config, { Accept: "application/json" }),
@@ -2099,7 +2190,7 @@ async function fetchVectorReadiness(
       };
     }
 
-    const rpcResponse = await fetch(`${config.url}/rpc/match_chunks`, {
+    const rpcResponse = await fetchWithTimeout(`${config.url}/rpc/match_chunks`, {
       method: "POST",
       headers: getSupabaseHeaders(config),
       body: JSON.stringify({
@@ -2284,7 +2375,7 @@ async function fetchVectorKnowledge(
       vector: queryEmbedding
     });
 
-    const response = await fetch(`${config.url}/rpc/match_chunks`, {
+    const response = await fetchWithTimeout(`${config.url}/rpc/match_chunks`, {
       method: "POST",
       headers: getSupabaseHeaders(config),
       body: JSON.stringify({
@@ -2411,7 +2502,7 @@ async function fetchKeywordKnowledge(
   });
 
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${config.url}/${encodeURIComponent(config.table)}?${params.toString()}`,
       {
         headers: getSupabaseHeaders(config, { Accept: "application/json" }),
@@ -2523,9 +2614,13 @@ function buildSearchTerms(analysis: QueryAnalysis) {
             ? ["휠체어", "장애인", "경사로", "엘리베이터"]
             : need === "stroller"
               ? ["유모차", "수유실", "엘리베이터"]
-              : need === "elderly" || need === "mobility_access"
-                ? ["이동약자", "계단", "경사로", "휴식"]
-                : [need]
+              : need === "short_distance"
+                ? ["짧은 동선", "가까운", "근처", "이동거리", "휴식"]
+                : need === "easy_explanation"
+                  ? ["쉬운 설명", "간단한 안내", "핵심 정보", "안내"]
+                  : need === "elderly" || need === "mobility_access"
+                    ? ["이동약자", "계단", "경사로", "휴식"]
+                    : [need]
         ),
         analysis.weather_sensitive ? "실내" : null,
         analysis.weather_sensitive ? "우천" : null
@@ -2679,35 +2774,79 @@ function getRowTags(row: KnowledgeRow) {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as {
+    if (
+      !isAllowedChatOrigin({
+        configuredOrigins: process.env.CHAT_ALLOWED_ORIGINS,
+        origin: request.headers.get("origin"),
+        requestOrigin: new URL(request.url).origin
+      })
+    ) {
+      return jsonChatError("허용되지 않은 요청 출처예요.", 403);
+    }
+
+    if (!isChatBodySizeAllowed(getRequestBodySizeBytes(request.headers))) {
+      return jsonChatError("질문 내용이 너무 길어요. 조금 짧게 줄여서 다시 보내 주세요.", 413);
+    }
+
+    const bodyResult = await readBoundedRequestBody(request, CHAT_MAX_BODY_BYTES);
+    if (!bodyResult.ok) {
+      return jsonChatError("질문 내용이 너무 길어요. 조금 짧게 줄여서 다시 보내 주세요.", 413);
+    }
+    const rawBody = bodyResult.text;
+
+    let body: {
       message?: unknown;
       accessibilityNeeds?: unknown;
       history?: unknown;
     };
+
+    try {
+      body = JSON.parse(rawBody) as typeof body;
+    } catch {
+      return jsonChatError("요청 형식을 읽지 못했어요. 다시 시도해 주세요.", 400);
+    }
+
     const message = typeof body.message === "string" ? body.message.trim() : "";
     const history = normalizeChatHistory(body.history);
     const conversationContext = createConversationContext(history, message);
     const profileAccessibilityNeeds = normalizeProfileAccessibilityNeeds(body.accessibilityNeeds);
 
     if (!message) {
-      return NextResponse.json({ error: "message is required" }, { status: 400 });
+      return jsonChatError("질문을 입력해 주세요.", 400);
+    }
+
+    if (!isChatMessageLengthAllowed(message)) {
+      return jsonChatError(`질문은 ${CHAT_MAX_MESSAGE_LENGTH}자 이내로 입력해 주세요.`, 400);
+    }
+
+    const clientKey = await resolveChatClientKey(request);
+    const rateLimit = chatRateLimiter.enforce(`chat:${clientKey}`);
+    if (!rateLimit.allowed) {
+      return jsonChatError(
+        "요청이 잠시 많아요. 조금 뒤 다시 질문해 주세요.",
+        429,
+        Math.max(1, rateLimit.retryAfterSeconds)
+      );
     }
 
     const staticSiteFaqResponse = createStaticSiteFaqResponse(message);
     if (staticSiteFaqResponse) {
-      return NextResponse.json(staticSiteFaqResponse);
+      return jsonChatResponse(staticSiteFaqResponse);
     }
 
     const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
     const model = getDeepSeekModel();
 
     if (!apiKey) {
-      return NextResponse.json(
-        createErrorResponse(
-          "DeepSeek API 키가 서버 환경에 아직 적용되지 않았어요. .env.local에 DEEPSEEK_API_KEY를 넣고 서버를 다시 시작해 주세요."
-        )
+      return jsonChatResponse(
+        createUnavailableResponse(
+          "현재 챗봇 답변 생성 기능을 사용할 수 없어요. 잠시 뒤 다시 이용해 주세요."
+        ),
+        { status: 503 }
       );
     }
+
+    await reserveChatUsage(clientKey);
 
     const classifiedAnalysis = await classifyQuestion({
       apiKey,
@@ -2715,6 +2854,15 @@ export async function POST(request: Request) {
       message,
       model
     });
+    if (!classifiedAnalysis) {
+      return jsonChatResponse(
+        createUnavailableResponse(
+          "질문 분류를 안전하게 완료하지 못했어요. 정확하지 않은 추천을 만들지 않도록 여기서 멈출게요. 잠시 뒤 다시 질문해 주세요."
+        ),
+        { status: 503 }
+      );
+    }
+
     const contextualAnalysis = applyConversationContext(
       classifiedAnalysis,
       message,
@@ -2728,7 +2876,7 @@ export async function POST(request: Request) {
     };
 
     if (!analysis.in_scope) {
-      return NextResponse.json(createOutOfScopeResponse(analysis));
+      return jsonChatResponse(createOutOfScopeResponse(analysis));
     }
 
     const searchTerms = buildSearchTerms(analysis);
@@ -2747,7 +2895,7 @@ export async function POST(request: Request) {
     ]);
 
     if (knowledge.status !== "ready") {
-      return NextResponse.json(
+      return jsonChatResponse(
         createNoKnowledgeResponse({
           analysis,
           inputMessage: message,
@@ -2758,10 +2906,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
-
-    const deepSeekResponse = await fetch(DEEPSEEK_CHAT_URL, {
+    const deepSeekResponse = await fetchWithTimeout(DEEPSEEK_CHAT_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -2795,15 +2940,15 @@ export async function POST(request: Request) {
         max_tokens: 850,
         temperature: 0.3,
         stream: false
-      }),
-      signal: controller.signal
-    }).finally(() => clearTimeout(timeout));
+      })
+    });
 
     if (!deepSeekResponse.ok) {
-      return NextResponse.json(
-        createErrorResponse(
-          "DeepSeek API 호출에 실패했어요. 키, 잔액, 모델명을 확인한 뒤 다시 시도해 주세요."
-        )
+      return jsonChatResponse(
+        createUnavailableResponse(
+          "현재 답변 생성 서비스와 연결이 원활하지 않아요. 잠시 뒤 다시 질문해 주세요."
+        ),
+        { status: 502 }
       );
     }
 
@@ -2811,14 +2956,14 @@ export async function POST(request: Request) {
     const answer = normalizeDaiyuTone(data.choices?.[0]?.message?.content?.trim() || "");
 
     if (!answer) {
-      return NextResponse.json(
+      return jsonChatResponse(
         createErrorResponse(
           "DeepSeek 응답은 도착했지만 답변 본문이 비어 있어요. 잠시 뒤 다시 질문해 주세요."
         )
       );
     }
 
-    return NextResponse.json(
+    return jsonChatResponse(
       createSuccessResponse({
         message: answer,
         model: data.model || model,
@@ -2832,11 +2977,17 @@ export async function POST(request: Request) {
       })
     );
   } catch (error) {
+    if (error instanceof ChatIdentityError || error instanceof ChatUsageError) {
+      return jsonChatResponse(createUnavailableResponse(getPublicChatGuardMessage(error)), {
+        status: error.status
+      });
+    }
+
     const message =
       error instanceof Error && error.name === "AbortError"
         ? "DeepSeek 응답 시간이 길어져 요청을 중단했어요. 질문을 조금 짧게 해서 다시 시도해 주세요."
         : "응답을 만드는 중 문제가 생겼어요. 잠시 뒤 다시 질문해 주세요.";
 
-    return NextResponse.json(createErrorResponse(message));
+    return jsonChatResponse(createErrorResponse(message));
   }
 }

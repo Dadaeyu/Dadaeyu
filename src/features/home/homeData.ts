@@ -265,9 +265,11 @@ export function homeNeedIdsToStorageValues(ids: readonly HomeNeedId[]): string[]
 export function homeNeedIdsToChatNeeds(ids: readonly HomeNeedId[]): string[] {
   const values = new Set<string>();
   for (const id of ids) {
-    if (id === "step_free" || id === "short_distance") values.add("mobility_access");
+    if (id === "step_free") values.add("mobility_access");
+    if (id === "short_distance") values.add("short_distance");
     if (id === "visual_guidance") values.add("visual_impairment");
     if (id === "hearing_guidance") values.add("hearing_impairment");
+    if (id === "easy_explanation") values.add("easy_explanation");
   }
   return [...values];
 }

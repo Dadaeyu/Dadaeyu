@@ -25,6 +25,7 @@ import {
   summarizeVisitInfo,
   type HomeNeedId
 } from "@/features/home/homeData";
+import { getHomeSearchStatusLabel } from "@/features/home/homePresentation";
 import type { HomeExperience } from "@/features/home/useHomeExperience";
 
 const NEED_ICONS = {
@@ -52,6 +53,10 @@ export function HomeHero({
   const displayName = auth.member?.nickname?.trim();
   const locationLabel = getLocationLabel(location.status, location.errorReason);
   const locationHelp = getLocationHelp(location.status, location.errorReason);
+  const searchStatusLabel = getHomeSearchStatusLabel(
+    experience.committedQuery,
+    experience.loadState
+  );
 
   return (
     <section
@@ -102,25 +107,25 @@ export function HomeHero({
                   value={experience.query}
                   onChange={(event) => experience.setQuery(event.target.value)}
                   placeholder="장소나 활동을 검색해 보세요"
-                  className="home-search-input text-ink placeholder:text-stone min-h-12 min-w-0 flex-1 bg-transparent text-base outline-none"
+                  className="home-search-input text-ink placeholder:text-steel min-h-12 min-w-0 flex-1 bg-transparent text-base outline-none"
                 />
                 <button
                   type="submit"
-                  className="home-search-submit bg-brand-700 grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white transition-transform hover:translate-x-0.5 motion-reduce:transform-none"
+                  className="home-search-submit bg-brand-800 hover:bg-brand-900 grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white transition-colors"
                   aria-label="관광지 검색"
                 >
                   <ArrowRight className="h-5 w-5" aria-hidden="true" />
                 </button>
               </div>
-              {experience.committedQuery ? (
+              {searchStatusLabel ? (
                 <div className="border-brand-100 mt-2 flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2">
-                  <p className="text-slate line-clamp-1 text-sm">
-                    “{experience.committedQuery}” 검색 중
+                  <p className="text-slate line-clamp-1 text-sm" aria-live="polite">
+                    {searchStatusLabel}
                   </p>
                   <button
                     type="button"
                     onClick={experience.clearSearch}
-                    className="text-brand-800 min-h-10 shrink-0 px-2 text-sm font-semibold"
+                    className="text-brand-800 min-h-11 shrink-0 px-2 text-sm font-semibold"
                   >
                     전체 보기
                   </button>
@@ -136,7 +141,7 @@ export function HomeHero({
                     key={item.query}
                     type="button"
                     onClick={() => experience.searchFor(item.query)}
-                    className="border-brand-200 text-brand-900 min-h-10 shrink-0 rounded-full border bg-white px-3 text-xs font-semibold transition-colors hover:bg-white/70"
+                    className="border-brand-200 text-brand-900 min-h-11 shrink-0 rounded-full border bg-white px-3 text-xs font-semibold transition-colors hover:bg-white/70"
                   >
                     {item.label}
                   </button>
@@ -153,7 +158,7 @@ export function HomeHero({
           <button
             type="button"
             onClick={onOpenChat}
-            className="bg-brand-700 hover:bg-brand-800 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white transition-colors"
+            className="bg-brand-800 hover:bg-brand-900 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white transition-colors"
             aria-haspopup="dialog"
           >
             <MessageCircle className="h-4 w-4" aria-hidden="true" />
@@ -216,7 +221,7 @@ export function HomeFeaturedPlace({ experience }: { experience: HomeExperience }
               <button
                 type="button"
                 onClick={experience.retry}
-                className="bg-brand-700 mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold text-white"
+                className="bg-brand-800 hover:bg-brand-900 mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold text-white transition-colors"
               >
                 다시 불러오기
               </button>
@@ -298,7 +303,7 @@ export function HomeFeaturedPlace({ experience }: { experience: HomeExperience }
           <button
             type="button"
             onClick={(event) => experience.openPlace(place, event.currentTarget)}
-            className="bg-brand-700 hover:bg-brand-800 mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white transition-colors"
+            className="bg-brand-800 hover:bg-brand-900 mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white transition-colors"
             aria-label={`${place.title} 자세히 보기`}
           >
             자세히 보기
@@ -357,7 +362,7 @@ export function HomeNeedsPicker({ experience }: { experience: HomeExperience }) 
               aria-pressed={selected}
               className={`flex min-h-12 shrink-0 snap-start items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors ${
                 selected
-                  ? "border-brand-700 bg-brand-700 text-white"
+                  ? "border-brand-800 bg-brand-800 text-white"
                   : "border-brand-100 text-slate hover:border-brand-300 bg-white"
               }`}
             >

@@ -2,8 +2,18 @@ import "server-only";
 
 import { TextToSpeechClient } from "@google-cloud/text-to-speech";
 import type { TextToSpeechVoice } from "@/lib/tts/types";
+import {
+  retryTextToSpeechAccountingCleanup,
+  type TextToSpeechAccountingCleanupOperation
+} from "@/lib/tts/server/accounting-cleanup-retry";
+import { withAbort } from "@/lib/tts/server/abort";
 import { TextToSpeechProviderError, type TextToSpeechProvider } from "@/lib/tts/server/provider";
-import { reserveGoogleTextToSpeechUsage } from "@/lib/tts/server/google-usage";
+import {
+  finalizeGoogleTextToSpeechUsage,
+  refundGoogleTextToSpeechUsage,
+  reserveGoogleTextToSpeechUsage,
+  type GoogleTextToSpeechUsageReservation
+} from "@/lib/tts/server/google-usage";
 
 const DEFAULT_VOICE = "ko-KR-Chirp3-HD-Sulafat";
 const DEFAULT_SPEED = 1;
@@ -64,7 +74,7 @@ export class GoogleTextToSpeechProvider implements TextToSpeechProvider {
     }
 
     const client = this.getClient();
-    await reserveGoogleTextToSpeechUsage(text, options.clientKey);
+    const reservation = await reserveGoogleTextToSpeechUsage(text, options.clientKey);
     const voice = resolveVoice(requestedVoice ?? this.defaultVoice);
 
     try {
@@ -93,11 +103,15 @@ export class GoogleTextToSpeechProvider implements TextToSpeechProvider {
           ? Uint8Array.from(Buffer.from(audioContent, "base64"))
           : Uint8Array.from(audioContent);
 
+      await finalizeReservedUsage(reservation);
+
       return {
         contentType: "audio/mpeg",
         stream: bytesToStream(audioBytes)
       };
     } catch (error) {
+      await refundReservedUsage(reservation);
+
       if (error instanceof TextToSpeechProviderError) {
         throw error;
       }
@@ -167,18 +181,6 @@ function bytesToStream(bytes: Uint8Array) {
   });
 }
 
-function withAbort<T>(promise: Promise<T>, signal?: AbortSignal) {
-  if (!signal) return promise;
-
-  return new Promise<T>((resolve, reject) => {
-    const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
-    signal.addEventListener("abort", abort, { once: true });
-    promise.then(resolve, reject).finally(() => {
-      signal.removeEventListener("abort", abort);
-    });
-  });
-}
-
 function getGoogleErrorStatus(error: unknown) {
   const code =
     typeof error === "object" && error && "code" in error ? Number(error.code) : Number.NaN;
@@ -191,4 +193,49 @@ function getGoogleErrorStatus(error: unknown) {
 
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
+}
+
+async function refundReservedUsage(reservation: GoogleTextToSpeechUsageReservation | null) {
+  await runAccountingCleanup("refund", reservation, () =>
+    refundGoogleTextToSpeechUsage(reservation)
+  );
+}
+
+async function finalizeReservedUsage(reservation: GoogleTextToSpeechUsageReservation | null) {
+  await runAccountingCleanup("finalize", reservation, () =>
+    finalizeGoogleTextToSpeechUsage(reservation)
+  );
+}
+
+async function runAccountingCleanup(
+  operation: TextToSpeechAccountingCleanupOperation,
+  reservation: GoogleTextToSpeechUsageReservation | null,
+  cleanup: () => Promise<void>
+) {
+  if (!reservation) return;
+
+  await retryTextToSpeechAccountingCleanup({
+    cleanup,
+    onFinalFailure: ({ attempts, error, reservationToken }) => {
+      console.error("Google TTS usage accounting cleanup failed.", {
+        attempts,
+        error: toLoggableError(error),
+        operation,
+        reservationToken
+      });
+    },
+    operation,
+    reservationToken: reservation.token
+  });
+}
+
+function toLoggableError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      name: error.name
+    };
+  }
+
+  return { message: String(error), name: "UnknownError" };
 }

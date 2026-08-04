@@ -1,11 +1,19 @@
 import "server-only";
 
 import { createHmac } from "node:crypto";
-import { isAllowedRequestOrigin } from "@/lib/server/origin-policy";
 import { createClient } from "@/lib/supabase/server";
-import { TextToSpeechProviderError } from "@/lib/tts/server/provider";
 
-export async function resolveTextToSpeechClientKey(request: Request) {
+export class ChatIdentityError extends Error {
+  status: number;
+
+  constructor(message: string, status = 503) {
+    super(message);
+    this.name = "ChatIdentityError";
+    this.status = status;
+  }
+}
+
+export async function resolveChatClientKey(request: Request) {
   const authenticatedUserId = await getAuthenticatedUserId();
   const source = authenticatedUserId
     ? `user:${authenticatedUserId}`
@@ -13,14 +21,6 @@ export async function resolveTextToSpeechClientKey(request: Request) {
   const secret = resolveHashSecret();
 
   return createHmac("sha256", secret).update(source).digest("hex");
-}
-
-export function isAllowedTextToSpeechOrigin(request: Request) {
-  return isAllowedRequestOrigin({
-    configuredOrigins: process.env.TTS_ALLOWED_ORIGINS,
-    origin: request.headers.get("origin"),
-    requestOrigin: new URL(request.url).origin
-  });
 }
 
 async function getAuthenticatedUserId() {
@@ -45,13 +45,16 @@ function getClientAddress(request: Request) {
 }
 
 function resolveHashSecret() {
-  const secret =
-    process.env.TTS_CLIENT_HASH_SECRET?.trim() ||
-    process.env.SUPABASE_SECRET_KEY?.trim() ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const dedicatedSecret = process.env.CHAT_CLIENT_HASH_SECRET?.trim();
+  if (dedicatedSecret) return dedicatedSecret;
 
-  if (secret) return secret;
-  if (process.env.NODE_ENV !== "production") return "dadaeyu-local-tts-client-key";
+  if (process.env.NODE_ENV !== "production") {
+    return (
+      process.env.SUPABASE_SECRET_KEY?.trim() ||
+      process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+      "dadaeyu-local-chat-client-key"
+    );
+  }
 
-  throw new TextToSpeechProviderError("TTS client identity is not configured.", 503);
+  throw new ChatIdentityError("Chat client identity is not configured.");
 }

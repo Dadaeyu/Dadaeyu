@@ -42,12 +42,57 @@ const REQUIRED_SCHEMAS = [
   { file: "schema.sql", tables: ["tb_places"] },
   {
     file: "schema-tts-usage.sql",
-    tables: ["tts_monthly_usage", "tts_client_daily_usage"]
+    tables: ["tts_monthly_usage", "tts_client_daily_usage", "tts_usage_reservations"],
+    rpcProbes: [
+      {
+        name: "reserve_tts_usage",
+        args: {
+          p_billing_period: "2026-01",
+          p_client_key: "0".repeat(64),
+          p_client_limit: 1,
+          p_client_period: "2026-01-01",
+          p_limit: 1,
+          p_provider: "probe",
+          p_reservation_token: null,
+          p_usage: 0
+        }
+      },
+      {
+        name: "refund_tts_usage",
+        args: { p_reservation_token: null }
+      },
+      {
+        name: "finalize_tts_usage",
+        args: { p_reservation_token: null }
+      }
+    ]
+  },
+  {
+    file: "schema-chat-usage.sql",
+    tables: ["chat_monthly_global_usage", "chat_client_daily_usage"],
+    rpcProbes: [
+      {
+        name: "reserve_chat_usage",
+        args: {
+          p_client_key: "0".repeat(64),
+          p_client_limit: 1,
+          p_client_period: "2026-01-01",
+          p_global_limit: 1,
+          p_global_period: "2026-01",
+          p_usage: 0
+        }
+      }
+    ]
   }
 ];
 
 async function tableExists(supabase, table) {
   const { error } = await supabase.from(table).select("*").limit(1);
+  return !error;
+}
+
+async function rpcExists(supabase, probe) {
+  const { error } = await supabase.rpc(probe.name, probe.args);
   return !error;
 }
 
@@ -90,7 +135,10 @@ async function main() {
       const tableStates = await Promise.all(
         schema.tables.map((table) => tableExists(supabase, table))
       );
-      return { ...schema, exists: tableStates.every(Boolean) };
+      const rpcStates = await Promise.all(
+        (schema.rpcProbes ?? []).map((probe) => rpcExists(supabase, probe))
+      );
+      return { ...schema, exists: tableStates.every(Boolean) && rpcStates.every(Boolean) };
     })
   );
   const missingSchemas = schemaStates.filter((schema) => !schema.exists);

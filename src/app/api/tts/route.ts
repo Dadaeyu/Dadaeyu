@@ -1,9 +1,15 @@
 import { createTextToSpeechProvider, TextToSpeechProviderError } from "@/lib/tts/server";
+import { readBoundedRequestBody } from "@/lib/server/read-bounded-request-body";
 import {
   isAllowedTextToSpeechOrigin,
   resolveTextToSpeechClientKey
 } from "@/lib/tts/server/client-identity";
 import { enforceTextToSpeechRateLimit } from "@/lib/tts/server/rate-limit";
+import {
+  getTextToSpeechRequestBodySizeBytes,
+  isTextToSpeechBodySizeAllowed,
+  TTS_MAX_BODY_BYTES
+} from "@/lib/tts/server/request-body";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -51,8 +57,17 @@ export async function POST(request: Request) {
 
   let body: unknown;
 
+  if (!isTextToSpeechBodySizeAllowed(getTextToSpeechRequestBodySizeBytes(request.headers))) {
+    return Response.json({ message: "요청 내용이 너무 길어요." }, { status: 413 });
+  }
+
   try {
-    body = await request.json();
+    const bodyResult = await readBoundedRequestBody(request, TTS_MAX_BODY_BYTES);
+    if (!bodyResult.ok) {
+      return Response.json({ message: "요청 내용이 너무 길어요." }, { status: 413 });
+    }
+
+    body = JSON.parse(bodyResult.text);
   } catch {
     return Response.json({ message: "올바른 요청 형식이 아니에요." }, { status: 400 });
   }
