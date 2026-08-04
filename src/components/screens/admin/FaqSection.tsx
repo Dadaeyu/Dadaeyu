@@ -115,22 +115,27 @@ export function FaqSection() {
   }, []);
 
   useEffect(() => {
-    if (mode === "list") loadList();
+    if (mode === "list") queueMicrotask(() => void loadList());
   }, [mode, loadList]);
 
   useEffect(() => {
-    if (isEditing && editingId) loadForEdit(editingId);
-    else if (isCreating) setForm(EMPTY_FORM);
+    queueMicrotask(() => {
+      if (isEditing && editingId) void loadForEdit(editingId);
+      else if (isCreating) setForm(EMPTY_FORM);
+    });
   }, [isEditing, isCreating, editingId, loadForEdit]);
 
   useEffect(() => {
+    if (mode !== "list") return;
+    if (searchInput === q) return;
     const t = setTimeout(() => setQuery(searchInput), 300);
     return () => clearTimeout(t);
-  }, [searchInput, setQuery]);
+  }, [mode, searchInput, q, setQuery]);
 
   useEffect(() => {
-    setSearchInput(q);
-  }, [q]);
+    if (mode !== "list") return;
+    queueMicrotask(() => setSearchInput(q));
+  }, [mode, q]);
 
   const submit = async () => {
     const validationError = validateFaqFields(form.question, form.answer);
@@ -211,14 +216,14 @@ export function FaqSection() {
           value={form.question}
           onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
           placeholder="질문"
-          className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+          className="border-hairline bg-background text-ink placeholder:text-stone w-full rounded-lg border px-3 py-2 text-sm"
         />
         <textarea
           value={form.answer}
           onChange={(e) => setForm((f) => ({ ...f, answer: e.target.value }))}
           placeholder="답변 (상세 내용)"
           rows={8}
-          className="border-hairline w-full resize-y rounded-lg border px-3 py-2 text-sm leading-relaxed"
+          className="border-hairline bg-background text-ink placeholder:text-stone w-full resize-y rounded-lg border px-3 py-2 text-sm leading-relaxed"
         />
         <div className="flex flex-wrap items-center gap-4">
           <label className="text-steel flex items-center gap-2 text-sm">

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { applyIlikeSearch, parseListParams } from "@/lib/admin/list-query";
+import { applyIlikeSearch } from "@/lib/admin/list-query";
+import { parseCommunityListParams } from "@/lib/pagination";
+import { awardPoints, POINT_REASON } from "@/lib/community/points";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +15,7 @@ const POST_TYPE_LABELS: Record<string, string> = {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const { page, pageSize, q, from, to } = parseListParams(searchParams);
+  const { page, pageSize, q, from, to } = parseCommunityListParams(searchParams);
   const typeFilter = searchParams.get("type") ?? "all";
 
   try {
@@ -22,7 +24,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from("tb_community_posts")
       .select(
-        "id, title, post_type, like_count, comment_count, created_at, author_id, tb_members!author_id(nickname)",
+        "id, title, post_type, like_count, comment_count, created_at, author_id, tb_members!author_id(nickname, community_level)",
         { count: "exact" }
       )
       .order("created_at", { ascending: false });
@@ -37,8 +39,12 @@ export async function GET(request: Request) {
     if (error) throw error;
 
     const items = (data ?? []).map((p) => {
-      const author = p.tb_members as { nickname: string } | { nickname: string }[] | null;
-      const nickname = Array.isArray(author) ? author[0]?.nickname : author?.nickname;
+      const author = p.tb_members as
+        | { nickname: string; community_level?: number }
+        | { nickname: string; community_level?: number }[]
+        | null;
+      const authorRow = Array.isArray(author) ? author[0] : author;
+      const nickname = authorRow?.nickname;
 
       return {
         id: p.id,
@@ -46,6 +52,7 @@ export async function GET(request: Request) {
         post_type: p.post_type,
         post_type_label: POST_TYPE_LABELS[p.post_type] ?? p.post_type,
         author_nickname: nickname ?? "알 수 없음",
+        author_community_level: authorRow?.community_level ?? 1,
         like_count: p.like_count,
         comment_count: p.comment_count,
         created_at: p.created_at
@@ -132,6 +139,17 @@ export async function POST(request: Request) {
       .single();
 
     if (error) throw error;
+
+    try {
+      await awardPoints({
+        userId: user.id,
+        reason: POINT_REASON.POST_CREATE,
+        refType: "post",
+        refId: data.id
+      });
+    } catch {
+      // 포인트 실패는 글 등록을 막지 않음
+    }
 
     return NextResponse.json({ post: data }, { status: 201 });
   } catch (e) {

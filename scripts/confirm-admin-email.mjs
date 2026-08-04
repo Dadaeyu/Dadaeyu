@@ -37,17 +37,14 @@ async function main() {
     process.exit(1);
   }
 
-  const res = await fetch(
-    `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query: SQL }),
-    }
-  );
+  const res = await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ query: SQL })
+  });
 
   if (!res.ok) {
     console.error("SQL 실행 실패:", await res.text());

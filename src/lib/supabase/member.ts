@@ -1,5 +1,5 @@
 import { createClient } from "./client";
-import type { AgeGroup, DbMember, DbUserPreferences, Gender } from "./types";
+import type { DbMember, DbUserPreferences } from "./types";
 
 export const NICKNAME_MIN_LENGTH = 2;
 

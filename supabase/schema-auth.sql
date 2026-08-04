@@ -85,7 +85,7 @@ create table if not exists public.tb_members (
     check (gender in ('male', 'female', 'undisclosed')),
   age_group text check (age_group in ('10s', '20s', '30s', '40s', '50s_plus')),
   role text not null default 'user' check (role in ('user', 'admin')),
-  status text not null default 'active' check (status in ('active', 'suspended')),
+  status text not null default 'active' check (status in ('active', 'suspended', 'withdrawn')),
   community_points int not null default 0 check (community_points >= 0),
   community_level int not null default 1,
   onboarding_completed boolean not null default false,
@@ -341,9 +341,9 @@ begin
   if new.status = 'approved'
      and (old.status is distinct from 'approved')
      and new.points_awarded = 0 then
-    new.points_awarded := 30;
+    new.points_awarded := 50;
     insert into public.tb_user_point_events (user_id, amount, reason, ref_type, ref_id)
-    values (new.user_id, 30, 'report_approved', 'report', new.id);
+    values (new.user_id, 50, 'report_approved', 'report', new.id);
   end if;
   return new;
 end;

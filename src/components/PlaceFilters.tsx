@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { ChevronDown, Plus, Minus, Star, Heart } from "lucide-react";
 import { useFilterOptions } from "@/lib/filterOptions";
+import { resolveEndAfterStartChange } from "@/lib/date-range";
 
 export const AGE_GROUPS = ["영유아", "어린이", "청소년", "성인", "고령자"];
 
@@ -197,15 +198,25 @@ export function FilterFields({
           <input
             type="date"
             value={filters.dateFrom}
-            onChange={(e) => set("dateFrom", e.target.value)}
+            max={filters.dateTo || undefined}
+            onChange={(e) => {
+              const dateFrom = e.target.value;
+              set("dateFrom", dateFrom);
+              const nextTo = resolveEndAfterStartChange(dateFrom, filters.dateTo, true);
+              if (nextTo !== filters.dateTo) set("dateTo", nextTo);
+            }}
             className={`border-hairline flex-1 rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 min-w-0 focus:ring-2 focus:outline-none`}
           />
           <span className="text-stone shrink-0 text-xs">~</span>
           <input
             type="date"
             value={filters.dateTo}
-            min={filters.dateFrom}
-            onChange={(e) => set("dateTo", e.target.value)}
+            min={filters.dateFrom || undefined}
+            onChange={(e) => {
+              const dateTo = e.target.value;
+              if (filters.dateFrom && dateTo && dateTo < filters.dateFrom) return;
+              set("dateTo", dateTo);
+            }}
             className={`border-hairline flex-1 rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 min-w-0 focus:ring-2 focus:outline-none`}
           />
         </div>

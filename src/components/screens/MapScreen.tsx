@@ -9,6 +9,7 @@ import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import KakaoMap, { type MapMarker } from "@/components/KakaoMap";
 import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
 import TourismDetailPanel from "@/components/search/TourismDetailPanel";
+import SearchResultList from "@/components/search/SearchResultList";
 import { FilterOverlayPanel } from "@/components/search/FilterPanel";
 import { usePlaceSearch } from "@/hooks/usePlaceSearch";
 import { useMyLocation } from "@/hooks/useMyLocation";
@@ -22,6 +23,7 @@ export default function Map() {
   const searchParams = useSearchParams();
   const initialTheme = searchParams.get("theme");
   const initialPlaceId = searchParams.get("place");
+  const initialQuery = searchParams.get("query")?.trim() ?? "";
   const initialContentId = searchParams.get("contentId");
   const mapOnly = searchParams.get("mode") === "map";
 
@@ -60,13 +62,13 @@ export default function Map() {
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,
     themes: filters.themes,
-    minRating: filters.minRating
+    minRating: filters.minRating,
+    initialKeyword: initialQuery
   });
 
   useEffect(() => {
     if (initialContentId) focusPlaceById(initialContentId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialContentId]);
+  }, [focusPlaceById, initialContentId]);
 
   const {
     location: myLocation,
@@ -138,15 +140,15 @@ export default function Map() {
         <div
           className={`${mapOnly ? "" : "md:hidden"} absolute top-3 right-3 left-3 z-20 flex gap-2`}
         >
-          <div className="relative flex-1 rounded-xl border border-gray-100 bg-white shadow-lg">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <div className="border-hairline bg-background relative flex-1 rounded-xl border shadow-lg">
+            <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
             <input
               type="text"
               placeholder={isSearching ? "검색 중..." : "장소 검색 (Enter)"}
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch(keyword)}
-              className="w-full rounded-xl bg-transparent py-2.5 pr-4 pl-9 text-sm focus:outline-none"
+              className="text-ink placeholder:text-stone w-full rounded-xl bg-transparent py-2.5 pr-4 pl-9 text-sm focus:outline-none"
             />
           </div>
           {!mapOnly && (
@@ -176,6 +178,21 @@ export default function Map() {
             onClose={() => setShowMobileFilters(false)}
           />
         )}
+
+        {searchPlaces.length > 0 && !showMobileFilters && !searchDetail ? (
+          <section
+            className={`${mapOnly ? "" : "md:hidden"} border-hairline absolute top-20 right-3 left-3 z-20 max-h-[min(46vh,24rem)] overflow-y-auto rounded-lg border bg-white shadow-xl`}
+            aria-label={`검색 결과 ${searchPlaces.length}개`}
+          >
+            <div className="border-hairline sticky top-0 border-b bg-white px-4 py-3">
+              <p className="text-ink text-sm font-semibold">검색 결과 {searchPlaces.length}개</p>
+              <p className="text-steel mt-0.5 text-xs">
+                장소를 선택하면 상세 정보를 확인할 수 있습니다.
+              </p>
+            </div>
+            <SearchResultList places={searchPlaces} onSelect={setSearchDetailId} />
+          </section>
+        ) : null}
 
         {/* Kakao Map */}
         <KakaoMap

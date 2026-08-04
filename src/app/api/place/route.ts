@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { brfrTourInfoApi, korTourInfoApi, bakeryInfoApi } from "@/utils/api/external";
+import { requireAdmin } from "@/lib/supabase/require-admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -1440,14 +1441,17 @@ export async function runFullSync(
 // ── 환경변수 확인 (스케줄러와 공용) ─────────────────────────
 // 동기화에 필요한 env(관광공사 서비스키 / Supabase URL·시크릿)를 검증한다.
 export function getSyncConfig():
-  | { ok: true; supabaseUrl: string; secretKey: string }
-  | { ok: false; error: string } {
-  const serviceKey = process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY;
+  { ok: true; supabaseUrl: string; secretKey: string } | { ok: false; error: string } {
+  const serviceKey =
+    process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? process.env.TOUR_API_SERVICE_KEY;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
 
   if (!serviceKey) {
-    return { ok: false, error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY가 설정되지 않았습니다." };
+    return {
+      ok: false,
+      error: ".env에 PUBLIC_DATA_OPEN_API_SERVICE_KEY 또는 TOUR_API_SERVICE_KEY가 필요합니다."
+    };
   }
   if (!supabaseUrl || !secretKey) {
     return {
@@ -1461,6 +1465,9 @@ export function getSyncConfig():
 // ── 핸들러 ──────────────────────────────────────────────────
 // tb_place / tb_place_detail / tb_place_barrierfree / tb_place_bakery 수동 동기화 엔드포인트.
 export async function POST(request: Request) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const config = getSyncConfig();
   if (!config.ok) {
     return NextResponse.json({ error: config.error }, { status: 500 });

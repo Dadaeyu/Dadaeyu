@@ -8,6 +8,8 @@ export interface MyLocationCoords {
 }
 
 export type MyLocationStatus = "idle" | "locating" | "active" | "error";
+export type MyLocationErrorReason =
+  "unsupported" | "denied" | "unavailable" | "timeout" | "outside_daejeon" | null;
 
 // 대전 전역을 넉넉히 덮는 bounding box (동/중/서/유성/대덕구 + 여유분)
 const DAEJEON_BOUNDS = { minLat: 36.05, maxLat: 36.55, minLng: 127.15, maxLng: 127.65 };
@@ -26,6 +28,7 @@ function isInDaejeon({ lat, lng }: MyLocationCoords): boolean {
 export function useMyLocation() {
   const [location, setLocation] = useState<MyLocationCoords | null>(null);
   const [status, setStatus] = useState<MyLocationStatus>("idle");
+  const [errorReason, setErrorReason] = useState<MyLocationErrorReason>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
   const watchIdRef = useRef<number | null>(null);
   const pendingFocusRef = useRef(false);
@@ -33,6 +36,7 @@ export function useMyLocation() {
   const start = () => {
     if (!navigator.geolocation) {
       setStatus("error");
+      setErrorReason("unsupported");
       return;
     }
     if (watchIdRef.current !== null) {
@@ -40,6 +44,7 @@ export function useMyLocation() {
     }
 
     setStatus("locating");
+    setErrorReason(null);
     pendingFocusRef.current = true;
 
     watchIdRef.current = navigator.geolocation.watchPosition(
@@ -48,18 +53,24 @@ export function useMyLocation() {
         if (!isInDaejeon(coords)) {
           setLocation(null);
           setStatus("error");
+          setErrorReason("outside_daejeon");
           return;
         }
         setLocation(coords);
         setStatus("active");
+        setErrorReason(null);
         if (pendingFocusRef.current) {
           pendingFocusRef.current = false;
           setFocusTrigger((n) => n + 1);
         }
       },
-      () => {
+      (error) => {
         setLocation(null);
         setStatus("error");
+        if (error.code === error.PERMISSION_DENIED) setErrorReason("denied");
+        else if (error.code === error.POSITION_UNAVAILABLE) setErrorReason("unavailable");
+        else if (error.code === error.TIMEOUT) setErrorReason("timeout");
+        else setErrorReason("unavailable");
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
     );
@@ -71,5 +82,5 @@ export function useMyLocation() {
     };
   }, []);
 
-  return { location, status, start, focusTrigger };
+  return { location, status, errorReason, start, focusTrigger };
 }

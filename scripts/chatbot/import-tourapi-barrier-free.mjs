@@ -3,22 +3,21 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const TOUR_API_BASE_URL =
-  "https://apis.data.go.kr/B551011/KorWithService2";
+const TOUR_API_BASE_URL = "https://apis.data.go.kr/B551011/KorWithService2";
 const DEFAULT_AREA_CODE = "3";
 const DEFAULT_MOBILE_OS = "ETC";
 const DEFAULT_MOBILE_APP = "Dadaeyu";
 const DEFAULT_ROWS_PER_PAGE = 50;
-const DEFAULT_LIMIT = 20;
+const DEFAULT_LIMIT = 500;
 
 const CONTENT_TYPES = {
-  "12": "관광지",
-  "14": "문화시설",
-  "15": "행사/공연/축제",
-  "28": "레포츠",
-  "32": "숙박",
-  "38": "쇼핑",
-  "39": "음식점"
+  12: "관광지",
+  14: "문화시설",
+  15: "행사/공연/축제",
+  28: "레포츠",
+  32: "숙박",
+  38: "쇼핑",
+  39: "음식점"
 };
 
 const ACCESSIBILITY_FIELDS = [
@@ -65,7 +64,10 @@ function loadEnv(filePath = ".env.local") {
     if (index === -1) continue;
 
     const key = trimmed.slice(0, index).trim();
-    const value = trimmed.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
+    const value = trimmed
+      .slice(index + 1)
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
     if (key && process.env[key] === undefined) {
       process.env[key] = value;
     }
@@ -118,21 +120,15 @@ function normalizeSupabaseRestUrl(rawUrl) {
 
   try {
     const parsed = new URL(rawUrl);
-    return rawUrl.includes("/rest/v1")
-      ? rawUrl.replace(/\/$/, "")
-      : `${parsed.origin}/rest/v1`;
+    return rawUrl.includes("/rest/v1") ? rawUrl.replace(/\/$/, "") : `${parsed.origin}/rest/v1`;
   } catch {
     return "";
   }
 }
 
 function getSupabaseConfig() {
-  const rawUrl =
-    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const key =
-    process.env.SUPABASE_SECRET_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    "";
+  const rawUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   const schema = process.env.SUPABASE_SCHEMA || "chatbot";
   const chunksTable = process.env.SUPABASE_CHAT_TABLE || "chunks";
   const documentsTable = process.env.SUPABASE_DOCUMENTS_TABLE || "documents";
@@ -154,9 +150,7 @@ function buildTourApiUrl(operation, serviceKey, params) {
     ...params
   });
 
-  const encodedKey = serviceKey.includes("%")
-    ? serviceKey
-    : encodeURIComponent(serviceKey);
+  const encodedKey = serviceKey.includes("%") ? serviceKey : encodeURIComponent(serviceKey);
 
   return `${TOUR_API_BASE_URL}/${operation}?${searchParams.toString()}&serviceKey=${encodedKey}`;
 }
@@ -182,9 +176,7 @@ async function tourApiRequest(operation, serviceKey, params) {
   const header = data?.response?.header;
   const resultCode = String(header?.resultCode || "");
   if (resultCode && resultCode !== "0000" && resultCode !== "00") {
-    throw new Error(
-      `${operation} failed: ${resultCode} ${header?.resultMsg || ""}`.trim()
-    );
+    throw new Error(`${operation} failed: ${resultCode} ${header?.resultMsg || ""}`.trim());
   }
 
   return data?.response?.body || {};
@@ -234,9 +226,7 @@ function text(value) {
 
 function buildAccessibility(detail) {
   return Object.fromEntries(
-    ACCESSIBILITY_FIELDS.map(([key]) => [key, text(detail[key])]).filter(
-      ([, value]) => value
-    )
+    ACCESSIBILITY_FIELDS.map(([key]) => [key, text(detail[key])]).filter(([, value]) => value)
   );
 }
 
@@ -390,9 +380,7 @@ async function supabaseRequest(config, path, options = {}) {
         `${config.schema} schema is not exposed in Supabase Data API. Add it in Project Settings > API > Data API > Exposed schemas.`
       );
     }
-    throw new Error(
-      `Supabase request failed (${response.status}): ${errorText.slice(0, 500)}`
-    );
+    throw new Error(`Supabase request failed (${response.status}): ${errorText.slice(0, 500)}`);
   }
 
   if (response.status === 204) return null;
@@ -550,8 +538,7 @@ async function main() {
         {
           mode: "dry-run",
           count: rows.length,
-          message:
-            "Use --write to upsert these rows into Supabase after confirming the preview.",
+          message: "Use --write to upsert these rows into Supabase after confirming the preview.",
           preview: rows.slice(0, 3)
         },
         null,

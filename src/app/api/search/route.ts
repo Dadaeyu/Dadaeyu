@@ -14,10 +14,13 @@ async function getBarrierFreeIds(types: string[]): Promise<number[]> {
   const cols = Array.from(new Set(types.map((t) => BARRIERFREE_COLS[t]).filter(Boolean)));
   if (cols.length === 0) return [];
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("tb_place_barrierfree")
     .select("contentid")
     .or(cols.map((c) => `${c}.eq.true`).join(","));
+
+  if (error) throw error;
+
   return (data ?? []).map((row) => row.contentid as number);
 }
 
@@ -199,9 +202,17 @@ export async function GET(request: Request) {
   if (guCode.trim()) query = query.eq("ldongsigngucd", guCode);
   if (dong.trim()) query = query.eq("dong", dong.trim());
   if (themes.length > 0) query = query.in("lclssystm1", themes); // 테마(대분류) — 선택 중 하나라도 해당
-  if (accessTypes.length > 0) {
-    const accessIds = await getBarrierFreeIds(accessTypes);
-    query = query.in("contentid", accessIds.length > 0 ? accessIds : [-1]);
+
+  try {
+    if (accessTypes.length > 0) {
+      const accessIds = await getBarrierFreeIds(accessTypes);
+      query = query.in("contentid", accessIds.length > 0 ? accessIds : [-1]);
+    }
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "접근성 정보를 조회하지 못했습니다." },
+      { status: 500 }
+    );
   }
   if (minRating > 0) {
     const ratedIds = await getRatedContentIds(minRating);

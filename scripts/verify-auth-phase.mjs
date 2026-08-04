@@ -30,8 +30,8 @@ async function tableOk(supabase, table) {
 
 async function main() {
   const env = loadEnv();
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = env.SUPABASE_SECRET_KEY;
+  const url = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
     console.error("❌ .env.local 에 SUPABASE URL/KEY 가 없습니다.");
@@ -39,12 +39,12 @@ async function main() {
   }
 
   const supabase = createClient(url, key, {
-    auth: { autoRefreshToken: false, persistSession: false },
+    auth: { autoRefreshToken: false, persistSession: false }
   });
 
   const checks = [
     { name: "members (1단계 필수)", table: "tb_members", required: true },
-    { name: "user_preferences (2단계)", table: "tb_user_preferences", required: false },
+    { name: "user_preferences (2단계)", table: "tb_user_preferences", required: false }
   ];
 
   let failed = false;

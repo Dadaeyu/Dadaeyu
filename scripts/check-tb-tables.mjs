@@ -18,8 +18,16 @@ const env = Object.fromEntries(
     })
 );
 
-const sb = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
+const supabaseUrl = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+const adminKey = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
+if (!supabaseUrl || !adminKey) {
+  throw new Error(
+    ".env.local에 Supabase URL과 SUPABASE_SECRET_KEY 또는 SUPABASE_SERVICE_ROLE_KEY가 필요합니다."
+  );
+}
+
+const sb = createClient(supabaseUrl, adminKey, {
+  auth: { autoRefreshToken: false, persistSession: false }
 });
 
 const BASE_NAMES = [
@@ -36,7 +44,7 @@ const BASE_NAMES = [
   "community_comments",
   "post_likes",
   "place_reports",
-  "admin_monthly_signups",
+  "admin_monthly_signups"
 ];
 
 async function probe(name) {
@@ -55,7 +63,7 @@ async function probe(name) {
 
 async function main() {
   console.log("Supabase DB 테이블 tb_ 점검\n");
-  console.log("프로젝트:", env.NEXT_PUBLIC_SUPABASE_URL);
+  console.log("프로젝트:", supabaseUrl);
   console.log("─".repeat(56));
 
   const legacyFound = [];
@@ -102,12 +110,6 @@ async function main() {
   if (tbMissing.length) {
     console.log(`  ✗ tb_ 테이블 미생성: ${tbMissing.join(", ")}`);
   }
-
-  // 함수 점검: insert_member_for_auth_user 소스에 members 참조 여부
-  const fnRes = await fetch(
-    `${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/version`,
-    { headers: { apikey: env.SUPABASE_SECRET_KEY } }
-  ).catch(() => null);
 
   console.log("\n참고: DB 함수는 REST로 조회 불가.");
   console.log("  insert_member 오류 났다면 schema-fix-tb-functions.sql 미적용 상태입니다.");

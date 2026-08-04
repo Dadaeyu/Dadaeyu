@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { MapPin, Star } from "lucide-react";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 
@@ -21,9 +22,12 @@ export default function SearchResultList({
         >
           <div className="flex items-start gap-2">
             {sp.image ? (
-              <img
+              <Image
                 src={sp.image}
                 alt={sp.name}
+                width={40}
+                height={40}
+                unoptimized
                 className="h-10 w-10 shrink-0 rounded-lg object-cover"
               />
             ) : (

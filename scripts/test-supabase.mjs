@@ -12,8 +12,14 @@ const env = Object.fromEntries(
     .map((l) => l.split("=").map((s) => s.trim()))
 );
 
-const url = env.NEXT_PUBLIC_SUPABASE_URL;
-const secretKey = env.SUPABASE_SECRET_KEY;
+const url = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+const secretKey = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!url || !secretKey) {
+  throw new Error(
+    ".env.local에 Supabase URL과 SUPABASE_SECRET_KEY 또는 SUPABASE_SERVICE_ROLE_KEY가 필요합니다."
+  );
+}
 
 const supabase = createClient(url, secretKey);
 
@@ -21,5 +27,8 @@ const supabase = createClient(url, secretKey);
 const tables = ["tb_places", "tb_place_reviews", "tb_courses", "tb_community_posts", "users"];
 for (const table of tables) {
   const { data, error } = await supabase.from(table).select("*").limit(1);
-  console.log(`[${table}]`, error ? `ERROR: ${error.message}` : `OK (${data?.length ?? 0} rows sampled)`);
+  console.log(
+    `[${table}]`,
+    error ? `ERROR: ${error.message}` : `OK (${data?.length ?? 0} rows sampled)`
+  );
 }

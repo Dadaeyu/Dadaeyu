@@ -12,7 +12,7 @@ const settingsConfig = [
   {
     key: "highContrast" as const,
     label: "고대비",
-    description: "글자·테두리 대비 살짝 강화",
+    description: "글자·테두리·면 구분을 더 또렷하게",
     toggle: "toggleHighContrast" as const
   },
   {
@@ -54,7 +54,7 @@ export default function AccessibilitySettings({ onClose }: Props) {
       <div
         role="dialog"
         aria-label="접근성 설정"
-        className="border-hairline absolute top-full right-4 z-50 mt-2 w-64 rounded-xl border bg-white p-3 shadow-lg"
+        className="border-hairline absolute top-full right-4 z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border bg-white p-3 shadow-lg"
       >
         <p className="text-stone mb-2 px-1 text-xs font-semibold">접근성 설정</p>
         <div className="space-y-1">
@@ -85,7 +85,7 @@ export default function AccessibilitySettings({ onClose }: Props) {
             </button>
           ))}
 
-          <div className="flex w-full items-center justify-between rounded-lg px-2 py-2">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-2">
             <div className="text-left">
               <p className="text-ink text-sm font-medium">화면 확대</p>
               <p className="text-stone text-xs">텍스트 크기 조절</p>
@@ -95,7 +95,7 @@ export default function AccessibilitySettings({ onClose }: Props) {
                 type="button"
                 onClick={decreaseFontScale}
                 disabled={fontScale <= FONT_SCALE_MIN}
-                className="flex h-6 w-6 items-center justify-center rounded-md bg-gray-100 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex h-12 w-12 items-center justify-center rounded-md bg-gray-100 text-lg font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="화면 축소"
               >
                 −
@@ -110,7 +110,7 @@ export default function AccessibilitySettings({ onClose }: Props) {
                 type="button"
                 onClick={increaseFontScale}
                 disabled={fontScale >= FONT_SCALE_MAX}
-                className="flex h-6 w-6 items-center justify-center rounded-md bg-gray-100 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex h-12 w-12 items-center justify-center rounded-md bg-gray-100 text-lg font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="화면 확대"
               >
                 +

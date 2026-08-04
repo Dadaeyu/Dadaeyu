@@ -26,17 +26,14 @@ function loadEnv() {
 }
 
 async function queryManagementApi(token, query) {
-  const res = await fetch(
-    `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query }),
-    }
-  );
+  const res = await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ query })
+  });
   const text = await res.text();
   if (!res.ok) throw new Error(text.slice(0, 400));
   return JSON.parse(text);
@@ -96,7 +93,7 @@ async function checkBehavioral(supabase) {
       provider,
       confirmed,
       hasMember,
-      created: u.created_at,
+      created: u.created_at
     };
   });
 
@@ -113,24 +110,27 @@ async function checkBehavioral(supabase) {
     unconfirmedWithMember,
     confirmedEmailNoMember,
     oauthNoMember,
-    rows,
+    rows
   };
 }
 
 async function main() {
   const env = loadEnv();
-  const supabase = createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SECRET_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
+  const supabaseUrl = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+  const adminKey = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !adminKey) {
+    throw new Error(
+      ".env.local에 Supabase URL과 SUPABASE_SECRET_KEY 또는 SUPABASE_SERVICE_ROLE_KEY가 필요합니다."
+    );
+  }
+  const supabase = createClient(supabaseUrl, adminKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
 
   console.log("=== phase4 이메일 인증 스키마 검증 ===\n");
 
   if (env.SUPABASE_ACCESS_TOKEN) {
-    const { triggers, functions } = await checkTriggersAndFunctions(
-      env.SUPABASE_ACCESS_TOKEN
-    );
+    const { triggers, functions } = await checkTriggersAndFunctions(env.SUPABASE_ACCESS_TOKEN);
     const triggerNames = triggers.map((t) => t.trigger_name);
     const fnNames = functions.map((f) => f.proname);
 
@@ -138,7 +138,7 @@ async function main() {
     const expectedFns = [
       "insert_member_for_auth_user",
       "handle_new_user",
-      "handle_user_email_confirmed",
+      "handle_user_email_confirmed"
     ];
 
     console.log("[DB 트리거]");
@@ -161,28 +161,18 @@ async function main() {
     }
     console.log("");
   } else {
-    console.log(
-      "○ SUPABASE_ACCESS_TOKEN 없음 → 트리거/함수 직접 조회 생략 (행동 검증만 수행)\n"
-    );
+    console.log("○ SUPABASE_ACCESS_TOKEN 없음 → 트리거/함수 직접 조회 생략 (행동 검증만 수행)\n");
   }
 
   const behavior = await checkBehavioral(supabase);
 
   console.log("[사용자 ↔ members 매칭] (총", behavior.totalUsers, "명)");
-  console.log(
-    "  미인증 이메일 가입:",
-    behavior.unconfirmedEmail.length,
-    "명"
-  );
+  console.log("  미인증 이메일 가입:", behavior.unconfirmedEmail.length, "명");
 
   if (behavior.unconfirmedEmail.length === 0) {
-    console.log(
-      "  ○ 미인증 이메일 계정 없음 — 트리거 적용 여부는 가입 테스트로 확인 필요"
-    );
+    console.log("  ○ 미인증 이메일 계정 없음 — 트리거 적용 여부는 가입 테스트로 확인 필요");
   } else if (behavior.unconfirmedWithMember.length === 0) {
-    console.log(
-      "  ✓ 미인증 이메일 가입자 모두 members 없음 → phase4 동작과 일치"
-    );
+    console.log("  ✓ 미인증 이메일 가입자 모두 members 없음 → phase4 동작과 일치");
   } else {
     console.log(
       "  ❌ 미인증 이메일인데 members 있음:",
@@ -192,9 +182,7 @@ async function main() {
     for (const r of behavior.unconfirmedWithMember) {
       console.log(`     - ${r.email}`);
     }
-    console.log(
-      "     → phase4 미적용이거나, 적용 전에 가입된 계정일 수 있음"
-    );
+    console.log("     → phase4 미적용이거나, 적용 전에 가입된 계정일 수 있음");
   }
 
   if (behavior.confirmedEmailNoMember.length > 0) {
@@ -223,8 +211,7 @@ async function main() {
   }
 
   const phase4LikelyOk =
-    behavior.unconfirmedWithMember.length === 0 &&
-    behavior.oauthNoMember.length === 0;
+    behavior.unconfirmedWithMember.length === 0 && behavior.oauthNoMember.length === 0;
 
   console.log(
     phase4LikelyOk

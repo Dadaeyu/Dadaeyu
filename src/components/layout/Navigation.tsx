@@ -39,10 +39,8 @@ function desktopNavClass(active: boolean, variant: "default" | "admin" = "defaul
 
 function mobileNavClass(active: boolean) {
   return cn(
-    "relative flex min-w-[3.25rem] flex-col items-center gap-0.5 rounded-xl px-2.5 py-2 transition-all",
-    active
-      ? "bg-brand-50 text-brand-700 scale-[1.02] shadow-sm ring-2 ring-brand-300/60"
-      : "text-stone hover:bg-surface-soft hover:text-brand-600"
+    "mobile-nav-item relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-2.5 py-2 transition-colors",
+    active ? "text-brand-800" : "text-stone hover:bg-surface-soft hover:text-brand-600"
   );
 }
 
@@ -52,7 +50,7 @@ export function DesktopNav() {
   const isAdmin = auth?.member?.role === "admin" && auth?.member?.status === "active";
 
   return (
-    <nav className="hidden items-center gap-1 md:flex" aria-label="주 메뉴">
+    <nav className="hidden items-center gap-0.5 md:flex lg:gap-1" aria-label="주 메뉴">
       {navItems.map(({ path, label, icon: Icon }) => {
         const active = isActive(path);
         return (
@@ -61,7 +59,7 @@ export function DesktopNav() {
             href={path}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm transition-all",
+              "relative flex min-h-12 min-w-12 shrink-0 items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs whitespace-nowrap transition-all lg:gap-2 lg:px-3.5 lg:text-sm",
               desktopNavClass(active)
             )}
           >
@@ -77,7 +75,7 @@ export function DesktopNav() {
             href={adminItem.path}
             aria-current={isActive(adminItem.path) ? "page" : undefined}
             className={cn(
-              "relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm transition-all",
+              "relative flex min-h-12 min-w-12 shrink-0 items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs whitespace-nowrap transition-all lg:gap-2 lg:px-3.5 lg:text-sm",
               desktopNavClass(isActive(adminItem.path), "admin")
             )}
           >
@@ -101,7 +99,7 @@ export function MobileNav() {
       className="border-hairline fixed right-0 bottom-0 left-0 z-50 border-t bg-white/95 backdrop-blur-md md:hidden"
       aria-label="주 메뉴"
     >
-      <div className="flex items-stretch justify-around px-1 py-1">
+      <div className="mobile-nav-list flex items-stretch justify-around px-1 py-1">
         {allItems.map(({ path, label, icon: Icon }) => {
           const active = isActive(path);
           return (
@@ -113,7 +111,7 @@ export function MobileNav() {
             >
               {active && (
                 <span
-                  className="bg-brand-500 absolute top-0 left-1/2 h-1 w-7 -translate-x-1/2 rounded-b-full"
+                  className="bg-brand-500 absolute top-0 left-1/2 h-1 w-6 -translate-x-1/2 rounded-b-full"
                   aria-hidden="true"
                 />
               )}

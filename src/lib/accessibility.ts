@@ -60,6 +60,7 @@ export function applyAccessibilityState(state: AccessibilityState): void {
   const root = document.documentElement;
   root.classList.toggle("dark", state.darkMode);
   root.classList.toggle("high-contrast", state.highContrast);
+  root.classList.toggle("font-scale-large", state.fontScale >= 150);
   root.style.setProperty("--a11y-scale", String(state.fontScale / 100));
 }
 

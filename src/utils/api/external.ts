@@ -4,7 +4,8 @@ import { GET } from "./axios";
 const PUBLIC_DATA_URL = "https://apis.data.go.kr";
 
 const tourDefaultParams = (): Record<string, string> => ({
-  serviceKey: process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? "",
+  serviceKey:
+    process.env.PUBLIC_DATA_OPEN_API_SERVICE_KEY ?? process.env.TOUR_API_SERVICE_KEY ?? "",
   MobileOS: "WIN",
   MobileApp: "Dadaeyu",
   _type: "json"

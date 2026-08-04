@@ -25,7 +25,12 @@ export async function buildTokenHashConfirmUrl(
   options?: {
     next?: string;
     password?: string;
-    profile?: { nickname?: string; phone?: string; theme_preferences?: string[] };
+    profile?: {
+      nickname?: string;
+      phone?: string;
+      theme_preferences?: string[];
+      accessibility_needs?: string[];
+    };
   }
 ): Promise<string | null> {
   const normalizedEmail = normalizeEmail(email);
@@ -46,6 +51,9 @@ export async function buildTokenHashConfirmUrl(
           phone: options.profile?.phone,
           ...(options.profile?.theme_preferences?.length
             ? { theme_preferences: options.profile.theme_preferences }
+            : {}),
+          ...(options.profile?.accessibility_needs?.length
+            ? { accessibility_needs: options.profile.accessibility_needs }
             : {})
         },
         redirectTo

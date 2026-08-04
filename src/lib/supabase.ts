@@ -1,7 +1,13 @@
+import "server-only";
 import { createClient } from "@supabase/supabase-js";
+import { getServerSupabaseConfig } from "@/lib/supabase/config";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!.replace(/\/rest\/v1\/?$/, "");
-const key =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const config = getServerSupabaseConfig();
 
-export const supabase = createClient(url, key);
+if (!config.isConfigured) {
+  throw new Error("Supabase server configuration is missing");
+}
+
+export const supabase = createClient(config.url.replace(/\/rest\/v1\/?$/, ""), config.key, {
+  auth: { persistSession: false, autoRefreshToken: false }
+});

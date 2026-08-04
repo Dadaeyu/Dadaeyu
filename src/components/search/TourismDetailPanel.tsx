@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Star,
@@ -12,14 +13,15 @@ import {
   MessageCircle,
   PenLine,
   Plus,
-  ExternalLink
+  ExternalLink,
+  Phone
 } from "lucide-react";
 import { PLACE_DETAILS } from "@/data/placesData";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import type { TourismDetail } from "@/hooks/usePlaceSearch";
 import AccessibilitySection from "./AccessibilitySection";
 import { useAuth } from "@/context/AuthContext";
-import { isPlaceLiked, togglePlaceLike } from "@/lib/supabase/placeLikes";
+import { isPlaceLiked } from "@/lib/supabase/placeLikes";
 
 // 카카오 검색 결과(source="kakao")는 DB 상세가 없어 리뷰 대신 이 플레이스홀더를 보여준다.
 const PLACEHOLDER_DETAIL = PLACE_DETAILS[1];
@@ -117,7 +119,9 @@ export default function TourismDetailPanel({
       return;
     }
     let cancelled = false;
-    setReviewsLoading(true);
+    queueMicrotask(() => {
+      if (!cancelled) setReviewsLoading(true);
+    });
     fetch(`/api/tourism/place-reviews?contentId=${encodeURIComponent(sp.id)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
@@ -157,8 +161,8 @@ export default function TourismDetailPanel({
 
   useEffect(() => {
     if (isKakao || !user || placeId == null) {
-      setFavorited(false);
-      return;
+      queueMicrotask(() => setFavorited(false));
+      return undefined;
     }
     let cancelled = false;
     isPlaceLiked(user.id, placeId)
@@ -185,7 +189,17 @@ export default function TourismDetailPanel({
     const next = !favorited;
     setFavorited(next);
     try {
-      await togglePlaceLike(user.id, placeId as number);
+      const res = await fetch("/api/places/favorite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ place_id: placeId })
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        favorited?: boolean;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error ?? "즐겨찾기 실패");
+      if (typeof json.favorited === "boolean") setFavorited(json.favorited);
       onLikeChange?.();
     } catch {
       setFavorited(!next);
@@ -233,7 +247,14 @@ export default function TourismDetailPanel({
 
       {/* 이미지 */}
       {image ? (
-        <img src={image} alt={title} className="h-40 w-full shrink-0 object-cover" />
+        <Image
+          src={image}
+          alt={title}
+          width={640}
+          height={320}
+          unoptimized
+          className="h-40 w-full shrink-0 object-cover"
+        />
       ) : (
         <div className="from-brand-400 to-brand-600 flex h-40 shrink-0 items-center justify-center bg-gradient-to-br">
           <MapPin className="h-12 w-12 text-white/60" />
@@ -322,17 +343,28 @@ export default function TourismDetailPanel({
               )}
             </div>
           ) : (
-            sp.placeUrl && (
-              <a
-                href={sp.placeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
-              >
-                <ExternalLink className="h-4 w-4" />
-                카카오맵에서 보기
-              </a>
-            )
+            <div className="space-y-2">
+              {sp.phone && (
+                <a
+                  href={`tel:${sp.phone.replace(/[^\d+]/g, "")}`}
+                  className="border-brand-200 text-brand-800 flex items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold transition-colors hover:bg-cyan-50"
+                >
+                  <Phone className="h-4 w-4" />
+                  전화하기
+                </a>
+              )}
+              {sp.placeUrl && (
+                <a
+                  href={sp.placeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  카카오맵에서 보기
+                </a>
+              )}
+            </div>
           )}
 
           {/* 리뷰 */}
