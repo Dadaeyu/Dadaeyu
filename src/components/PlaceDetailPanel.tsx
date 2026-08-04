@@ -15,6 +15,7 @@ import {
 import { useRouter } from "next/navigation";
 import { PLACE_DETAILS, ACCESSIBILITY_LABELS, PLACE_COLORS, type Place } from "@/data/placesData";
 import { useCourseContext } from "@/context/CourseContext";
+import { useAuth } from "@/context/AuthContext";
 
 export default function PlaceDetailPanel({
   place,
@@ -29,8 +30,10 @@ export default function PlaceDetailPanel({
   const [showReport, setShowReport] = useState(false);
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [loginNotice, setLoginNotice] = useState(false);
   const detail = PLACE_DETAILS[place.id];
   const { myCourses, addPlaceToCourse } = useCourseContext();
+  const { user } = useAuth();
   const router = useRouter();
 
   const handleAddToCourse = (courseId: number, courseTitle: string) => {
@@ -38,6 +41,16 @@ export default function PlaceDetailPanel({
     setShowCourseDropdown(false);
     setToast(`"${courseTitle}"에 추가됐어요`);
     setTimeout(() => setToast(null), 2500);
+  };
+
+  const handleCreateCourse = () => {
+    setShowCourseDropdown(false);
+    if (!user) {
+      setLoginNotice(true);
+      setTimeout(() => setLoginNotice(false), 2000);
+      return;
+    }
+    router.push("/course/new");
   };
 
   const gradients: Record<string, string> = {
@@ -113,6 +126,14 @@ export default function PlaceDetailPanel({
             즐겨찾기
           </button>
 
+          <button
+            onClick={() => onNavigate?.(place)}
+            className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+          >
+            <Navigation className="h-4 w-4 text-blue-500" />
+            경로안내
+          </button>
+
           {/* 내 코스에 추가 드롭다운 */}
           <div className="relative">
             <button
@@ -140,10 +161,7 @@ export default function PlaceDetailPanel({
                   </button>
                 ))}
                 <button
-                  onClick={() => {
-                    setShowCourseDropdown(false);
-                    router.push("/course/new");
-                  }}
+                  onClick={handleCreateCourse}
                   className="text-brand-600 hover:bg-brand-50 flex w-full items-center gap-2 border-t border-gray-100 px-3 py-2.5 text-xs font-medium transition-colors"
                 >
                   <Plus className="h-3.5 w-3.5" />새 코스 만들기
@@ -151,14 +169,6 @@ export default function PlaceDetailPanel({
               </div>
             )}
           </div>
-
-          <button
-            onClick={() => onNavigate?.(place)}
-            className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
-          >
-            <Navigation className="h-4 w-4 text-blue-500" />
-            경로안내
-          </button>
         </div>
 
         {/* 토스트 */}
@@ -166,6 +176,11 @@ export default function PlaceDetailPanel({
           <div className="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-gray-900 px-4 py-2.5 text-xs whitespace-nowrap text-white shadow-lg">
             <Check className="h-3.5 w-3.5 shrink-0 text-green-400" />
             {toast}
+          </div>
+        )}
+        {loginNotice && (
+          <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-gray-900 px-4 py-2.5 text-xs whitespace-nowrap text-white shadow-lg">
+            로그인 후 이용 가능합니다
           </div>
         )}
 

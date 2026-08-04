@@ -3,10 +3,9 @@
 // 장소 필터(접근성/인원수/테마/위치/일정/별점/즐겨찾기) 상태 훅과 필터 UI 필드 모음.
 import { useState } from "react";
 import { ChevronDown, Plus, Minus, Star, Heart } from "lucide-react";
+import { useFilterOptions } from "@/lib/filterOptions";
 
-export const THEMES = ["빵지순례", "먹거리", "과학", "자연힐링", "문화예술", "역사근대", "축제"];
 export const AGE_GROUPS = ["영유아", "어린이", "청소년", "성인", "고령자"];
-export const ACCESSIBILITY = ["시각", "청각", "보행", "영유아", "임산부", "고령자"];
 
 export interface Filters {
   accessibility: string[];
@@ -53,8 +52,7 @@ export function useFilters(initial?: Partial<Filters>) {
 
   const activeCount = [
     filters.accessibility.length > 0,
-    filters.gu,
-    filters.dong,
+    filters.gu || filters.dong, // 위치(구/동)는 하나로 카운트
     filters.themes.length > 0,
     filters.headcount > 1,
     filters.dateFrom || filters.dateTo,
@@ -80,6 +78,9 @@ export function FilterFields({
   dongOptions?: string[];
   compact?: boolean;
 }) {
+  // 접근성 · 테마 옵션은 전역 캐시에서 가져온다 (브라우저 첫 진입 시 1회 조회).
+  const { accessibility: accessOptions, themes: themeOptions } = useFilterOptions();
+
   const xs = compact ? "text-xs" : "text-sm";
   const chip = (active: boolean) =>
     `px-2 py-1 ${compact ? "text-xs" : "text-sm"} rounded-full border transition-colors ${
@@ -100,13 +101,13 @@ export function FilterFields({
       <div>
         <p className={`${xs} text-steel mb-1.5 font-semibold`}>접근성</p>
         <div className="flex flex-wrap gap-1">
-          {ACCESSIBILITY.map((a) => (
+          {accessOptions.map((a) => (
             <button
-              key={a}
-              onClick={() => toggleList("accessibility", a)}
-              className={chip(filters.accessibility.includes(a))}
+              key={a.code}
+              onClick={() => toggleList("accessibility", a.code)}
+              className={chip(filters.accessibility.includes(a.code))}
             >
-              {a}
+              {a.name}
             </button>
           ))}
         </div>
@@ -136,13 +137,13 @@ export function FilterFields({
       <div className={full}>
         <p className={`${xs} text-steel mb-1.5 font-semibold`}>테마</p>
         <div className="flex flex-wrap gap-1">
-          {THEMES.map((t) => (
+          {themeOptions.map((t) => (
             <button
-              key={t}
-              onClick={() => toggleList("themes", t)}
-              className={chip(filters.themes.includes(t))}
+              key={t.code}
+              onClick={() => toggleList("themes", t.code)}
+              className={chip(filters.themes.includes(t.code))}
             >
-              {t}
+              {t.name}
             </button>
           ))}
         </div>

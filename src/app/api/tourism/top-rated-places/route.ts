@@ -37,6 +37,7 @@ export async function GET() {
 
     let result: {
       id: string;
+      placeId: number;
       name: string;
       lat: number;
       lng: number;
@@ -48,7 +49,7 @@ export async function GET() {
     if (ranked.length > 0) {
       const { data: places, error: placesError } = await supabase
         .from("tb_place")
-        .select("contentid, title, mapx, mapy, firstimage")
+        .select("place_id, contentid, title, mapx, mapy, firstimage")
         .in(
           "contentid",
           ranked.map((r) => r.contentId)
@@ -66,6 +67,7 @@ export async function GET() {
           if (!p) return null;
           return {
             id: String(p.contentid),
+            placeId: p.place_id,
             name: p.title,
             lat: Number(p.mapy),
             lng: Number(p.mapx),
@@ -98,6 +100,7 @@ export async function GET() {
         .slice(0, remaining)
         .map((p) => ({
           id: String(p.contentid),
+          placeId: p.place_id,
           name: p.title,
           lat: Number(p.mapy),
           lng: Number(p.mapx),

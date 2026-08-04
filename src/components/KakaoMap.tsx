@@ -37,6 +37,13 @@ export interface TooltipInfo {
   phone?: string;
 }
 
+// 경로선 한 구간(코스 일정용). points 가 2개 미만이면 그리지 않는다.
+export interface MapPathSegment {
+  points: { lat: number; lng: number }[];
+  color?: string; // 기본 초록
+  dashed?: boolean; // true 면 점선(Day 간 연결 구간 표시용)
+}
+
 // ── Props ──────────────────────────────────────────────────
 interface Props {
   markers?: MapMarker[];
@@ -50,6 +57,8 @@ interface Props {
   onCloseTooltip?: () => void;
   myLocation?: { lat: number; lng: number } | null;
   focusMyLocationTrigger?: number;
+  // 여러 구간의 경로선(코스 일정용). 구간별로 색상·점선 여부를 다르게 줄 수 있다.
+  path?: MapPathSegment[];
 }
 
 // ── 핀 렌더러 ──────────────────────────────────────────────
@@ -117,13 +126,15 @@ export default function KakaoMap({
   tooltip = null,
   onCloseTooltip,
   myLocation = null,
-  focusMyLocationTrigger = 0
+  focusMyLocationTrigger = 0,
+  path = []
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const overlaysRef = useRef<kakao.maps.CustomOverlay[]>([]);
   const markerElemsRef = useRef(new Map<string, HTMLDivElement>());
   const polylineRef = useRef<kakao.maps.Polyline | null>(null);
+  const pathPolylinesRef = useRef<kakao.maps.Polyline[]>([]);
   const tooltipOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const myLocationOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const [mapInitCount, setMapInitCount] = useState(0);
@@ -162,7 +173,9 @@ export default function KakaoMap({
         content: el,
         yAnchor: marker.shape === "dot" || marker.shape === "heart" ? 0.5 : 1,
         xAnchor: 0.5,
-        zIndex: marker.id === selectedId ? 5 : 3
+        zIndex: marker.id === selectedId ? 5 : 3,
+        // 마커 클릭이 지도 클릭(onDeselect)으로 이어지지 않게 함 → 다른 마커 클릭 시 바로 그 상세로 전환.
+        clickable: true
       });
       overlay.setMap(mapRef.current!);
       overlaysRef.current.push(overlay);
@@ -257,6 +270,30 @@ export default function KakaoMap({
       polylineRef.current = line;
     }
   }, [navTarget, myLocation]);
+
+  // 코스 경로선 — 구간(path)별로 순서대로 잇는다(코스 일정 장소 순서). 구간마다 색상·점선 여부가 다를 수 있다.
+  // 각 구간의 지점이 2개 미만이면 그 구간은 그리지 않음.
+  useEffect(() => {
+    if (!mapRef.current || !window.kakao?.maps) return;
+    const K = window.kakao.maps;
+
+    pathPolylinesRef.current.forEach((line) => line.setMap(null));
+    pathPolylinesRef.current = [];
+
+    for (const segment of path) {
+      if (segment.points.length < 2) continue;
+      const line = new K.Polyline({
+        path: segment.points.map((p) => new K.LatLng(p.lat, p.lng)),
+        strokeWeight: 4,
+        strokeColor: segment.color ?? "#16a34a",
+        strokeOpacity: 0.8,
+        strokeStyle: segment.dashed ? "shortdash" : "solid"
+      });
+      line.setMap(mapRef.current);
+      pathPolylinesRef.current.push(line);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(path), mapInitCount]);
 
   // 내 위치 마커 — myLocation이 바뀔 때마다 다시 그리고, null이면 제거
   useEffect(() => {

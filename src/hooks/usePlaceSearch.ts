@@ -24,12 +24,22 @@ export function usePlaceSearch({
   accessibility,
   gu,
   dong,
-  favoritesOnly
+  favoritesOnly,
+  headcount,
+  dateFrom,
+  dateTo,
+  themes,
+  minRating
 }: {
   accessibility: string[];
   gu: string;
   dong: string;
   favoritesOnly: boolean;
+  headcount: number;
+  dateFrom: string;
+  dateTo: string;
+  themes: string[];
+  minRating: number;
 }) {
   const [keyword, setKeyword] = useState("");
   const [searchPlaces, setSearchPlaces] = useState<SearchPlace[]>([]);
@@ -125,7 +135,17 @@ export function usePlaceSearch({
 
   const handleSearch = async (kw: string) => {
     const guCode = gu ? areaCodes.find((a) => a.name === gu)?.code : undefined;
-    const hasNormalQuery = !!(kw.trim() || accessibility.length > 0 || guCode || dong);
+    const hasNormalQuery = !!(
+      kw.trim() ||
+      accessibility.length > 0 ||
+      guCode ||
+      dong ||
+      themes.length > 0 ||
+      minRating > 0 ||
+      headcount > 1 ||
+      dateFrom ||
+      dateTo
+    );
     if (!hasNormalQuery && !favoritesOnly) {
       setSearchPlaces([]);
       setSearchDetailId(null);
@@ -138,6 +158,11 @@ export function usePlaceSearch({
       if (accessibility.length > 0) params.set("accessibility", accessibility.join(","));
       if (guCode) params.set("gu", guCode);
       if (dong) params.set("dong", dong);
+      if (themes.length > 0) params.set("themes", themes.join(","));
+      if (minRating > 0) params.set("minRating", String(minRating));
+      if (headcount > 1) params.set("headcount", String(headcount));
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
 
       const [dbRes, kakaoResults, likedResults] = await Promise.all([
         hasNormalQuery
@@ -175,7 +200,7 @@ export function usePlaceSearch({
   useEffect(() => {
     handleSearch(keyword);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessibility, gu, dong, favoritesOnly]);
+  }, [accessibility, gu, dong, favoritesOnly, headcount, dateFrom, dateTo, themes, minRating]);
 
   // 특정 contentid(글 첨부 장소 등)를 지도에 마커로 띄우고 상세를 연다.
   const focusPlaceById = useCallback(async (contentId: string) => {

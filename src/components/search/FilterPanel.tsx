@@ -15,6 +15,8 @@ interface FilterPanelProps {
 }
 
 // 데스크탑용: 헤더를 눌러 여닫는 인라인 필터 섹션. useFilters()의 결과를 그대로 넘기면 된다.
+// open/onOpenChange 를 넘기면 부모가 열림 상태를 제어한다(상세→뒤로 시에도 상태 유지).
+// 안 넘기면 내부 상태(defaultOpen 초기값)를 쓴다.
 export function FilterToggleSection({
   filters,
   set,
@@ -23,15 +25,27 @@ export function FilterToggleSection({
   dongOptions,
   activeCount,
   onReset,
-  defaultOpen = false
-}: FilterPanelProps & { defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+  defaultOpen = false,
+  open: openProp,
+  onOpenChange
+}: FilterPanelProps & {
+  defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [openState, setOpenState] = useState(defaultOpen);
+  const open = openProp ?? openState;
+  const toggleOpen = () => {
+    const next = !open;
+    if (onOpenChange) onOpenChange(next);
+    else setOpenState(next);
+  };
 
   return (
     <div className="shrink-0 border-b border-gray-100">
       <div className="flex items-center">
         <button
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggleOpen}
           className="flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
         >
           <div className="flex items-center gap-2">

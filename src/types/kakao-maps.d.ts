@@ -20,6 +20,7 @@ declare namespace kakao.maps {
       yAnchor?: number;
       xAnchor?: number;
       zIndex?: number;
+      clickable?: boolean;
     });
     setMap(map: Map | null): void;
   }

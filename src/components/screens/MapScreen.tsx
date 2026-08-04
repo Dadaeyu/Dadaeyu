@@ -3,14 +3,13 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, Filter, X, Navigation, LocateFixed } from "lucide-react";
-import { THEMES, useFilters } from "@/components/PlaceFilters";
+import { useFilters } from "@/components/PlaceFilters";
 import { PLACES, PLACE_COLORS, type Place } from "@/data/placesData";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import KakaoMap, { type MapMarker } from "@/components/KakaoMap";
+import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
 import TourismDetailPanel from "@/components/search/TourismDetailPanel";
-import KakaoDetailPanel from "@/components/search/KakaoDetailPanel";
-import SearchResultList from "@/components/search/SearchResultList";
-import { FilterToggleSection, FilterOverlayPanel } from "@/components/search/FilterPanel";
+import { FilterOverlayPanel } from "@/components/search/FilterPanel";
 import { usePlaceSearch } from "@/hooks/usePlaceSearch";
 import { useMyLocation } from "@/hooks/useMyLocation";
 
@@ -28,7 +27,7 @@ export default function Map() {
 
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const { filters, set, toggleList, reset, activeCount } = useFilters({
-    themes: initialTheme && THEMES.includes(initialTheme) ? [initialTheme] : []
+    themes: initialTheme ? [initialTheme] : []
   });
   const [detailId, setDetailId] = useState<number | null>(
     initialPlaceId ? Number(initialPlaceId) : null
@@ -56,7 +55,12 @@ export default function Map() {
     accessibility: filters.accessibility,
     gu: filters.gu,
     dong: filters.dong,
-    favoritesOnly: filters.favoritesOnly
+    favoritesOnly: filters.favoritesOnly,
+    headcount: filters.headcount,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    themes: filters.themes,
+    minRating: filters.minRating
   });
 
   useEffect(() => {
@@ -96,66 +100,35 @@ export default function Map() {
       <aside
         className={`${mapOnly ? "hidden" : "hidden md:flex"} relative w-72 shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white`}
       >
-        {searchDetail ? (
-          searchDetail.source === "kakao" ? (
-            <KakaoDetailPanel sp={searchDetail} onBack={() => setSearchDetailId(null)} />
-          ) : (
-            <TourismDetailPanel
-              sp={searchDetail}
-              detail={tourismDetail}
-              isLoading={isLoadingDetail}
-              onBack={() => setSearchDetailId(null)}
-              onLikeChange={refreshLiked}
-            />
-          )
-        ) : detailPlace ? (
+        {detailPlace && !searchDetail ? (
           <PlaceDetailPanel
             place={detailPlace}
             onBack={() => setDetailId(null)}
             onNavigate={handleNavigate}
           />
         ) : (
-          <>
-            {/* Search */}
-            <div className="shrink-0 border-b border-gray-100 p-3">
-              <div className="relative">
-                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="장소 검색 (Enter)"
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch(keyword)}
-                  className="focus:ring-brand-500 w-full rounded-lg border border-gray-200 py-2 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Filter toggle */}
-            <FilterToggleSection
-              filters={filters}
-              set={set}
-              toggleList={toggleList}
-              guOptions={areaCodes.map((a) => a.name)}
-              dongOptions={dongOptions}
-              activeCount={activeFilterCount}
-              onReset={resetFilters}
-              defaultOpen={!!initialTheme}
-            />
-
-            {/* 검색 결과 or 후기 평점 상위 장소 */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="sticky top-0 border-b border-gray-100 bg-gray-50 px-4 py-2">
-                <span className="text-xs font-semibold tracking-wide text-gray-400 uppercase">
-                  {searchPlaces.length > 0
-                    ? `검색 결과 ${searchPlaces.length}개`
-                    : `핫플레이스${displayPlaces.length}개`}
-                </span>
-              </div>
-
-              <SearchResultList places={displayPlaces} onSelect={setSearchDetailId} />
-            </div>
-          </>
+          <PlaceSearchSidebar
+            keyword={keyword}
+            setKeyword={setKeyword}
+            onSearch={handleSearch}
+            isSearching={isSearching}
+            filters={filters}
+            set={set}
+            toggleList={toggleList}
+            guOptions={areaCodes.map((a) => a.name)}
+            dongOptions={dongOptions}
+            activeCount={activeFilterCount}
+            onResetFilters={resetFilters}
+            defaultFilterOpen
+            places={displayPlaces}
+            searchCount={searchPlaces.length}
+            onSelectPlace={setSearchDetailId}
+            searchDetail={searchDetail}
+            tourismDetail={tourismDetail}
+            isLoadingDetail={isLoadingDetail}
+            onBackFromDetail={() => setSearchDetailId(null)}
+            onLikeChange={refreshLiked}
+          />
         )}
       </aside>
 
@@ -262,17 +235,13 @@ export default function Map() {
           <div
             className={`${mapOnly ? "" : "md:hidden"} absolute inset-0 z-40 overflow-y-auto bg-white`}
           >
-            {searchDetail.source === "kakao" ? (
-              <KakaoDetailPanel sp={searchDetail} onBack={() => setSearchDetailId(null)} />
-            ) : (
-              <TourismDetailPanel
-                sp={searchDetail}
-                detail={tourismDetail}
-                isLoading={isLoadingDetail}
-                onBack={() => setSearchDetailId(null)}
-                onLikeChange={refreshLiked}
-              />
-            )}
+            <TourismDetailPanel
+              sp={searchDetail}
+              detail={tourismDetail}
+              isLoading={isLoadingDetail}
+              onBack={() => setSearchDetailId(null)}
+              onLikeChange={refreshLiked}
+            />
           </div>
         )}
 
