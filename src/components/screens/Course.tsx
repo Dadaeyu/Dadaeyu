@@ -43,8 +43,7 @@ import {
   type CourseDay,
   type CoursePlace
 } from "@/context/CourseContext";
-import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import { PLACES, PLACE_COLORS } from "@/data/placesData";
+import { PLACE_COLORS } from "@/data/placesData";
 
 // 장소 검색으로 새로 추가된 장소(좌표 직접 보유)의 마커 색상 — 순서대로 순환 배정.
 const MARKER_COLORS = Object.values(PLACE_COLORS).map((c) => c.color);
@@ -974,15 +973,6 @@ const PLACE_COORDS: Record<string, { cx: number; cy: number; color: string }> = 
   "대청호 오백리길": { cx: 800, cy: 435, color: "#2563eb" }
 };
 
-// 장소별 실제 위경도 — KakaoMap 마커용
-const PLACE_LATLNG: Record<string, { lat: number; lng: number }> = {
-  성심당: { lat: 36.3276, lng: 127.4275 },
-  "대전 엑스포 과학공원": { lat: 36.3745, lng: 127.3885 },
-  한밭수목원: { lat: 36.3689, lng: 127.3884 },
-  유성온천: { lat: 36.3543, lng: 127.3421 },
-  "대청호 오백리길": { lat: 36.4809, lng: 127.4867 }
-};
-
 function CourseDetail({ id }: { id: string }) {
   const isNew = id === "new";
   const numId = Number(id);
@@ -1234,9 +1224,8 @@ function CourseDetail({ id }: { id: string }) {
       });
 
   const [activeDay, setActiveDay] = useState(1);
-  const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(null);
   // 장소 검색으로 추가된(좌표 직접 보유) 코스 항목의 지도 노드를 클릭했을 때의 상세 보기.
-  // mock 데모 장소(selectedPlaceId)와는 별개 상태 — 뒤로가기 시 코스 편집 패널로 바로 복귀한다.
+  // 뒤로가기 시 코스 편집 패널로 바로 복귀한다.
   const [selectedSearchPlace, setSelectedSearchPlace] = useState<CoursePlace | null>(null);
   const [selectedSearchDetail, setSelectedSearchDetail] = useState<TourismDetail | null>(null);
   const [selectedSearchDetailLoading, setSelectedSearchDetailLoading] = useState(false);
@@ -1421,9 +1410,10 @@ function CourseDetail({ id }: { id: string }) {
 
   // KakaoMap 마커·경로선 — 특정 Day 만이 아니라 "모든 일정"을 Day 순서 → 각 Day 내 장소 순서로
   // 이어서 한 번에 보여준다(Day1 마지막 장소 → Day2 첫 장소 순으로 연결).
-  // 장소 검색으로 추가된 항목은 자체 좌표(p.lat/lng)를 우선 쓰고, 좌표가 없는 기존 mock 데모
-  // 항목(성심당 등)은 이름으로 PLACES/PLACE_LATLNG 를 찾아 표시한다.
-  type MarkerSource = ({ kind: "real"; item: CoursePlace } | { kind: "mock"; mockId: number }) & {
+  // 좌표(p.lat/lng)가 있는 항목(장소 검색으로 추가된 실제 장소)만 지도에 표시한다.
+  type MarkerSource = {
+    kind: "real";
+    item: CoursePlace;
     markerId: string;
     lat: number;
     lng: number;
@@ -1436,31 +1426,17 @@ function CourseDetail({ id }: { id: string }) {
   let colorIdx = 0;
   for (const d of sortedDays) {
     for (const p of d.places) {
-      if (p.lat != null && p.lng != null) {
-        markerSources.push({
-          markerId: `real:${d.day}:${p.id}`,
-          lat: p.lat,
-          lng: p.lng,
-          color: MARKER_COLORS[colorIdx % MARKER_COLORS.length],
-          kind: "real",
-          item: p,
-          day: d.day
-        });
-        colorIdx += 1;
-        continue;
-      }
-      const ll = PLACE_LATLNG[p.name];
-      const found = PLACES.find((pl) => pl.name === p.name);
-      if (!ll || !found) continue;
+      if (p.lat == null || p.lng == null) continue;
       markerSources.push({
-        markerId: `mock:${d.day}:${found.id}`,
-        lat: ll.lat,
-        lng: ll.lng,
-        color: PLACE_COORDS[p.name]?.color ?? "#16a34a",
-        kind: "mock",
-        mockId: found.id,
+        markerId: `real:${d.day}:${p.id}`,
+        lat: p.lat,
+        lng: p.lng,
+        color: MARKER_COLORS[colorIdx % MARKER_COLORS.length],
+        kind: "real",
+        item: p,
         day: d.day
       });
+      colorIdx += 1;
     }
   }
 
@@ -1498,13 +1474,8 @@ function CourseDetail({ id }: { id: string }) {
     dayIdx += 1;
   }
   const selectedMarkerId = selectedSearchPlace
-    ? (markerSources.find((m) => m.kind === "real" && m.item.id === selectedSearchPlace.id)
-        ?.markerId ?? null)
-    : selectedPlaceId != null
-      ? (markerSources.find((m) => m.kind === "mock" && m.mockId === selectedPlaceId)?.markerId ??
-        null)
-      : null;
-  const selectedPlace = PLACES.find((p) => p.id === selectedPlaceId);
+    ? (markerSources.find((m) => m.item.id === selectedSearchPlace.id)?.markerId ?? null)
+    : null;
 
   // 지도에서 검색 추가 장소의 노드를 클릭하면(selectedSearchPlace) 상세를 새로 조회한다.
   useEffect(() => {
@@ -1856,8 +1827,6 @@ function CourseDetail({ id }: { id: string }) {
             isLoading={selectedSearchDetailLoading}
             onBack={() => setSelectedSearchPlace(null)}
           />
-        ) : selectedPlace && !isEditing ? (
-          <PlaceDetailPanel place={selectedPlace} onBack={() => setSelectedPlaceId(null)} />
         ) : isEditing ? (
           /* ── 편집 패널 ── */
           <>
@@ -2314,12 +2283,6 @@ function CourseDetail({ id }: { id: string }) {
                       key={place.id}
                       className="flex cursor-pointer items-start gap-3 rounded-xl bg-gray-50 p-3 transition-colors hover:bg-gray-100"
                       onClick={() => {
-                        const f = PLACES.find((p) => p.name === place.name);
-                        if (f) {
-                          setSelectedPlaceId(f.id);
-                          return;
-                        }
-                        // mock PLACES 에 없는(=장소 검색으로 추가된 실제) 항목은 좌표가 있으면 상세를 연다.
                         if (place.lat != null && place.lng != null) setSelectedSearchPlace(place);
                       }}
                     >
@@ -2395,11 +2358,9 @@ function CourseDetail({ id }: { id: string }) {
           onSelect={(id) => {
             const src = markerSources.find((m) => m.markerId === id);
             if (!src) return;
-            if (src.kind === "real") setSelectedSearchPlace(src.item);
-            else setSelectedPlaceId(src.mockId);
+            setSelectedSearchPlace(src.item);
           }}
           onDeselect={() => {
-            setSelectedPlaceId(null);
             setSelectedSearchPlace(null);
           }}
           path={coursePath}
