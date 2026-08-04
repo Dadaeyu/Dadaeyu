@@ -20,9 +20,13 @@ import {
 } from "@/components/ui/Carousel";
 import { HomePlaceImage } from "@/features/home/HomePlaceImage";
 import {
+  formatSourceDate,
   formatDistance,
+  getHomeEvidenceStatus,
+  HOME_NEED_OPTIONS,
   sortHomeEvidenceForNeeds,
   summarizeVisitInfo,
+  type HomeNeedId,
   type RankedHomePlace
 } from "@/features/home/homeData";
 import type { HomeExperience } from "@/features/home/useHomeExperience";
@@ -142,15 +146,25 @@ function CuratedPlaces({
 }) {
   const otherPlaces = places.slice(1, 9);
   const title = experience.committedQuery
-    ? `“${experience.committedQuery}”와 관련된 장소`
+    ? `“${experience.committedQuery}” 검색 결과`
     : experience.selectedNeedIds.length
-      ? "선택한 조건에 맞는 곳"
-      : "이런 곳은 어때요?";
+      ? "선택한 조건과 관련된 정보가 있는 곳"
+      : "둘러볼 만한 대전";
+  const description = experience.committedQuery
+    ? "검색어와 공개 관광 정보를 함께 확인한 결과예요."
+    : experience.selectedNeedIds.length
+      ? "선택한 조건과 관련된 공개 정보가 있는 장소를 먼저 보여드려요."
+      : "공개된 방문·편의 정보가 많은 곳부터 모았어요.";
 
   return (
     <section aria-labelledby="recommendation-title">
       {otherPlaces.length ? (
-        <OtherPlaces places={otherPlaces} experience={experience} title={title} />
+        <OtherPlaces
+          places={otherPlaces}
+          experience={experience}
+          title={title}
+          description={description}
+        />
       ) : null}
     </section>
   );
@@ -159,11 +173,13 @@ function CuratedPlaces({
 function OtherPlaces({
   places,
   experience,
-  title
+  title,
+  description
 }: {
   places: RankedHomePlace[];
   experience: HomeExperience;
   title: string;
+  description: string;
 }) {
   return (
     <Carousel
@@ -174,32 +190,34 @@ function OtherPlaces({
         skipSnaps: false,
         duration: 34
       }}
-      className="mt-7 sm:mt-9"
+      className="mt-6 sm:mt-8"
       aria-label="다른 추천 관광지"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-brand-800 text-sm font-semibold">추천 {places.length}곳</p>
           <h2 id="recommendation-title" className="text-ink mt-1 text-xl font-semibold sm:text-2xl">
             {title}
           </h2>
+          <p className="text-steel mt-2 max-w-[46rem] text-sm leading-6">{description}</p>
+          <p className="text-steel mt-2 text-xs sm:hidden">옆으로 넘겨 더 보기</p>
         </div>
         <div className="flex shrink-0 gap-2" aria-label="다른 추천 장소 이동">
           <CarouselPrevious
             aria-label="이전 추천 장소"
-            className="border-hairline hover:bg-surface static size-12 translate-y-0 rounded-full border bg-white"
+            className="border-hairline hover:bg-surface static hidden size-12 translate-y-0 rounded-full border bg-white sm:grid"
           />
           <CarouselNext
             aria-label="다음 추천 장소"
-            className="border-hairline hover:bg-surface static size-12 translate-y-0 rounded-full border bg-white"
+            className="border-hairline hover:bg-surface static hidden size-12 translate-y-0 rounded-full border bg-white sm:grid"
           />
         </div>
       </div>
-      <CarouselContent className="mt-4 -ml-3 items-stretch">
+      <CarouselContent className="mt-4 -ml-3 items-stretch pb-1">
         {places.map((place) => (
           <CarouselItem
             key={place.id}
-            className="flex basis-[78%] pl-3 min-[430px]:basis-[68%] sm:basis-[46%] lg:basis-[31%]"
+            className="flex basis-[86%] pl-3 min-[430px]:basis-[72%] sm:basis-[46%] lg:basis-[31%]"
           >
             <CompactPlaceCard place={place} experience={experience} />
           </CarouselItem>
@@ -218,41 +236,60 @@ function CompactPlaceCard({
 }) {
   const distance = formatDistance(place.distanceMeters);
   const visitInfo = summarizeVisitInfo(place);
-  const evidence = sortHomeEvidenceForNeeds(place.accessibility, experience.selectedNeedIds)[0];
+  const summary = getPlaceEvidenceSummary(place, experience.selectedNeedIds);
+  const needLabels = getMatchedNeedLabels(place);
 
   return (
     <article className="h-full min-w-0">
       <button
         type="button"
         onClick={(event) => experience.openPlace(place, event.currentTarget)}
-        className="group bg-brand-900 focus-visible:outline-brand-600 relative flex aspect-[4/5] h-full min-h-[21rem] w-full overflow-hidden rounded-[1.5rem] text-left shadow-[0_18px_45px_-34px_rgba(15,44,41,0.9)] focus-visible:outline-2 focus-visible:outline-offset-4"
+        className="border-hairline group focus-visible:outline-brand-600 hover:border-brand-200 flex h-full min-h-[20.5rem] w-full flex-col overflow-hidden rounded-lg border bg-white text-left shadow-[0_18px_44px_-36px_rgba(15,44,41,0.75)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4"
         aria-label={`${place.title} 자세히 보기`}
       >
-        <HomePlaceImage
-          src={place.imageUrl}
-          alt={place.title}
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none"
-        />
-        <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,24,22,0.02)_24%,rgba(8,24,22,0.82)_100%)]" />
-        <span className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-4">
-          <span className="rounded-full border border-white/25 bg-black/25 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-md">
+        <span className="bg-surface relative block aspect-[16/10] w-full overflow-hidden">
+          <HomePlaceImage
+            src={place.imageUrl}
+            alt={place.title}
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.035] motion-reduce:transform-none motion-reduce:transition-none"
+          />
+          <span className="absolute inset-x-0 bottom-0 h-20 bg-[linear-gradient(180deg,rgba(8,24,22,0)_0%,rgba(8,24,22,0.64)_100%)]" />
+          <span className="absolute bottom-3 left-3 rounded-md border border-white/25 bg-black/32 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-md">
             {place.category ?? "대전 여행"}
           </span>
-          {evidence ? (
-            <span className="bg-brand-300/90 text-brand-900 max-w-[62%] truncate rounded-full px-3 py-1.5 text-xs font-semibold backdrop-blur-sm">
-              {evidence.label}
-            </span>
-          ) : null}
         </span>
-        <span className="absolute inset-x-0 bottom-0 p-4 text-white sm:p-5">
-          <span className="block text-xl leading-tight font-semibold [overflow-wrap:anywhere]">
+        <span className="flex flex-1 flex-col p-4 sm:p-5">
+          <span className="text-ink block text-lg leading-tight font-semibold [overflow-wrap:anywhere]">
             {place.title}
           </span>
-          <span className="mt-2 flex items-center justify-between gap-3 text-sm text-white/[0.78]">
-            <span className="line-clamp-1">
-              {distance ? `${distance} 거리` : (visitInfo ?? "대전에서 만나는 장소")}
+          <span className="text-steel mt-2 line-clamp-1 text-sm">
+            {distance ? `${distance} 거리` : (visitInfo ?? "대전에서 만나는 장소")}
+          </span>
+
+          <span className="border-hairline bg-surface/70 mt-4 block rounded-md border p-3">
+            <span className="text-ink block text-sm font-semibold">{summary.reason}</span>
+            <span className="text-steel mt-1 line-clamp-2 block text-xs leading-5">
+              {summary.detail}
             </span>
-            <span className="text-brand-900 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none">
+            <span className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <span className="text-steel leading-4">
+                <span className="block">확인 필요</span>
+                <span className="text-ink font-semibold">{summary.attentionCount}개</span>
+              </span>
+              <span className="text-steel text-right leading-4">
+                <span className="block">정보 기준</span>
+                <span className="text-ink font-semibold">{summary.sourceDate ?? "미제공"}</span>
+              </span>
+            </span>
+          </span>
+
+          {needLabels ? (
+            <span className="text-steel mt-3 line-clamp-1 text-xs">{needLabels}</span>
+          ) : null}
+
+          <span className="text-brand-800 mt-auto flex items-center justify-between gap-3 pt-4 text-sm font-semibold">
+            자세히 보기
+            <span className="bg-brand-50 grid h-9 w-9 shrink-0 place-items-center rounded-full transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none">
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </span>
           </span>
@@ -268,9 +305,9 @@ function EssentialFacilities({ experience }: { experience: HomeExperience }) {
 
   return (
     <section aria-labelledby="facility-title">
-      <SectionTitle id="facility-title" title="편의시설이 있는 곳" />
+      <SectionTitle id="facility-title" title="바로 확인할 편의시설" />
       <p className="text-steel mt-2 text-sm leading-6">
-        화장실, 엘리베이터, 장애인 주차가 있는 곳을 모았어요.
+        공개 정보에 시설 내용이 있는 장소예요. 방문 전 운영 여부는 한 번 더 확인해 주세요.
       </p>
       <div className="-mx-4 mt-4 flex snap-x [scrollbar-width:none] gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:px-0 [&::-webkit-scrollbar]:hidden">
         {facilities.map((facility) => {
@@ -280,7 +317,7 @@ function EssentialFacilities({ experience }: { experience: HomeExperience }) {
             <Link
               key={facility.key}
               href={`/map?query=${encodeURIComponent(facility.placeTitle)}`}
-              className="border-hairline hover:border-brand-200 hover:bg-brand-50/40 group flex min-h-36 min-w-[76%] snap-start flex-col rounded-[1.25rem] border bg-white p-4 transition-colors sm:min-w-0"
+              className="border-hairline hover:border-brand-200 hover:bg-brand-50/30 group grid min-h-[7rem] min-w-[82%] snap-start grid-cols-[2.75rem_minmax(0,1fr)] gap-3 rounded-lg border bg-white p-4 transition-colors min-[430px]:min-w-[68%] sm:min-w-0"
               aria-label={`${facility.label}, ${facility.placeTitle}, ${
                 distance ? `장소까지 직선거리 ${distance}` : "지도에서 위치 확인"
               }`}
@@ -288,18 +325,18 @@ function EssentialFacilities({ experience }: { experience: HomeExperience }) {
               <span className="bg-brand-50 text-brand-800 grid h-11 w-11 place-items-center rounded-xl">
                 <FacilityIcon className="h-5 w-5" aria-hidden="true" />
               </span>
-              <span className="mt-4 min-w-0">
+              <span className="min-w-0">
                 <span className="text-ink block font-semibold">{facility.label}</span>
-                <span className="text-steel mt-1 line-clamp-2 block text-sm leading-5">
+                <span className="text-steel mt-1 line-clamp-1 block text-sm leading-5">
                   {facility.placeTitle}
                 </span>
-              </span>
-              <span className="text-brand-800 mt-auto flex items-center gap-1 pt-4 text-sm font-semibold">
-                {distance ?? "지도 보기"}
-                <ChevronRight
-                  className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-                  aria-hidden="true"
-                />
+                <span className="text-brand-800 mt-2 flex items-center gap-1 text-sm font-semibold">
+                  {distance ?? "지도 보기"}
+                  <ChevronRight
+                    className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                    aria-hidden="true"
+                  />
+                </span>
               </span>
             </Link>
           );
@@ -314,6 +351,47 @@ const FACILITY_ICONS = {
   elevator: ArrowUpDown,
   parking: CircleParking
 } as const;
+
+function getPlaceEvidenceSummary(place: RankedHomePlace, selectedNeedIds: readonly HomeNeedId[]) {
+  const sortedEvidence = sortHomeEvidenceForNeeds(place.accessibility, selectedNeedIds);
+  const availableCount = place.accessibility.filter(
+    (item) => getHomeEvidenceStatus(item) === "available"
+  ).length;
+  const attentionCount = place.accessibility.filter(
+    (item) => getHomeEvidenceStatus(item) !== "available"
+  ).length;
+  const selectedMatchCount = selectedNeedIds.length ? place.matchedNeedIds.length : 0;
+  const topEvidence = sortedEvidence[0];
+  const sourceDate = formatSourceDate(place.sourceUpdatedAt);
+
+  const reason = selectedMatchCount
+    ? `선택 조건 관련 ${selectedMatchCount}개`
+    : availableCount
+      ? `공개 편의정보 ${availableCount}개`
+      : "방문 전 확인 필요";
+  const detail = topEvidence
+    ? `${topEvidence.label}: ${summarizeEvidenceValue(topEvidence.value)}`
+    : "장소 상세 정보에서 방문 조건을 확인해 주세요.";
+
+  return {
+    reason,
+    detail,
+    attentionCount,
+    sourceDate
+  };
+}
+
+function getMatchedNeedLabels(place: RankedHomePlace) {
+  if (!place.matchedNeedIds.length) return null;
+  const labels = place.matchedNeedIds
+    .map((needId) => HOME_NEED_OPTIONS.find((option) => option.id === needId)?.label)
+    .filter(Boolean);
+  return labels.length ? `관련 조건: ${labels.join(", ")}` : null;
+}
+
+function summarizeEvidenceValue(value: string) {
+  return value.replace(/\s+/g, " ").trim().slice(0, 58);
+}
 
 function SectionTitle({ id, eyebrow, title }: { id: string; eyebrow?: string; title: string }) {
   return (
