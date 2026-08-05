@@ -18,10 +18,15 @@ test("chat debug is only exposed outside production with CHAT_DEBUG=true", () =>
 
   assert.deepEqual(
     stripChatDebugForPolicy(
-      { message: "ok", debug: { secret: true } },
+      {
+        message: "ok",
+        card: { title: "답변 근거", rows: ["pgvector 5건"], source: "internal" },
+        debug: { secret: true },
+        sources: ["DeepSeek API", "tourapi:KorWithService2:123"]
+      },
       { NODE_ENV: "production", CHAT_DEBUG: "true" }
     ),
-    { message: "ok" }
+    { message: "ok", sources: [] }
   );
 });
 
