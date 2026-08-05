@@ -32,6 +32,8 @@ const basePlace: HomePlace = {
   fee: null,
   phone: null,
   parking: null,
+  officialUrl: null,
+  reservationUrl: null,
   accessibility: [
     { key: "elevator", label: "엘리베이터", value: "주 출입구 옆에 있습니다." },
     { key: "restroom", label: "장애인 화장실", value: "1층에 있습니다." }
