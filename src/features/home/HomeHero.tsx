@@ -27,7 +27,7 @@ import {
   summarizeVisitInfo,
   type HomeNeedId
 } from "@/features/home/homeData";
-import { getHomeSearchStatusLabel } from "@/features/home/homePresentation";
+import { getHomeRefinementStatusLabel } from "@/features/home/homePresentation";
 import type { HomeExperience } from "@/features/home/useHomeExperience";
 
 const NEED_ICONS = {
@@ -55,7 +55,7 @@ export function HomeHero({
   const displayName = auth.member?.nickname?.trim();
   const locationLabel = getLocationLabel(location.status, location.errorReason);
   const locationHelp = getLocationHelp(location.status, location.errorReason);
-  const searchStatusLabel = getHomeSearchStatusLabel(
+  const refinementStatusLabel = getHomeRefinementStatusLabel(
     experience.committedQuery,
     experience.loadState
   );
@@ -96,51 +96,74 @@ export function HomeHero({
 
           <div>
             <form
-              role="search"
+              aria-labelledby="home-refine-title"
               onSubmit={(event) => {
                 event.preventDefault();
                 experience.submitSearch();
               }}
             >
-              <label htmlFor="home-search" className="sr-only">
-                장소, 활동, 필요한 편의시설 검색
-              </label>
-              <div className="home-search-row border-hairline bg-surface flex min-h-14 min-w-0 items-center gap-2 rounded-2xl border p-1.5 pl-3 shadow-[0_16px_40px_-34px_rgba(15,75,67,0.45)] sm:min-h-16 sm:p-2 sm:pl-4">
-                <Search className="text-steel h-5 w-5 shrink-0" aria-hidden="true" />
-                <input
-                  id="home-search"
-                  type="search"
-                  value={experience.query}
-                  onChange={(event) => experience.setQuery(event.target.value)}
-                  placeholder="장소·활동·편의시설 검색"
-                  className="home-search-input text-ink placeholder:text-steel min-h-11 min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none sm:min-h-12 sm:text-base"
-                />
-                <button
-                  type="submit"
-                  className="home-search-submit bg-brand-800 hover:bg-brand-900 grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white transition-colors sm:h-12 sm:w-12"
-                  aria-label="관광지 검색"
-                >
-                  <ArrowRight className="h-5 w-5" aria-hidden="true" />
-                </button>
+              <div className="border-hairline bg-surface rounded-2xl border p-2 shadow-[0_16px_40px_-34px_rgba(15,75,67,0.45)]">
+                <div className="flex items-center justify-between gap-3 px-2 pt-1">
+                  <label
+                    id="home-refine-title"
+                    htmlFor="home-search"
+                    className="text-brand-800 text-xs font-semibold tracking-[0.04em]"
+                  >
+                    홈 추천 키워드
+                  </label>
+                  <Link
+                    href={
+                      experience.query.trim()
+                        ? `/map?query=${encodeURIComponent(experience.query.trim())}`
+                        : "/map"
+                    }
+                    className="text-steel hover:text-brand-800 inline-flex min-h-8 items-center gap-1.5 text-xs font-semibold transition-colors"
+                  >
+                    지도에서 키워드 이어보기
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Link>
+                </div>
+                <div className="home-search-row flex min-h-12 min-w-0 items-center gap-2 pt-1 sm:min-h-14">
+                  <Search className="text-steel ml-2 h-5 w-5 shrink-0" aria-hidden="true" />
+                  <input
+                    id="home-search"
+                    type="search"
+                    value={experience.query}
+                    onChange={(event) => experience.setQuery(event.target.value)}
+                    placeholder="실내, 공원, 장애인 화장실로 홈 추천 좁히기"
+                    className="home-search-input text-ink placeholder:text-steel min-h-11 min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none sm:min-h-12 sm:text-base"
+                  />
+                  <button
+                    type="submit"
+                    className="home-search-submit bg-brand-800 hover:bg-brand-900 inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold text-white transition-colors sm:h-12 sm:px-5"
+                    aria-label="홈 추천 조건 적용"
+                  >
+                    홈추천 적용
+                    <ArrowRight className="hidden h-4 w-4 sm:block" aria-hidden="true" />
+                  </button>
+                </div>
+                <p className="text-steel mt-2 px-2 text-xs leading-5">
+                  이 입력은 홈 추천 목록 안의 결과만 정리하는 필터예요.
+                </p>
               </div>
-              {searchStatusLabel ? (
+              {refinementStatusLabel ? (
                 <div className="border-brand-100 mt-2 flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2">
                   <p className="text-slate line-clamp-1 text-sm" aria-live="polite">
-                    {searchStatusLabel}
+                    {refinementStatusLabel}
                   </p>
                   <button
                     type="button"
                     onClick={experience.clearSearch}
                     className="text-brand-800 min-h-11 shrink-0 px-2 text-sm font-semibold"
                   >
-                    전체 보기
+                    전체 추천
                   </button>
                 </div>
               ) : null}
             </form>
 
             {!experience.committedQuery ? (
-              <div className="mt-3 grid grid-cols-3 gap-2" aria-label="상황별 빠른 검색">
+              <div className="mt-3 grid grid-cols-3 gap-2" aria-label="상황별 빠른 조건">
                 <span className="sr-only">이럴 때</span>
                 {QUICK_SEARCHES.map((item) => (
                   <button
@@ -228,7 +251,7 @@ export function HomeFeaturedPlace({ experience }: { experience: HomeExperience }
                   : "조건에 맞는 추천 장소가 아직 없어요."}
               </p>
               <p className="text-slate mt-2 text-sm leading-6">
-                {experience.loadError ?? "검색어나 도움 조건을 바꿔서 다시 찾아보세요."}
+                {experience.loadError ?? "입력 조건이나 도움 조건을 바꿔서 다시 살펴보세요."}
               </p>
               {experience.loadState === "error" ? (
                 <button

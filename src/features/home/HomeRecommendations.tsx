@@ -80,10 +80,10 @@ export function HomeRecommendations({ experience }: { experience: HomeExperience
         >
           <Compass className="text-brand-700 h-7 w-7" aria-hidden="true" />
           <h2 id="recommendation-empty-title" className="text-ink mt-3 text-xl font-semibold">
-            조건에 맞는 결과를 찾지 못했어요
+            조건에 맞는 추천을 찾지 못했어요
           </h2>
           <p className="text-slate mt-2 max-w-[52ch] leading-6">
-            검색어를 바꾸거나 조건 없이 전체 장소를 확인해 보세요.
+            조건을 줄이거나 전체 추천으로 돌아가 보세요.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <button
@@ -91,7 +91,7 @@ export function HomeRecommendations({ experience }: { experience: HomeExperience
               onClick={experience.clearSearch}
               className="bg-primary text-primary-foreground min-h-12 rounded-md px-5 font-medium"
             >
-              전체 장소 보기
+              전체 추천 보기
             </button>
             <Link
               href="/map"
@@ -146,12 +146,12 @@ function CuratedPlaces({
 }) {
   const otherPlaces = places.slice(1, 9);
   const title = experience.committedQuery
-    ? `“${experience.committedQuery}” 검색 결과`
+    ? `“${experience.committedQuery}” 검색 적용`
     : experience.selectedNeedIds.length
       ? "선택한 조건과 관련된 정보가 있는 곳"
       : "둘러볼 만한 대전";
   const description = experience.committedQuery
-    ? "검색어와 공개 관광 정보를 함께 확인한 결과예요."
+    ? "홈 추천 후보군 안에서 장소·활동·편의 정보를 함께 본 결과예요."
     : experience.selectedNeedIds.length
       ? "선택한 조건과 관련된 공개 정보가 있는 장소를 먼저 보여드려요."
       : "공개된 방문·편의 정보가 많은 곳부터 모았어요.";
