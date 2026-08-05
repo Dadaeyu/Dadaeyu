@@ -14,7 +14,6 @@ import {
   Map,
   MessageCircle,
   Route,
-  Search,
   SlidersHorizontal
 } from "lucide-react";
 import { HomePlaceImage } from "@/features/home/HomePlaceImage";
@@ -39,9 +38,9 @@ const NEED_ICONS = {
 } satisfies Record<HomeNeedId, typeof Accessibility>;
 
 const QUICK_SEARCHES = [
-  { label: "비 오는 날", query: "실내" },
-  { label: "아이와 함께", query: "어린이" },
-  { label: "가벼운 산책", query: "공원" }
+  { label: "비 오는 날", compactLabel: "비 오는 날", query: "실내" },
+  { label: "아이와 함께", compactLabel: "아이와", query: "어린이" },
+  { label: "가벼운 산책", compactLabel: "산책", query: "공원" }
 ] as const;
 
 export function HomeHero({
@@ -59,6 +58,8 @@ export function HomeHero({
     experience.committedQuery,
     experience.loadState
   );
+  const mapQuery = experience.query.trim() || experience.committedQuery;
+  const mapHref = mapQuery ? `/map?query=${encodeURIComponent(mapQuery)}` : "/map";
 
   return (
     <section
@@ -68,7 +69,7 @@ export function HomeHero({
       <div className="p-4 sm:p-7 lg:p-8">
         <div className="home-heading-row flex items-start justify-between gap-3">
           <p className="text-brand-800 home-profile-label pt-2 text-sm font-semibold">
-            대전 여행 브리핑
+            대전 브리핑
           </p>
           <Link
             href={auth.user ? "/mypage" : "/login?next=%2F"}
@@ -94,61 +95,57 @@ export function HomeHero({
             </p>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <form
+              className="min-w-0"
               aria-labelledby="home-refine-title"
               onSubmit={(event) => {
                 event.preventDefault();
                 experience.submitSearch();
               }}
             >
-              <div className="border-hairline bg-surface rounded-2xl border p-2 shadow-[0_16px_40px_-34px_rgba(15,75,67,0.45)]">
-                <div className="flex items-center justify-between gap-3 px-2 pt-1">
+              <div className="border-hairline bg-surface min-w-0 rounded-2xl border p-2 shadow-[0_16px_40px_-34px_rgba(15,75,67,0.45)]">
+                <div className="px-2 pt-1">
                   <label
                     id="home-refine-title"
                     htmlFor="home-search"
-                    className="text-brand-800 text-xs font-semibold tracking-[0.04em]"
+                    className="text-brand-800 text-sm font-semibold"
                   >
-                    홈 추천 키워드
+                    추천 장소 좁히기
                   </label>
-                  <Link
-                    href={
-                      experience.query.trim()
-                        ? `/map?query=${encodeURIComponent(experience.query.trim())}`
-                        : "/map"
-                    }
-                    className="text-steel hover:text-brand-800 inline-flex min-h-8 items-center gap-1.5 text-xs font-semibold transition-colors"
-                  >
-                    지도에서 키워드 이어보기
-                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                  </Link>
+                  <p id="home-refine-help" className="text-steel mt-0.5 text-xs leading-5">
+                    홈에 모은 대전 여행지의 장소·활동·공개 편의 정보를 기준으로 봐요.
+                  </p>
                 </div>
-                <div className="home-search-row flex min-h-12 min-w-0 items-center gap-2 pt-1 sm:min-h-14">
-                  <Search className="text-steel ml-2 h-5 w-5 shrink-0" aria-hidden="true" />
+                <div className="home-search-row border-hairline focus-within:border-brand-400 focus-within:ring-brand-100 mt-2 flex min-h-12 min-w-0 items-center gap-2 rounded-xl border bg-white p-1.5 pl-3 transition-shadow focus-within:ring-2 sm:min-h-14">
+                  <SlidersHorizontal
+                    className="text-brand-700 h-5 w-5 shrink-0"
+                    aria-hidden="true"
+                  />
                   <input
                     id="home-search"
-                    type="search"
+                    type="text"
                     value={experience.query}
                     onChange={(event) => experience.setQuery(event.target.value)}
-                    placeholder="실내, 공원, 장애인 화장실로 홈 추천 좁히기"
+                    placeholder="예: 실내, 공원"
+                    maxLength={80}
+                    autoComplete="off"
+                    aria-describedby="home-refine-help"
                     className="home-search-input text-ink placeholder:text-steel min-h-11 min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none sm:min-h-12 sm:text-base"
                   />
                   <button
                     type="submit"
-                    className="home-search-submit bg-brand-800 hover:bg-brand-900 inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold text-white transition-colors sm:h-12 sm:px-5"
-                    aria-label="홈 추천 조건 적용"
+                    className="bg-brand-800 hover:bg-brand-900 inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg px-3 text-sm font-semibold text-white transition-colors min-[360px]:px-4 sm:min-h-12 sm:px-5"
+                    aria-label="입력한 조건으로 홈 추천 보기"
                   >
-                    홈추천 적용
-                    <ArrowRight className="hidden h-4 w-4 sm:block" aria-hidden="true" />
+                    <span className="min-[360px]:hidden">추천</span>
+                    <span className="hidden min-[360px]:inline">추천 보기</span>
                   </button>
                 </div>
-                <p className="text-steel mt-2 px-2 text-xs leading-5">
-                  이 입력은 홈 추천 목록 안의 결과만 정리하는 필터예요.
-                </p>
               </div>
               {refinementStatusLabel ? (
                 <div className="border-brand-100 mt-2 flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2">
-                  <p className="text-slate line-clamp-1 text-sm" aria-live="polite">
+                  <p className="text-slate min-w-0 text-sm leading-5" aria-live="polite">
                     {refinementStatusLabel}
                   </p>
                   <button
@@ -156,32 +153,41 @@ export function HomeHero({
                     onClick={experience.clearSearch}
                     className="text-brand-800 min-h-11 shrink-0 px-2 text-sm font-semibold"
                   >
-                    전체 추천
+                    조건 지우기
                   </button>
                 </div>
               ) : null}
             </form>
 
-            {!experience.committedQuery ? (
-              <div className="mt-3 grid grid-cols-3 gap-2" aria-label="상황별 빠른 조건">
-                <span className="sr-only">이럴 때</span>
-                {QUICK_SEARCHES.map((item) => (
+            <div className="mt-3 grid grid-cols-3 gap-2" aria-label="추천 빠른 조건">
+              {QUICK_SEARCHES.map((item) => {
+                const isActive = experience.committedQuery === item.query;
+                return (
                   <button
                     key={item.query}
                     type="button"
-                    onClick={() => experience.searchFor(item.query)}
-                    className="border-hairline text-slate hover:border-brand-300 hover:bg-brand-50 min-h-10 min-w-0 rounded-xl border bg-white px-1.5 text-xs leading-4 font-semibold transition-colors sm:px-3"
+                    onClick={() =>
+                      isActive ? experience.clearSearch() : experience.searchFor(item.query)
+                    }
+                    aria-pressed={isActive}
+                    aria-label={item.label}
+                    className={`border-hairline min-h-10 min-w-0 rounded-xl border px-1.5 text-xs leading-4 font-semibold transition-colors sm:px-3 ${
+                      isActive
+                        ? "border-brand-800 bg-brand-800 text-white"
+                        : "text-slate hover:border-brand-300 hover:bg-brand-50 bg-white"
+                    }`}
                   >
-                    {item.label}
+                    <span className="min-[360px]:hidden">{item.compactLabel}</span>
+                    <span className="hidden min-[360px]:inline">{item.label}</span>
                   </button>
-                ))}
-              </div>
-            ) : null}
+                );
+              })}
+            </div>
           </div>
         </div>
 
         <div
-          className="home-action-grid border-hairline mt-5 grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)_minmax(0,0.85fr)] gap-2 border-t pt-4 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,0.875fr)_minmax(0,0.875fr)]"
+          className="home-action-grid border-hairline mt-5 grid grid-cols-3 gap-2 border-t pt-4 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,0.875fr)_minmax(0,0.875fr)]"
           aria-label="여행 바로가기"
         >
           <button
@@ -192,14 +198,16 @@ export function HomeHero({
             aria-label="다유에게 물어보기"
           >
             <MessageCircle className="h-4 w-4" aria-hidden="true" />
-            <span className="truncate">다유에게</span>
+            <span className="min-[360px]:hidden">다유</span>
+            <span className="hidden min-[360px]:inline">다유에게</span>
           </button>
           <Link
-            href="/map"
-            className="border-hairline text-ink bg-surface hover:bg-brand-50 inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors"
+            href={mapHref}
+            className="border-hairline text-ink bg-surface hover:bg-brand-50 inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl border px-2 text-sm font-semibold transition-colors sm:px-3"
+            aria-label={mapQuery ? `지도에서 ${mapQuery} 장소 찾기` : "지도에서 전체 장소 찾기"}
           >
             <Map className="hidden h-4 w-4 sm:block" aria-hidden="true" />
-            <span className="truncate">지도</span>
+            <span className="truncate">장소 찾기</span>
           </Link>
           <button
             type="button"

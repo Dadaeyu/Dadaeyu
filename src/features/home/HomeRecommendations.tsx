@@ -72,6 +72,7 @@ export function HomeRecommendations({ experience }: { experience: HomeExperience
   }
 
   if (experience.loadState === "empty" || !experience.data?.places.length) {
+    const hasRefinement = Boolean(experience.committedQuery);
     return (
       <>
         <section
@@ -80,10 +81,12 @@ export function HomeRecommendations({ experience }: { experience: HomeExperience
         >
           <Compass className="text-brand-700 h-7 w-7" aria-hidden="true" />
           <h2 id="recommendation-empty-title" className="text-ink mt-3 text-xl font-semibold">
-            조건에 맞는 추천을 찾지 못했어요
+            {hasRefinement ? "입력한 조건에 맞는 장소가 없어요" : "추천 장소를 준비하지 못했어요"}
           </h2>
           <p className="text-slate mt-2 max-w-[52ch] leading-6">
-            조건을 줄이거나 전체 추천으로 돌아가 보세요.
+            {hasRefinement
+              ? "다른 조건을 입력하거나 기본 추천으로 돌아가 보세요."
+              : "잠시 후 다시 확인하거나 지도에서 장소를 찾아보세요."}
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <button
@@ -91,13 +94,13 @@ export function HomeRecommendations({ experience }: { experience: HomeExperience
               onClick={experience.clearSearch}
               className="bg-primary text-primary-foreground min-h-12 rounded-md px-5 font-medium"
             >
-              전체 추천 보기
+              {hasRefinement ? "조건 지우기" : "다시 확인하기"}
             </button>
             <Link
               href="/map"
               className="border-hairline text-ink inline-flex min-h-12 items-center rounded-md border px-5 font-medium"
             >
-              지도 열기
+              지도에서 더 찾기
             </Link>
           </div>
         </section>
@@ -146,12 +149,12 @@ function CuratedPlaces({
 }) {
   const otherPlaces = places.slice(1, 9);
   const title = experience.committedQuery
-    ? `“${experience.committedQuery}” 검색 적용`
+    ? `“${experience.committedQuery}”에 맞는 추천 장소`
     : experience.selectedNeedIds.length
       ? "선택한 조건과 관련된 정보가 있는 곳"
       : "둘러볼 만한 대전";
   const description = experience.committedQuery
-    ? "홈 추천 후보군 안에서 장소·활동·편의 정보를 함께 본 결과예요."
+    ? "입력한 조건과 공개된 방문·편의 정보를 함께 확인했어요."
     : experience.selectedNeedIds.length
       ? "선택한 조건과 관련된 공개 정보가 있는 장소를 먼저 보여드려요."
       : "공개된 방문·편의 정보가 많은 곳부터 모았어요.";
