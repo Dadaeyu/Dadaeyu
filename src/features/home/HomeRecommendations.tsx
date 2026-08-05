@@ -156,16 +156,16 @@ function CuratedPlaces({
       ? "선택한 조건과 관련된 공개 정보가 있는 장소를 먼저 보여드려요."
       : "공개된 방문·편의 정보가 많은 곳부터 모았어요.";
 
+  if (!otherPlaces.length) return null;
+
   return (
     <section aria-labelledby="recommendation-title">
-      {otherPlaces.length ? (
-        <OtherPlaces
-          places={otherPlaces}
-          experience={experience}
-          title={title}
-          description={description}
-        />
-      ) : null}
+      <OtherPlaces
+        places={otherPlaces}
+        experience={experience}
+        title={title}
+        description={description}
+      />
     </section>
   );
 }
@@ -240,7 +240,7 @@ function CompactPlaceCard({
   const needLabels = getMatchedNeedLabels(place);
 
   return (
-    <article className="h-full min-w-0">
+    <article className="h-full w-full min-w-0">
       <button
         type="button"
         onClick={(event) => experience.openPlace(place, event.currentTarget)}

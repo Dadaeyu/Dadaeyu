@@ -1,5 +1,9 @@
 export type HomeSearchLoadState = "loading" | "ready" | "empty" | "error";
 
+export function shouldShowHomePlaceImage(source: string | null, failedSource: string | null) {
+  return Boolean(source && source !== failedSource);
+}
+
 export function getHomeSearchStatusLabel(query: string, loadState: HomeSearchLoadState) {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) return null;
