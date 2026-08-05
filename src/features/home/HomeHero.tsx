@@ -217,24 +217,29 @@ export function HomeFeaturedPlace({ experience }: { experience: HomeExperience }
           >
             오늘 가볼 만한 곳
           </h2>
-          <div className="border-hairline bg-surface mt-3 rounded-[1.75rem] border px-5 py-8 text-center sm:px-8">
-            <p className="text-ink font-semibold">
-              {experience.loadState === "error"
-                ? "추천 장소를 불러오지 못했어요."
-                : "조건에 맞는 추천 장소가 아직 없어요."}
-            </p>
-            <p className="text-slate mt-2 text-sm leading-6">
-              {experience.loadError ?? "검색어나 도움 조건을 바꿔서 다시 찾아보세요."}
-            </p>
-            {experience.loadState === "error" ? (
-              <button
-                type="button"
-                onClick={experience.retry}
-                className="bg-brand-800 hover:bg-brand-900 mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold text-white transition-colors"
-              >
-                다시 불러오기
-              </button>
-            ) : null}
+          <div className="border-hairline bg-surface mt-3 flex min-h-[14rem] items-center justify-center rounded-[1.75rem] border px-5 py-8 text-center sm:min-h-[16rem] sm:px-8">
+            <div className="max-w-md">
+              <span className="border-brand-100 text-brand-800 mx-auto grid size-12 place-items-center rounded-2xl border bg-white shadow-sm">
+                <Map className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <p className="text-ink mt-4 font-semibold">
+                {experience.loadState === "error"
+                  ? "추천 장소를 불러오지 못했어요."
+                  : "조건에 맞는 추천 장소가 아직 없어요."}
+              </p>
+              <p className="text-slate mt-2 text-sm leading-6">
+                {experience.loadError ?? "검색어나 도움 조건을 바꿔서 다시 찾아보세요."}
+              </p>
+              {experience.loadState === "error" ? (
+                <button
+                  type="button"
+                  onClick={experience.retry}
+                  className="bg-brand-800 hover:bg-brand-900 mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold text-white transition-colors"
+                >
+                  다시 불러오기
+                </button>
+              ) : null}
+            </div>
           </div>
         </section>
       );
@@ -298,7 +303,7 @@ export function HomeFeaturedPlace({ experience }: { experience: HomeExperience }
           <HomePlaceImage
             src={place.imageUrl}
             alt={place.title}
-            className="h-full w-full object-cover"
+            className="block h-full w-full object-cover"
           />
         </div>
         <div className="flex flex-col justify-between p-5 sm:p-6">
