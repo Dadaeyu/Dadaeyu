@@ -9,10 +9,10 @@ export function getHomeRefinementStatusLabel(query: string, loadState: HomeRefin
   if (!normalizedQuery) return null;
 
   const suffix: Record<HomeRefinementLoadState, string> = {
-    loading: "추천 필터 적용 중",
-    ready: "추천 필터에 맞춰 정렬",
-    empty: "추천 필터에 맞는 결과 없음",
-    error: "추천 필터 적용 실패"
+    loading: "조건을 반영하고 있어요",
+    ready: "조건을 반영했어요",
+    empty: "조건에 맞는 장소가 없어요",
+    error: "조건을 반영하지 못했어요"
   };
   return `“${normalizedQuery}” ${suffix[loadState]}`;
 }
