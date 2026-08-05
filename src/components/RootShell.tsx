@@ -8,6 +8,7 @@ import { CourseProvider } from "@/context/CourseContext";
 import { PlacesProvider } from "@/context/PlacesContext";
 import { AccessibilityProvider } from "@/context/AccessibilityContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { prefetchFilterOptions } from "@/lib/filterOptions";
 import type { Place, PlaceDetail } from "@/data/placesData";
 import NoticeModal, {
   getTodayKey,
@@ -38,6 +39,11 @@ export default function RootShell({
   const pathname = usePathname();
   const isHomePage = pathname === "/";
   const [queue, setQueue] = useState<ActiveNotice[]>([]);
+
+  // 브라우저 첫 진입 시 지도 필터 옵션(접근성/테마)을 미리 받아 전역 캐시에 저장.
+  useEffect(() => {
+    prefetchFilterOptions();
+  }, []);
 
   useEffect(() => {
     if (!isHomePage) {

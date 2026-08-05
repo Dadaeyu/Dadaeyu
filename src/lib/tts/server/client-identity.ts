@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHmac } from "node:crypto";
+import { isAllowedRequestOrigin } from "@/lib/server/origin-policy";
 import { createClient } from "@/lib/supabase/server";
 import { TextToSpeechProviderError } from "@/lib/tts/server/provider";
 
@@ -15,16 +16,11 @@ export async function resolveTextToSpeechClientKey(request: Request) {
 }
 
 export function isAllowedTextToSpeechOrigin(request: Request) {
-  const origin = request.headers.get("origin")?.trim();
-  if (!origin) return true;
-
-  const requestOrigin = new URL(request.url).origin;
-  const configuredOrigins = (process.env.TTS_ALLOWED_ORIGINS ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  return new Set([requestOrigin, ...configuredOrigins]).has(origin);
+  return isAllowedRequestOrigin({
+    configuredOrigins: process.env.TTS_ALLOWED_ORIGINS,
+    origin: request.headers.get("origin"),
+    requestOrigin: new URL(request.url).origin
+  });
 }
 
 async function getAuthenticatedUserId() {

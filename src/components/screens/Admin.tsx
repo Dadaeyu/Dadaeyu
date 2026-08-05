@@ -229,7 +229,10 @@ export default function Admin() {
 const DB_TABS = [
   { key: "place", label: "tb_place", desc: "장소 기본" },
   { key: "detail", label: "tb_place_detail", desc: "상세 정보" },
-  { key: "barrierfree", label: "tb_place_barrierfree", desc: "무장애 정보" }
+  { key: "detail_normalized", label: "tb_place_detail_normalized", desc: "상세 정보(정규화)" },
+  { key: "barrierfree", label: "tb_place_barrierfree", desc: "무장애 정보" },
+  { key: "bakery", label: "tb_place_bakery", desc: "제과점" },
+  { key: "holiday", label: "tb_holiday", desc: "공휴일" }
 ] as const;
 type DbTabKey = (typeof DB_TABS)[number]["key"];
 
@@ -240,6 +243,7 @@ const PLACE_COLUMNS = [
   "title",
   "addr1",
   "addr2",
+  "dong",
   "ldongregncd",
   "ldongsigngucd",
   "mapx",
@@ -347,9 +351,7 @@ const PLACE_DETAIL_COLUMNS = [
   "createdtime",
   "modifiedtime",
   "registtime",
-  "updatetime",
-  "delete_yn",
-  "deletetime"
+  "updatetime"
 ] as const;
 
 const PLACE_BF_COLUMNS = [
@@ -379,6 +381,24 @@ const PLACE_BF_COLUMNS = [
   "lactationroom",
   "babysparechair",
   "infantsfamilyetc",
+  // 무장애 요약 플래그 (장애 유형별 편의 제공 여부)
+  "has_blind",
+  "has_deaf",
+  "has_gait",
+  "has_infant",
+  "has_maternity",
+  "has_senior",
+  "registtime",
+  "updatetime"
+] as const;
+
+const PLACE_BAKERY_COLUMNS = [
+  "bakery_id",
+  "bplc_nm",
+  "road_nm_addr",
+  "lotno_addr",
+  "dat_updt_pnt",
+  "dat_updt_se",
   "registtime",
   "updatetime",
   "delete_yn",
@@ -527,7 +547,10 @@ function PlaceManagement() {
         <div className="pt-2">
           {dbTab === "place" && <DbPlaceTable />}
           {dbTab === "detail" && <DbPlaceDetailTable />}
+          {dbTab === "detail_normalized" && <DbPlaceDetailNormalizedTable />}
           {dbTab === "barrierfree" && <DbBarrierFreeTable />}
+          {dbTab === "bakery" && <DbBakeryTable />}
+          {dbTab === "holiday" && <DbHolidayTable />}
         </div>
       </div>
     </div>
@@ -944,6 +967,219 @@ function DbBarrierFreeTable() {
   );
 }
 
+// ── 3-2b. Supabase tb_place_bakery 조회 + 동기화 ─────────
+const DB_BAKERY_PAGE_SIZE = 10;
+
+interface BakerySyncResult {
+  totalCount: number;
+  fetched: number;
+  inserted: number;
+  updated: number;
+  deleted: number;
+  errorCount: number;
+}
+
+function DbBakeryTable() {
+  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(0); // 0-based
+  const [total, setTotal] = useState(0);
+
+  // 동기화 상태
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<BakerySyncResult | null>(null);
+  const [syncError, setSyncError] = useState("");
+
+  // targetPage(0-based) 페이지를 10개씩 조회
+  const fetchRows = async (targetPage = 0) => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      setStatus("error");
+      setError(".env에 NEXT_PUBLIC_SUPABASE_URL이 설정되지 않았습니다.");
+      return;
+    }
+
+    setStatus("loading");
+    setError("");
+    try {
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      const from = targetPage * DB_BAKERY_PAGE_SIZE;
+      const to = from + DB_BAKERY_PAGE_SIZE - 1;
+      const { data, error, count } = await supabase
+        .from("tb_place_bakery")
+        .select("*", { count: "exact" })
+        .order("bakery_id", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      setRows((data ?? []) as Record<string, unknown>[]);
+      setTotal(count ?? 0);
+      setPage(targetPage);
+      setStatus("success");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    // 마운트 시 첫 페이지 조회 (initial fetch on mount)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchRows(0);
+  }, []);
+
+  // 제과점영업 조회서비스에서 대전광역시 데이터를 조회해 tb_place_bakery 와 동기화
+  const runSync = async () => {
+    setSyncing(true);
+    setSyncError("");
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/place?target=bakery", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? `동기화 실패 (HTTP ${res.status})`);
+      setSyncResult(json as BakerySyncResult);
+      await fetchRows(0); // 동기화 후 첫 페이지부터 다시 조회
+    } catch (e: unknown) {
+      setSyncError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // 컬럼 헤더는 실제 스키마 기준으로 하드코딩 (데이터가 비어도 헤더 표시)
+  const columns = PLACE_BAKERY_COLUMNS;
+  const totalPages = Math.max(1, Math.ceil(total / DB_BAKERY_PAGE_SIZE));
+  const isLoading = status === "loading";
+
+  const renderCell = (value: unknown) => {
+    if (value === null || value === undefined || value === "")
+      return <span className="text-stone">—</span>;
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+  };
+
+  return (
+    <div className="space-y-3 pt-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Database className="text-navy-500 h-4 w-4" />
+          <h2 className="text-ink font-bold">tb_place_bakery</h2>
+          <code className="bg-surface text-steel rounded-full px-2 py-0.5 font-mono text-xs">
+            제과점
+          </code>
+          {status === "success" && <span className="text-stone text-sm">총 {total}건</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchRows(page)}
+            disabled={isLoading || syncing}
+            className="border-hairline text-steel hover:bg-surface-soft rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            {isLoading ? "조회 중..." : "새로고침"}
+          </button>
+          <button
+            onClick={runSync}
+            disabled={syncing}
+            className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
+          >
+            <Database className="h-3.5 w-3.5" />
+            {syncing ? "동기화 중... (시간이 걸려요)" : "API 동기화"}
+          </button>
+        </div>
+      </div>
+
+      <p className="text-stone text-xs">
+        “API 동기화”를 누르면 행정안전부 제과점영업 조회서비스에서 대전광역시(영업 중) 제과점을 전부
+        조회해 tb_place_bakery와 동기화합니다. (상호명 기준으로 신규는 insert, 주소·갱신정보가 바뀐
+        곳은 update, API에 없는 곳은 삭제됩니다)
+      </p>
+
+      {/* 동기화 결과 / 에러 */}
+      {syncResult && (
+        <div className="border-brand-200 bg-brand-50 text-brand-800 rounded-lg border p-4 text-sm">
+          ✓ 동기화 완료 — 대상 {syncResult.totalCount}건 조회({syncResult.fetched}건), 신규{" "}
+          {syncResult.inserted}건, 수정 {syncResult.updated}건, 삭제 처리 {syncResult.deleted}건
+          {syncResult.errorCount > 0 && `, 실패 ${syncResult.errorCount}건`}
+        </div>
+      )}
+      {syncError && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{syncError}</p>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{error}</p>
+        </div>
+      )}
+
+      {status !== "error" && (
+        <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-hairline-soft bg-surface-soft border-b">
+                  {columns.map((c) => (
+                    <th
+                      key={c}
+                      className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
+                    >
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr
+                    key={i}
+                    className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
+                  >
+                    {columns.map((c) => (
+                      <td
+                        key={c}
+                        className="text-steel max-w-xs truncate px-4 py-3 whitespace-nowrap"
+                        title={typeof row[c] === "string" ? (row[c] as string) : undefined}
+                      >
+                        {renderCell(row[c])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {isLoading && (
+            <p className="text-steel animate-pulse py-8 text-center text-sm">
+              Supabase에서 데이터를 불러오는 중...
+            </p>
+          )}
+          {status === "success" && rows.length === 0 && (
+            <p className="text-stone py-8 text-center text-sm">
+              데이터가 없어요. “API 동기화”를 눌러 채워보세요.
+            </p>
+          )}
+
+          {/* 페이지네이션 */}
+          {status === "success" && total > 0 && (
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={DB_BAKERY_PAGE_SIZE}
+              disabled={isLoading}
+              onChange={fetchRows}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 3-3. Supabase tb_place_detail 조회 + 동기화 ──────────
 const DB_DETAIL_PAGE_SIZE = 10;
 
@@ -1138,6 +1374,485 @@ function DbPlaceDetailTable() {
               totalPages={totalPages}
               total={total}
               pageSize={DB_DETAIL_PAGE_SIZE}
+              disabled={isLoading}
+              onChange={fetchRows}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 3-4. Supabase tb_place_detail_normalized 조회 (조회 전용) ─────
+const PLACE_DETAIL_NORMALIZED_COLUMNS = [
+  "place_id",
+  "contentid",
+  "contenttypeid",
+  "homepage",
+  "tel",
+  "overview",
+  "accomcount",
+  "accommin",
+  "accommax",
+  "scale",
+  "agerange",
+  "agemin",
+  "agemax",
+  "openperiod",
+  "opendate",
+  "useseason",
+  "usetime",
+  "eventstartdate",
+  "eventenddate",
+  "checkintime",
+  "checkouttime",
+  "spendtime",
+  "restdate",
+  "closed_weekdays",
+  "closed_holiday",
+  "has_irregular_closing",
+  "schedule",
+  "infocenter",
+  "usefee",
+  "discountinfo",
+  "parking",
+  "parkingfee",
+  "chkbabycarriage",
+  "eventhomepage",
+  "eventplace",
+  "placeinfo",
+  "program",
+  "distance",
+  "theme",
+  "pickup",
+  "roomcount",
+  "reservationlodging",
+  "reservationurl",
+  "roomtype",
+  "restroom",
+  "saleitem",
+  "saleitemcost",
+  "shopguide",
+  "firstmenu",
+  "seat",
+  "treatmenu",
+  "createdtime",
+  "modifiedtime",
+  "registtime",
+  "updatetime"
+] as const;
+
+function DbPlaceDetailNormalizedTable() {
+  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(0); // 0-based
+  const [total, setTotal] = useState(0);
+
+  // 정규화(tb_place_detail → tb_place_detail_normalized 복사) 상태
+  const [normalizing, setNormalizing] = useState(false);
+  const [normResult, setNormResult] = useState<SyncResult | null>(null);
+  const [normError, setNormError] = useState("");
+
+  // targetPage(0-based) 페이지를 10개씩 조회
+  const fetchRows = async (targetPage = 0) => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      setStatus("error");
+      setError(".env에 NEXT_PUBLIC_SUPABASE_URL이 설정되지 않았습니다.");
+      return;
+    }
+
+    setStatus("loading");
+    setError("");
+    try {
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      const from = targetPage * DB_DETAIL_PAGE_SIZE;
+      const to = from + DB_DETAIL_PAGE_SIZE - 1;
+      const { data, error, count } = await supabase
+        .from("tb_place_detail_normalized")
+        .select("*", { count: "exact" })
+        .order("place_id", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      setRows((data ?? []) as Record<string, unknown>[]);
+      setTotal(count ?? 0);
+      setPage(targetPage);
+      setStatus("success");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    // 마운트 시 첫 페이지 조회 (initial fetch on mount)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchRows(0);
+  }, []);
+
+  // "정규화" — tb_place_detail 의 동일 컬럼 데이터를 tb_place_detail_normalized 로 복사(upsert)
+  const runNormalize = async () => {
+    setNormalizing(true);
+    setNormError("");
+    setNormResult(null);
+    try {
+      const res = await fetch("/api/place?target=normalize", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? `정규화 실패 (HTTP ${res.status})`);
+      setNormResult(json as SyncResult);
+      await fetchRows(0); // 정규화 후 첫 페이지부터 다시 조회
+    } catch (e: unknown) {
+      setNormError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setNormalizing(false);
+    }
+  };
+
+  // 컬럼 헤더는 실제 스키마 기준으로 하드코딩 (데이터가 비어도 헤더 표시)
+  const columns = PLACE_DETAIL_NORMALIZED_COLUMNS;
+  const totalPages = Math.max(1, Math.ceil(total / DB_DETAIL_PAGE_SIZE));
+  const isLoading = status === "loading";
+
+  const renderCell = (value: unknown) => {
+    if (value === null || value === undefined || value === "")
+      return <span className="text-stone">—</span>;
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+  };
+
+  return (
+    <div className="space-y-3 pt-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Database className="text-navy-500 h-4 w-4" />
+          <h2 className="text-ink font-bold">tb_place_detail_normalized</h2>
+          <code className="bg-surface text-steel rounded-full px-2 py-0.5 font-mono text-xs">
+            상세 정보(정규화)
+          </code>
+          {status === "success" && <span className="text-stone text-sm">총 {total}건</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchRows(page)}
+            disabled={isLoading || normalizing}
+            className="border-hairline text-steel hover:bg-surface-soft rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            {isLoading ? "조회 중..." : "새로고침"}
+          </button>
+          <button
+            onClick={runNormalize}
+            disabled={normalizing}
+            className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
+          >
+            <Database className="h-3.5 w-3.5" />
+            {normalizing ? "정규화 중..." : "정규화"}
+          </button>
+        </div>
+      </div>
+
+      <p className="text-stone text-xs">
+        “정규화”를 누르면 tb_place_detail 의 동일 컬럼 데이터를 tb_place_detail_normalized 로
+        복사(place_id 기준 insert/update)합니다. accommin·accommax·agerange·agemin·agemax 등 신규
+        컬럼은 아직 채우지 않습니다.
+      </p>
+
+      {/* 정규화 결과 / 에러 */}
+      {normResult && (
+        <div className="border-brand-200 bg-brand-50 text-brand-800 rounded-lg border p-4 text-sm">
+          ✓ 정규화 완료 — tb_place_detail {normResult.totalPlaces}건에서 {normResult.upserted}건
+          복사(upsert)
+        </div>
+      )}
+      {normError && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{normError}</p>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{error}</p>
+        </div>
+      )}
+
+      {status !== "error" && (
+        <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-hairline-soft bg-surface-soft border-b">
+                  {columns.map((c) => (
+                    <th
+                      key={c}
+                      className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
+                    >
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr
+                    key={i}
+                    className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
+                  >
+                    {columns.map((c) => (
+                      <td
+                        key={c}
+                        className="text-steel max-w-xs truncate px-4 py-3 whitespace-nowrap"
+                        title={typeof row[c] === "string" ? (row[c] as string) : undefined}
+                      >
+                        {renderCell(row[c])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {isLoading && (
+            <p className="text-steel animate-pulse py-8 text-center text-sm">
+              Supabase에서 데이터를 불러오는 중...
+            </p>
+          )}
+          {status === "success" && rows.length === 0 && (
+            <p className="text-stone py-8 text-center text-sm">데이터가 없어요.</p>
+          )}
+
+          {/* 페이지네이션 */}
+          {status === "success" && total > 0 && (
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={DB_DETAIL_PAGE_SIZE}
+              disabled={isLoading}
+              onChange={fetchRows}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 3-5. Supabase tb_holiday 조회 + 동기화 ───────────────
+const DB_HOLIDAY_PAGE_SIZE = 10;
+
+const HOLIDAY_COLUMNS = [
+  "holiday_id",
+  "datename",
+  "locdate",
+  "seq",
+  "datekind",
+  "isholiday",
+  "registtime",
+  "updatetime"
+] as const;
+
+interface HolidaySyncResult {
+  year: string;
+  fetched: number;
+  deleted: number;
+  inserted: number;
+}
+
+function DbHolidayTable() {
+  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(0); // 0-based
+  const [total, setTotal] = useState(0);
+
+  // 동기화 상태
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<HolidaySyncResult | null>(null);
+  const [syncError, setSyncError] = useState("");
+
+  // targetPage(0-based) 페이지를 10개씩 조회
+  const fetchRows = async (targetPage = 0) => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      setStatus("error");
+      setError(".env에 NEXT_PUBLIC_SUPABASE_URL이 설정되지 않았습니다.");
+      return;
+    }
+
+    setStatus("loading");
+    setError("");
+    try {
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      const from = targetPage * DB_HOLIDAY_PAGE_SIZE;
+      const to = from + DB_HOLIDAY_PAGE_SIZE - 1;
+      const { data, error, count } = await supabase
+        .from("tb_holiday")
+        .select("*", { count: "exact" })
+        .order("locdate", { ascending: true })
+        .order("seq", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      setRows((data ?? []) as Record<string, unknown>[]);
+      setTotal(count ?? 0);
+      setPage(targetPage);
+      setStatus("success");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    // 마운트 시 첫 페이지 조회 (initial fetch on mount)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchRows(0);
+  }, []);
+
+  // 특일 정보 API(공휴일 정보조회)를 올해 연도로 조회해 tb_holiday 의 올해 데이터를
+  // 전부 지우고 다시 insert 한다. (upsert 아님)
+  const runSync = async () => {
+    setSyncing(true);
+    setSyncError("");
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/holiday", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? `동기화 실패 (HTTP ${res.status})`);
+      setSyncResult(json as HolidaySyncResult);
+      await fetchRows(0); // 동기화 후 첫 페이지부터 다시 조회
+    } catch (e: unknown) {
+      setSyncError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // 컬럼 헤더는 실제 스키마 기준으로 하드코딩 (데이터가 비어도 헤더 표시)
+  const columns = HOLIDAY_COLUMNS;
+  const totalPages = Math.max(1, Math.ceil(total / DB_HOLIDAY_PAGE_SIZE));
+  const isLoading = status === "loading";
+
+  const renderCell = (value: unknown) => {
+    if (value === null || value === undefined || value === "")
+      return <span className="text-stone">—</span>;
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+  };
+
+  return (
+    <div className="space-y-3 pt-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Database className="text-navy-500 h-4 w-4" />
+          <h2 className="text-ink font-bold">tb_holiday</h2>
+          <code className="bg-surface text-steel rounded-full px-2 py-0.5 font-mono text-xs">
+            공휴일
+          </code>
+          {status === "success" && <span className="text-stone text-sm">총 {total}건</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchRows(page)}
+            disabled={isLoading || syncing}
+            className="border-hairline text-steel hover:bg-surface-soft rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            {isLoading ? "조회 중..." : "새로고침"}
+          </button>
+          <button
+            onClick={runSync}
+            disabled={syncing}
+            className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
+          >
+            <Database className="h-3.5 w-3.5" />
+            {syncing ? "동기화 중..." : "API 동기화"}
+          </button>
+        </div>
+      </div>
+
+      <p className="text-stone text-xs">
+        “API 동기화”를 누르면 한국천문연구원 특일 정보(공휴일 정보조회)를 올해 연도로 조회해,
+        tb_holiday의 올해 데이터를 전부 삭제한 뒤 조회 결과를 다시 insert 합니다.
+      </p>
+
+      {/* 동기화 결과 / 에러 */}
+      {syncResult && (
+        <div className="border-brand-200 bg-brand-50 text-brand-800 rounded-lg border p-4 text-sm">
+          ✓ 동기화 완료 — {syncResult.year}년 {syncResult.fetched}건 조회, 기존 {syncResult.deleted}
+          건 삭제 후 {syncResult.inserted}건 저장
+        </div>
+      )}
+      {syncError && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{syncError}</p>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div className="border-gold-200 bg-gold-50 flex items-start gap-3 rounded-lg border p-4">
+          <AlertCircle className="text-gold-500 mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-gold-800 text-sm whitespace-pre-wrap">{error}</p>
+        </div>
+      )}
+
+      {status !== "error" && (
+        <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-hairline-soft bg-surface-soft border-b">
+                  {columns.map((c) => (
+                    <th
+                      key={c}
+                      className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
+                    >
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr
+                    key={i}
+                    className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
+                  >
+                    {columns.map((c) => (
+                      <td
+                        key={c}
+                        className="text-steel max-w-xs truncate px-4 py-3 whitespace-nowrap"
+                        title={typeof row[c] === "string" ? (row[c] as string) : undefined}
+                      >
+                        {renderCell(row[c])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {isLoading && (
+            <p className="text-steel animate-pulse py-8 text-center text-sm">
+              Supabase에서 데이터를 불러오는 중...
+            </p>
+          )}
+          {status === "success" && rows.length === 0 && (
+            <p className="text-stone py-8 text-center text-sm">
+              데이터가 없어요. “API 동기화”를 눌러 채워보세요.
+            </p>
+          )}
+
+          {/* 페이지네이션 */}
+          {status === "success" && total > 0 && (
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={DB_HOLIDAY_PAGE_SIZE}
               disabled={isLoading}
               onChange={fetchRows}
             />

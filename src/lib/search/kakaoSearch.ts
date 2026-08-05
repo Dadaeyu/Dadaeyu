@@ -1,7 +1,7 @@
 // 카카오 로컬 검색 API(/api/kakao-search)를 호출해 DB 검색 결과와 같은 SearchPlace 형태로 변환한다.
 
 export interface SearchPlace {
-  id: string;
+  id: string; // tb_place.contentid (문자열) — 카카오 출처는 "kakao_..." 형태
   name: string;
   lat: number;
   lng: number;
@@ -14,6 +14,9 @@ export interface SearchPlace {
   // "후기" 게시판 별점 평균 (상위 평점 장소 목록에서만 채워짐)
   average_rating?: number | null;
   review_count?: number;
+  // tb_place.place_id (내부 PK) — DB 출처(source="db")일 때만 채워짐.
+  // tb_course_detail.place_id 등 place_id 를 FK로 쓰는 곳은 반드시 이 값을 써야 한다(contentid 아님).
+  placeId?: number;
 }
 
 export async function fetchKakaoPlaces(

@@ -6,19 +6,25 @@ import { useRouter } from "next/navigation";
 import {
   Star,
   Heart,
-  Route,
   Navigation,
   ChevronLeft,
   MapPin,
   Flag,
   MessageCircle,
-  PenLine
+  PenLine,
+  Plus,
+  ExternalLink,
+  Phone
 } from "lucide-react";
+import { PLACE_DETAILS } from "@/data/placesData";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import type { TourismDetail } from "@/hooks/usePlaceSearch";
 import AccessibilitySection from "./AccessibilitySection";
 import { useAuth } from "@/context/AuthContext";
 import { isPlaceLiked } from "@/lib/supabase/placeLikes";
+
+// 카카오 검색 결과(source="kakao")는 DB 상세가 없어 리뷰 대신 이 플레이스홀더를 보여준다.
+const PLACEHOLDER_DETAIL = PLACE_DETAILS[1];
 
 const REVIEW_PREVIEW_LENGTH = 60;
 // 리뷰로 취급하는 게시판("후기")의 board_id.
@@ -58,22 +64,28 @@ function renderWithLineBreaks(text: string) {
   return lines.flatMap((line, i) => (i === 0 ? [line] : [<br key={i} />, line]));
 }
 
-// DB(tb_place) 출처 검색 결과의 상세 패널. usePlaceSearch()의 tourismDetail을 받아 표시한다.
+// 지도·코스 검색 결과 상세 패널 — DB(tb_place) 출처와 카카오 로컬 검색 출처를 함께 다룬다.
+// DB 출처: usePlaceSearch()의 tourismDetail 을 받아 실제 리뷰·접근성·상세내용을 보여준다.
+// 카카오 출처(sp.source==="kakao"): DB 상세가 없으므로 좋아요 영속화·리뷰 작성 없이
+// 간소화된 정보(주소/전화)와 플레이스홀더 리뷰, 카카오맵 외부 링크만 보여준다.
 export default function TourismDetailPanel({
   sp,
   detail,
   isLoading,
   onBack,
-  onLikeChange
+  onLikeChange,
+  onAddToCourse
 }: {
   sp: SearchPlace;
   detail: TourismDetail | null;
   isLoading: boolean;
   onBack: () => void;
   onLikeChange?: () => void;
+  onAddToCourse?: () => void; // 넘기면 헤더에 "내 코스에 추가" 버튼 표시 (코스 편집 화면 전용)
 }) {
   const router = useRouter();
   const { user } = useAuth();
+  const isKakao = sp.source === "kakao";
   const [favorited, setFavorited] = useState(false);
   const [loginNotice, setLoginNotice] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -83,9 +95,29 @@ export default function TourismDetailPanel({
   const [reviews, setReviews] = useState<PlaceReviewItem[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
 
-  const placeId = Number(sp.id);
+  // 카카오 출처는 contentid 가 없어(예: "kakao_123") 좋아요/리뷰 API 대상이 될 수 없다.
+  const placeId = isKakao ? null : Number(sp.id);
 
   useEffect(() => {
+    if (isKakao) {
+      // DB 상세가 없으므로 실제 리뷰 대신 플레이스홀더 리뷰로 개수·평균을 보여준다.
+      const placeholder: PlaceReviewItem[] = PLACEHOLDER_DETAIL.reviews.map((r) => ({
+        id: r.id,
+        title: r.user,
+        content: r.content,
+        rating: r.rating,
+        created_at: r.date
+      }));
+      setReviewTotal(placeholder.length);
+      setAverageRating(
+        placeholder.length
+          ? placeholder.reduce((sum, r) => sum + (r.rating ?? 0), 0) / placeholder.length
+          : null
+      );
+      setReviews(placeholder);
+      setReviewsLoading(false);
+      return;
+    }
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled) setReviewsLoading(true);
@@ -111,7 +143,7 @@ export default function TourismDetailPanel({
     return () => {
       cancelled = true;
     };
-  }, [sp.id]);
+  }, [sp.id, isKakao]);
 
   const goWriteReview = () => {
     const params = new URLSearchParams({ contentId: sp.id, board: String(REVIEW_BOARD_ID) });
@@ -128,7 +160,7 @@ export default function TourismDetailPanel({
   };
 
   useEffect(() => {
-    if (!user) {
+    if (isKakao || !user || placeId == null) {
       queueMicrotask(() => setFavorited(false));
       return undefined;
     }
@@ -141,9 +173,14 @@ export default function TourismDetailPanel({
     return () => {
       cancelled = true;
     };
-  }, [user, placeId]);
+  }, [user, placeId, isKakao]);
 
   const handleToggleFavorite = async () => {
+    if (isKakao) {
+      // 카카오 출처는 DB 저장 대상이 없어(임시) 화면 표시만 토글한다.
+      setFavorited((v) => !v);
+      return;
+    }
     if (!user) {
       setLoginNotice(true);
       setTimeout(() => setLoginNotice(false), 2000);
@@ -171,10 +208,20 @@ export default function TourismDetailPanel({
 
   const title = detail?.title ?? sp.name;
   const image = detail?.image ?? sp.image;
-  const addr1 = detail?.addr1 || "-";
-  const useTime = detail?.use_time || "-";
-  const phone = detail?.phone || "-";
-  const overview = detail?.overview ? decodeHtmlEntities(detail.overview) : "상세내용이 없습니다";
+  const hasOverview = !!detail?.overview;
+  const categoryLabel = isKakao ? sp.category?.split(" > ").pop() : detail?.category;
+
+  // 기본 정보 목록 — DB 출처는 주소/시간/전화, 카카오 출처는 시간 정보가 없어 주소/전화만.
+  const infoRows = isKakao
+    ? [
+        { label: "주소", value: sp.address || "-" },
+        { label: "전화", value: sp.phone || "-" }
+      ]
+    : [
+        { label: "주소", value: detail?.addr1 || "-" },
+        { label: "시간", value: detail?.use_time || "-" },
+        { label: "전화", value: detail?.phone || "-" }
+      ];
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -187,6 +234,15 @@ export default function TourismDetailPanel({
           <ChevronLeft className="h-4 w-4" />
         </button>
         <h2 className="flex-1 truncate text-sm font-bold text-gray-800">{title}</h2>
+        {onAddToCourse && (
+          <button
+            onClick={onAddToCourse}
+            className="bg-brand-500 hover:bg-brand-600 flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-white transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            코스에 추가
+          </button>
+        )}
       </div>
 
       {/* 이미지 */}
@@ -205,7 +261,7 @@ export default function TourismDetailPanel({
         </div>
       )}
 
-      {isLoading ? (
+      {!isKakao && isLoading ? (
         <div className="flex flex-1 items-center justify-center py-12">
           <div className="border-brand-500 h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" />
         </div>
@@ -224,21 +280,11 @@ export default function TourismDetailPanel({
                 </span>
               </div>
             </div>
-            {detail?.category && <p className="mt-0.5 text-xs text-gray-500">{detail.category}</p>}
-            {/* <div className="mt-2 flex flex-wrap gap-1">
-              {PLACEHOLDER_DETAIL.tags.map((t) => (
-                <span
-                  key={t}
-                  className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
-                >
-                  #{t}
-                </span>
-              ))}
-            </div> */}
+            {categoryLabel && <p className="mt-0.5 text-xs text-gray-500">{categoryLabel}</p>}
           </div>
 
-          {/* 액션 버튼 */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* 액션 버튼 — "내 코스"는 지도 브라우징 중엔 대상 코스/Day 가 애매해 일단 숨김 */}
+          <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handleToggleFavorite}
               className={`flex flex-col items-center gap-1 rounded-xl border py-2.5 text-xs font-medium transition-colors ${
@@ -249,9 +295,6 @@ export default function TourismDetailPanel({
             >
               <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : ""}`} />
               즐겨찾기
-            </button>
-            <button className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
-              <Route className="text-brand-600 h-4 w-4" />내 코스
             </button>
             <button className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600">
               <Navigation className="h-4 w-4 text-blue-500" />
@@ -268,11 +311,7 @@ export default function TourismDetailPanel({
 
           {/* 기본 정보 */}
           <div className="space-y-1.5 text-xs text-gray-600">
-            {[
-              { label: "주소", value: addr1 },
-              { label: "시간", value: useTime },
-              { label: "전화", value: phone }
-            ].map(({ label, value }) => (
+            {infoRows.map(({ label, value }) => (
               <div key={label} className="flex gap-2">
                 <span className="w-10 shrink-0 font-medium text-gray-700">{label}</span>
                 <span className="min-w-0 break-words">{renderWithLineBreaks(value)}</span>
@@ -280,28 +319,53 @@ export default function TourismDetailPanel({
             ))}
           </div>
 
-          {/* 접근성 정보 */}
-          {detail?.accessibility && detail.accessibility.length > 0 && (
+          {/* 접근성 정보 (DB 출처만) */}
+          {!isKakao && detail?.accessibility && detail.accessibility.length > 0 && (
             <AccessibilitySection groups={detail.accessibility} />
           )}
 
-          {/* 상세 내용 (overview) */}
-          <div>
-            <h4 className="mb-2 text-sm font-semibold text-gray-800">상세 내용</h4>
-            <p
-              className={`text-sm leading-relaxed text-gray-600 ${overviewExpanded ? "" : "line-clamp-5"}`}
-            >
-              {overview}
-            </p>
-            {overview !== "상세내용이 없습니다" && (
-              <button
-                onClick={() => setOverviewExpanded((v) => !v)}
-                className="text-brand-600 hover:text-brand-800 mt-1 text-xs transition-colors"
+          {/* 상세 내용(overview, DB 출처) 또는 카카오맵 외부 링크(카카오 출처) */}
+          {!isKakao ? (
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-gray-800">상세 내용</h4>
+              <p
+                className={`text-sm leading-relaxed text-gray-600 ${overviewExpanded ? "" : "line-clamp-5"}`}
               >
-                {overviewExpanded ? "접기 ▲" : "더보기 ▼"}
-              </button>
-            )}
-          </div>
+                {hasOverview ? renderWithLineBreaks(detail?.overview ?? "") : "상세내용이 없습니다"}
+              </p>
+              {hasOverview && (
+                <button
+                  onClick={() => setOverviewExpanded((v) => !v)}
+                  className="text-brand-600 hover:text-brand-800 mt-1 text-xs transition-colors"
+                >
+                  {overviewExpanded ? "접기 ▲" : "더보기 ▼"}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {sp.phone && (
+                <a
+                  href={`tel:${sp.phone.replace(/[^\d+]/g, "")}`}
+                  className="border-brand-200 text-brand-800 flex items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold transition-colors hover:bg-cyan-50"
+                >
+                  <Phone className="h-4 w-4" />
+                  전화하기
+                </a>
+              )}
+              {sp.placeUrl && (
+                <a
+                  href={sp.placeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  카카오맵에서 보기
+                </a>
+              )}
+            </div>
+          )}
 
           {/* 리뷰 */}
           <div>
@@ -309,23 +373,25 @@ export default function TourismDetailPanel({
               <MessageCircle className="h-4 w-4 text-gray-500" />
               <h4 className="text-sm font-semibold text-gray-800">리뷰</h4>
               <span className="text-xs text-gray-400">{reviewTotal}개</span>
-              <div className="ml-auto flex items-center gap-2">
-                <button
-                  onClick={goWriteReview}
-                  className="text-brand-600 hover:text-brand-800 flex items-center gap-1 text-xs font-medium transition-colors"
-                >
-                  <PenLine className="h-3 w-3" />
-                  리뷰 쓰기
-                </button>
-                {reviewTotal > 0 && (
+              {!isKakao && (
+                <div className="ml-auto flex items-center gap-2">
                   <button
-                    onClick={goMoreReviews}
-                    className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-600"
+                    onClick={goWriteReview}
+                    className="text-brand-600 hover:text-brand-800 flex items-center gap-1 text-xs font-medium transition-colors"
                   >
-                    더보기
+                    <PenLine className="h-3 w-3" />
+                    리뷰 쓰기
                   </button>
-                )}
-              </div>
+                  {reviewTotal > 0 && (
+                    <button
+                      onClick={goMoreReviews}
+                      className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-600"
+                    >
+                      더보기
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             {reviewsLoading ? (
               <p className="py-4 text-center text-xs text-gray-400">불러오는 중…</p>
@@ -333,34 +399,55 @@ export default function TourismDetailPanel({
               <p className="py-4 text-center text-xs text-gray-400">등록된 후기가 없습니다</p>
             ) : (
               <div className="space-y-3">
-                {reviews.map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => router.push(`/community/${r.id}`)}
-                    className="block w-full rounded-xl border border-gray-100 p-3 text-left transition-colors hover:bg-gray-50"
-                  >
-                    <div className="mb-1.5 flex items-center justify-between gap-2">
-                      <span className="truncate text-xs font-semibold text-gray-800">
-                        {r.title}
-                      </span>
-                      {r.rating != null && (
-                        <div className="flex shrink-0 items-center gap-0.5">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`h-3 w-3 ${i < r.rating! ? "fill-yellow-400 text-yellow-400" : "text-gray-200"}`}
-                            />
-                          ))}
-                        </div>
-                      )}
+                {reviews.map((r) =>
+                  isKakao ? (
+                    <div key={r.id} className="rounded-xl border border-gray-100 p-3">
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="truncate text-xs font-semibold text-gray-800">
+                          {r.title}
+                        </span>
+                        {r.rating != null && (
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`h-3 w-3 ${i < r.rating! ? "fill-yellow-400 text-yellow-400" : "text-gray-200"}`}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs leading-relaxed text-gray-600">{r.content}</p>
                     </div>
-                    <p className="text-xs leading-relaxed text-gray-600">
-                      {r.content.length > REVIEW_PREVIEW_LENGTH
-                        ? `${r.content.slice(0, REVIEW_PREVIEW_LENGTH)}...`
-                        : r.content}
-                    </p>
-                  </button>
-                ))}
+                  ) : (
+                    <button
+                      key={r.id}
+                      onClick={() => router.push(`/community/${r.id}`)}
+                      className="block w-full rounded-xl border border-gray-100 p-3 text-left transition-colors hover:bg-gray-50"
+                    >
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="truncate text-xs font-semibold text-gray-800">
+                          {r.title}
+                        </span>
+                        {r.rating != null && (
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`h-3 w-3 ${i < r.rating! ? "fill-yellow-400 text-yellow-400" : "text-gray-200"}`}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs leading-relaxed text-gray-600">
+                        {r.content.length > REVIEW_PREVIEW_LENGTH
+                          ? `${r.content.slice(0, REVIEW_PREVIEW_LENGTH)}...`
+                          : r.content}
+                      </p>
+                    </button>
+                  )
+                )}
               </div>
             )}
           </div>

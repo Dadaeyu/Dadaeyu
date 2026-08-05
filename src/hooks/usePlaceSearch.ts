@@ -40,12 +40,22 @@ export function usePlaceSearch({
   gu,
   dong,
   favoritesOnly,
+  headcount,
+  dateFrom,
+  dateTo,
+  themes,
+  minRating,
   initialKeyword = ""
 }: {
   accessibility: string[];
   gu: string;
   dong: string;
   favoritesOnly: boolean;
+  headcount: number;
+  dateFrom: string;
+  dateTo: string;
+  themes: string[];
+  minRating: number;
   initialKeyword?: string;
 }) {
   const [keyword, setKeyword] = useState(initialKeyword);
@@ -111,6 +121,8 @@ export function usePlaceSearch({
   const [likedPlaces, setLikedPlaces] = useState<SearchPlace[]>([]);
   const likedIds = useMemo(() => new Set(likedPlaces.map((place) => place.id)), [likedPlaces]);
 
+  // 즐겨찾기 마커(하트) 표시용으로, 필터와 무관하게 내 즐겨찾기 목록을 유지한다.
+  // 상세 패널에서 하트를 누른 직후에도 즉시 다시 불러올 수 있도록 콜백으로 노출한다.
   const refreshLiked = useCallback(async () => {
     const liked = await fetchLikedPlaces();
     setLikedPlaces(liked);
@@ -152,9 +164,26 @@ export function usePlaceSearch({
         selectedGuCode ?? "",
         gu,
         dong,
-        favoritesOnly
+        favoritesOnly,
+        themes,
+        minRating,
+        headcount,
+        dateFrom,
+        dateTo
       ]),
-    [accessibility, dong, favoritesOnly, gu, searchRequest, selectedGuCode]
+    [
+      accessibility,
+      dong,
+      favoritesOnly,
+      gu,
+      searchRequest,
+      selectedGuCode,
+      themes,
+      minRating,
+      headcount,
+      dateFrom,
+      dateTo
+    ]
   );
 
   useEffect(() => {
@@ -167,7 +196,12 @@ export function usePlaceSearch({
         favoritesOnly,
         gu,
         guCode: selectedGuCode,
-        keyword: searchRequest.keyword
+        keyword: searchRequest.keyword,
+        themes,
+        minRating,
+        headcount,
+        dateFrom,
+        dateTo
       },
       controller.signal
     )
@@ -303,7 +337,12 @@ async function fetchCombinedPlaces(
     favoritesOnly,
     gu,
     guCode,
-    keyword
+    keyword,
+    themes,
+    minRating,
+    headcount,
+    dateFrom,
+    dateTo
   }: {
     accessibility: string[];
     dong: string;
@@ -311,11 +350,26 @@ async function fetchCombinedPlaces(
     gu: string;
     guCode?: string;
     keyword: string;
+    themes: string[];
+    minRating: number;
+    headcount: number;
+    dateFrom: string;
+    dateTo: string;
   },
   signal: AbortSignal
 ) {
   const trimmedKeyword = keyword.trim();
-  const hasNormalQuery = Boolean(trimmedKeyword || accessibility.length > 0 || guCode || dong);
+  const hasNormalQuery = Boolean(
+    trimmedKeyword ||
+    accessibility.length > 0 ||
+    guCode ||
+    dong ||
+    themes.length > 0 ||
+    minRating > 0 ||
+    headcount > 1 ||
+    dateFrom ||
+    dateTo
+  );
 
   if (!hasNormalQuery && !favoritesOnly) {
     return { places: [] as SearchPlace[], liked: null as SearchPlace[] | null };
@@ -326,6 +380,11 @@ async function fetchCombinedPlaces(
   if (accessibility.length > 0) params.set("accessibility", accessibility.join(","));
   if (guCode) params.set("gu", guCode);
   if (dong) params.set("dong", dong);
+  if (themes.length > 0) params.set("themes", themes.join(","));
+  if (minRating > 0) params.set("minRating", String(minRating));
+  if (headcount > 1) params.set("headcount", String(headcount));
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
 
   const [databaseResponse, kakaoResults, liked] = await Promise.all([
     hasNormalQuery

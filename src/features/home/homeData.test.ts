@@ -44,10 +44,10 @@ test("기존 프로필 값을 홈 도움 조건으로 변환한다", () => {
     "계단 피하기",
     "쉬운 설명"
   ]);
-  assert.deepEqual(homeNeedIdsToChatNeeds(["step_free", "short_distance", "hearing_guidance"]), [
-    "mobility_access",
-    "hearing_impairment"
-  ]);
+  assert.deepEqual(
+    homeNeedIdsToChatNeeds(["step_free", "short_distance", "hearing_guidance", "easy_explanation"]),
+    ["mobility_access", "short_distance", "hearing_impairment", "easy_explanation"]
+  );
 });
 
 test("선택한 도움과 실제 접근성 근거가 있는 장소를 우선한다", () => {

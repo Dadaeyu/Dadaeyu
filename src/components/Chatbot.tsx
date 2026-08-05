@@ -181,7 +181,7 @@ const confidenceLabels: Record<Confidence, string> = {
 };
 
 const confidenceTone: Record<Confidence, string> = {
-  high: "border-brand-200 bg-brand-50 text-brand-700",
+  high: "border-brand-200 bg-brand-50 text-brand-800",
   medium: "border-gold-200 bg-gold-50 text-gold-700",
   low: "border-red-200 bg-red-50 text-red-700"
 };
@@ -536,6 +536,18 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
     }, delay);
   }
 
+  async function readChatErrorMessage(response: Response) {
+    try {
+      const data = (await response.json()) as { error?: unknown; message?: unknown };
+      if (typeof data.error === "string" && data.error.trim()) return data.error.trim();
+      if (typeof data.message === "string" && data.message.trim()) return data.message.trim();
+    } catch {
+      return "";
+    }
+
+    return "";
+  }
+
   async function sendMessage(message: string, options: { continueConversation?: boolean } = {}) {
     const text = message.trim();
     if (!text || isLoadingRef.current) return;
@@ -556,7 +568,8 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
       });
 
       if (!response.ok) {
-        throw new Error("chat request failed");
+        const errorMessage = await readChatErrorMessage(response);
+        throw new Error(errorMessage || "chat request failed");
       }
 
       const data = (await response.json()) as ChatResponse;
@@ -573,10 +586,13 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
           }
         });
       }
-    } catch {
+    } catch (error) {
       const errorMessageId = nextId();
       const errorResponse: ChatResponse = {
-        message: "응답을 만드는 중 문제가 생겼어요. 잠시 뒤 다시 질문해 주세요.",
+        message:
+          error instanceof Error && error.message && error.message !== "chat request failed"
+            ? error.message
+            : "응답을 만드는 중 문제가 생겼어요. 잠시 뒤 다시 질문해 주세요.",
         chips: ["한밭수목원 휠체어 가능해?", "성심당 갈 수 있어?"],
         confidence: "low",
         sources: []
@@ -732,7 +748,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
               ref={isLatest ? latestMessageRef : null}
               className="flex justify-end"
             >
-              <div className="from-navy-600 to-brand-600 shadow-brand-900/10 max-w-[78%] rounded-2xl rounded-br-md bg-gradient-to-br px-4 py-3 text-[16px] leading-relaxed font-semibold text-white shadow-md">
+              <div className="from-navy-800 to-brand-800 shadow-brand-900/10 max-w-[78%] rounded-2xl rounded-br-md bg-gradient-to-br px-4 py-3 text-[16px] leading-relaxed font-semibold text-white shadow-md">
                 {message.text}
               </div>
             </div>
@@ -772,6 +788,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
           type="text"
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          maxLength={500}
           placeholder={
             isConversationMode
               ? isLoading
@@ -785,7 +802,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
           }
           aria-label="질문 입력"
           disabled={isLoading || isConversationMode}
-          className="focus:border-brand-400 min-w-0 flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-[16px] transition-colors placeholder:text-gray-400 focus:bg-white disabled:opacity-60"
+          className="focus:border-brand-400 min-w-0 flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-[16px] transition-colors placeholder:text-gray-600 focus:bg-white disabled:opacity-60"
         />
         <button
           type="button"
@@ -811,7 +828,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
           className={`inline-flex h-12 min-w-[98px] shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-3 text-[12px] font-extrabold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
             isConversationMode || isListening
               ? "border-red-300 bg-red-500 shadow-red-500/20 hover:bg-red-600"
-              : "border-brand-200 bg-brand-500 shadow-brand-500/15 hover:bg-brand-600"
+              : "border-brand-800 bg-brand-800 shadow-brand-900/15 hover:bg-brand-900"
           }`}
         >
           {isConversationMode || isListening ? (
@@ -824,7 +841,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
         <button
           type="submit"
           disabled={isLoading || isConversationMode || !input.trim()}
-          className="from-navy-600 to-brand-500 shadow-brand-500/20 grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br text-white shadow-lg transition-all hover:scale-105 disabled:scale-100 disabled:opacity-40"
+          className="from-navy-800 to-brand-800 shadow-brand-900/20 grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br text-white shadow-lg transition-all hover:scale-105 disabled:scale-100 disabled:opacity-40"
           aria-label="전송"
         >
           <Send className="h-5 w-5" aria-hidden="true" />
@@ -971,7 +988,7 @@ function PlaceRecommendationList({
             관광정보와 접근성을 나눠서 확인해요
           </span>
         </div>
-        <span className="bg-brand-50 text-brand-700 ring-brand-100 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1">
+        <span className="bg-brand-50 text-brand-800 ring-brand-100 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1">
           {places.length}곳
         </span>
       </div>
@@ -987,7 +1004,7 @@ function PlaceRecommendationList({
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <span className="text-brand-700 mb-1 block text-[11px] font-extrabold">
+                  <span className="text-brand-800 mb-1 block text-[11px] font-extrabold">
                     후보 {index + 1}
                     {place.category ? ` · ${place.category}` : ""}
                   </span>
@@ -1000,7 +1017,7 @@ function PlaceRecommendationList({
                     href={buildMapSearchUrl(place)}
                     target="_blank"
                     rel="noreferrer"
-                    className="border-brand-200 text-brand-700 hover:bg-brand-50 inline-flex min-h-12 items-center gap-1.5 rounded-full border bg-white px-3 py-2 text-[12px] font-extrabold transition-colors"
+                    className="border-brand-200 text-brand-800 hover:bg-brand-50 inline-flex min-h-12 items-center gap-1.5 rounded-full border bg-white px-3 py-2 text-[12px] font-extrabold transition-colors"
                   >
                     <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
                     위치 보기
@@ -1050,8 +1067,8 @@ function PlaceRecommendationList({
                       }
                       className={`inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[12px] font-extrabold transition-colors ${
                         isActive
-                          ? "bg-brand-600 text-white shadow-sm"
-                          : "hover:bg-brand-50 hover:text-brand-700 bg-white text-gray-600 ring-1 ring-gray-100"
+                          ? "bg-brand-800 text-white shadow-sm"
+                          : "hover:bg-brand-50 hover:text-brand-800 bg-white text-gray-600 ring-1 ring-gray-100"
                       }`}
                     >
                       {tab === "tour" ? <Info className="h-3.5 w-3.5" aria-hidden="true" /> : null}
@@ -1078,7 +1095,7 @@ function PlaceRecommendationList({
                     key={question}
                     disabled={disabled}
                     onClick={() => void onChipClick(question)}
-                    className="border-brand-200 text-brand-700 hover:border-brand-400 hover:bg-brand-50 min-h-12 rounded-full border bg-white px-3 py-2 text-left text-[12px] leading-snug font-extrabold transition-colors disabled:opacity-50"
+                    className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 min-h-12 rounded-full border bg-white px-3 py-2 text-left text-[12px] leading-snug font-extrabold transition-colors disabled:opacity-50"
                   >
                     {question}
                   </button>
@@ -1086,7 +1103,7 @@ function PlaceRecommendationList({
               </div>
 
               {place.source ? (
-                <span className="mt-2 block truncate text-[11px] font-semibold text-gray-400">
+                <span className="mt-2 block truncate text-[11px] font-semibold text-gray-600">
                   출처: {place.source}
                 </span>
               ) : null}
@@ -1236,7 +1253,7 @@ function AssistantMessage({
               }
               onSpeak(messageId, response.message);
             }}
-            className="border-brand-200 text-brand-700 hover:border-brand-400 hover:bg-brand-50 ml-auto inline-flex min-h-8 items-center gap-1.5 rounded-full border bg-white px-2.5 py-1.5 text-[12px] font-extrabold transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+            className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-full border bg-white px-3 py-1.5 text-[12px] font-extrabold transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-500"
             aria-label={isSpeaking ? "답변 읽기 중지" : "답변 읽어주기"}
           >
             {isSpeaking ? (
@@ -1251,7 +1268,7 @@ function AssistantMessage({
           {response.message}
         </p>
         {!ttsSupported ? (
-          <span className="mt-2 block text-[12px] font-semibold text-gray-400">
+          <span className="mt-2 block text-[12px] font-semibold text-gray-600">
             현재 음성 읽어주기를 사용할 수 없어요.
           </span>
         ) : null}
@@ -1266,10 +1283,10 @@ function AssistantMessage({
 
         {response.card ? (
           <details className="border-brand-100 bg-brand-50/70 mt-4 rounded-2xl border px-3.5 py-3 text-gray-700">
-            <summary className="text-brand-800 flex cursor-pointer items-center gap-2 text-[13px] font-extrabold select-none">
+            <summary className="text-brand-800 flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-extrabold select-none">
               <MapPin className="h-4 w-4" aria-hidden="true" />
               {response.card.title}
-              <span className="text-brand-600 ml-auto text-[11px] font-bold">근거 보기</span>
+              <span className="text-brand-800 ml-auto text-[11px] font-bold">근거 보기</span>
             </summary>
             <ul className="mt-3 grid gap-2 text-[13px] leading-relaxed text-gray-700">
               {response.card.rows.map((row) => (
@@ -1287,7 +1304,7 @@ function AssistantMessage({
 
         {showTechnicalDetails ? (
           <details className="border-navy-100 bg-navy-50/50 mt-3 rounded-2xl border px-3 py-2.5 text-xs text-gray-800">
-            <summary className="text-navy-700 cursor-pointer text-xs font-extrabold select-none">
+            <summary className="text-navy-700 flex min-h-11 cursor-pointer items-center text-xs font-extrabold select-none">
               정보 출처
             </summary>
             {showDebugDetails && response.debug ? (
@@ -1506,7 +1523,7 @@ function AssistantMessage({
                   key={chip}
                   disabled={disabled}
                   onClick={() => void onChipClick(chip)}
-                  className="border-brand-200 text-brand-700 hover:border-brand-400 hover:bg-brand-50 rounded-full border bg-white px-3 py-2 text-left text-[13px] leading-snug font-bold transition-colors disabled:opacity-50"
+                  className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 min-h-11 rounded-full border bg-white px-3 py-2 text-left text-[13px] leading-snug font-bold transition-colors disabled:opacity-50"
                 >
                   {chip}
                 </button>

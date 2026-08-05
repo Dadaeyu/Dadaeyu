@@ -40,11 +40,27 @@ export type TourWeatherInput = {
 export const KMA_TOUR_WEATHER_URL =
   "https://apis.data.go.kr/1360000/TourStnInfoService1/getCityTourClmIdx1";
 export const KMA_TOUR_WEATHER_SOURCE = "기상청 관광코스별 관광지 상세 날씨 조회서비스";
+export const KMA_TOUR_WEATHER_TIMEOUT_MS = 8_000;
 
-export async function fetchTourWeather({
-  location = "대전",
-  weatherSensitive = true
-}: TourWeatherInput = {}): Promise<TourWeatherResult> {
+type TourWeatherFetch = (
+  input: string,
+  init: {
+    headers: { Accept: string };
+    next: { revalidate: number };
+    signal: AbortSignal;
+  }
+) => Promise<Response>;
+
+export type TourWeatherRuntime = {
+  createTimeoutSignal?: (timeoutMs: number) => AbortSignal;
+  fetch?: TourWeatherFetch;
+  timeoutMs?: number;
+};
+
+export async function fetchTourWeather(
+  { location = "대전", weatherSensitive = true }: TourWeatherInput = {},
+  runtime: TourWeatherRuntime = {}
+): Promise<TourWeatherResult> {
   if (!weatherSensitive) {
     return createTourWeatherResult({
       message: "날씨 조건 없는 질문",
@@ -89,11 +105,14 @@ export async function fetchTourWeather({
   const url = `${KMA_TOUR_WEATHER_URL}?${params.toString()}&ServiceKey=${encodePublicDataServiceKey(
     config.apiKey
   )}`;
+  const fetchImpl = runtime.fetch ?? fetch;
+  const createTimeoutSignal = runtime.createTimeoutSignal ?? createAbortTimeoutSignal;
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchImpl(url, {
       headers: { Accept: "application/json" },
-      next: { revalidate: 1800 }
+      next: { revalidate: 1800 },
+      signal: createTimeoutSignal(runtime.timeoutMs ?? KMA_TOUR_WEATHER_TIMEOUT_MS)
     });
 
     if (!response.ok) {
@@ -211,6 +230,10 @@ function getTourWeatherHttpFailureMessage(status: number) {
   }
 
   return `기상청 관광 날씨 API 호출 실패(${status})`;
+}
+
+function createAbortTimeoutSignal(timeoutMs: number) {
+  return AbortSignal.timeout(timeoutMs);
 }
 
 function encodePublicDataServiceKey(serviceKey: string) {

@@ -6,6 +6,7 @@ import { TextToSpeechProviderError, type TextToSpeechProvider } from "@/lib/tts/
 const providerFactories = {
   google: () => new GoogleTextToSpeechProvider()
 } satisfies Record<string, () => TextToSpeechProvider>;
+const providerCache = new Map<string, TextToSpeechProvider>();
 
 export function createTextToSpeechProvider(): TextToSpeechProvider {
   const providerName = process.env.TTS_PROVIDER?.trim().toLowerCase() || "google";
@@ -15,7 +16,12 @@ export function createTextToSpeechProvider(): TextToSpeechProvider {
     throw new TextToSpeechProviderError(`Unsupported TTS provider: ${providerName}`, 503);
   }
 
-  return createProvider();
+  const cachedProvider = providerCache.get(providerName);
+  if (cachedProvider) return cachedProvider;
+
+  const provider = createProvider();
+  providerCache.set(providerName, provider);
+  return provider;
 }
 
 export { TextToSpeechProviderError } from "@/lib/tts/server/provider";

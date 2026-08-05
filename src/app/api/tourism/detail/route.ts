@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   const [{ data: place }, { data: detail }, { data: acc }] = await Promise.all([
     supabase
       .from("tb_place")
-      .select("title, firstimage, addr1, lclssystm3")
+      .select("title, firstimage, addr1, lclssystm1")
       .eq("contentid", contentId)
       .or("delete_yn.is.null,delete_yn.eq.N")
       .single(),
@@ -72,13 +72,13 @@ export async function GET(request: Request) {
 
   if (!place) return Response.json({ error: "not found" }, { status: 404 });
 
-  // 카카오맵의 "장소명 아래 카테고리"처럼 보여주기 위한 소분류명 (tb_code.code_group='LCLSSYSTM').
-  const { data: category } = place.lclssystm3
+  // 카카오맵의 "장소명 아래 카테고리"처럼 보여주기 위한 대분류명 (tb_code.code_group='LCLSSYSTM1').
+  const { data: category } = place.lclssystm1
     ? await supabase
         .from("tb_code")
         .select("code_nm")
-        .eq("code_group", "LCLSSYSTM")
-        .eq("code_id", place.lclssystm3)
+        .eq("code_group", "LCLSSYSTM1")
+        .eq("code_id", place.lclssystm1)
         .maybeSingle()
     : { data: null };
 
