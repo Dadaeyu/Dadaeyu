@@ -11,6 +11,8 @@ import {
   Image as ImageIcon,
   X,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   MapPin,
   Route,
   Search,
@@ -1276,6 +1278,69 @@ function CommunityDetail({ id }: { id: string }) {
   const [commentError, setCommentError] = useState<string | null>(null);
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState("");
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const imageScrollRef = useRef<HTMLDivElement>(null);
+  const imageDragRef = useRef({ dragging: false, moved: false, startX: 0, startScrollLeft: 0 });
+
+  // 스크롤바를 숨긴 대신, 세로 휠 입력을 가로 스크롤로 변환해 마우스 휠로도 넘길 수 있게 한다.
+  useEffect(() => {
+    const el = imageScrollRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0 || e.deltaX !== 0) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [post?.images.length]);
+
+  // 이미지는 기본적으로 브라우저가 드래그 대상으로 취급해 마우스로 끌면 스크롤 대신
+  // 이미지 고스트/선택 블록이 뜬다. 직접 드래그를 가로채 스크롤로 처리한다.
+  useEffect(() => {
+    const el = imageScrollRef.current;
+    if (!el) return;
+    const drag = imageDragRef.current;
+    const handleMouseDown = (e: MouseEvent) => {
+      drag.dragging = true;
+      drag.moved = false;
+      drag.startX = e.pageX;
+      drag.startScrollLeft = el.scrollLeft;
+      e.preventDefault();
+    };
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!drag.dragging) return;
+      const delta = e.pageX - drag.startX;
+      if (Math.abs(delta) > 5) drag.moved = true;
+      el.scrollLeft = drag.startScrollLeft - delta;
+    };
+    const handleMouseUp = () => {
+      drag.dragging = false;
+    };
+    el.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      el.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [post?.images.length]);
+
+  useEffect(() => {
+    if (lightboxIndex === null || !post) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxIndex(null);
+      else if (e.key === "ArrowLeft")
+        setLightboxIndex((i) =>
+          i === null ? i : (i - 1 + post.images.length) % post.images.length
+        );
+      else if (e.key === "ArrowRight")
+        setLightboxIndex((i) => (i === null ? i : (i + 1) % post.images.length));
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxIndex, post]);
 
   const handleToggleLike = async () => {
     if (liking) return;
@@ -1510,10 +1575,28 @@ function CommunityDetail({ id }: { id: string }) {
           </p>
 
           {post.images.length > 0 && (
-            <div className="mt-6 flex flex-wrap gap-2">
-              {post.images.map((img) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={img} src={img} alt="" className="h-28 w-28 rounded-lg object-cover" />
+            <div
+              ref={imageScrollRef}
+              className="mt-6 flex cursor-grab [scrollbar-width:none] gap-2 overflow-x-auto pb-1 active:cursor-grabbing [&::-webkit-scrollbar]:hidden"
+            >
+              {post.images.map((img, i) => (
+                <button
+                  key={img}
+                  type="button"
+                  onClick={() => {
+                    if (imageDragRef.current.moved) return;
+                    setLightboxIndex(i);
+                  }}
+                  className="bg-surface h-40 w-64 shrink-0 overflow-hidden rounded-lg select-none"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img}
+                    alt=""
+                    draggable={false}
+                    className="h-full w-full object-cover select-none"
+                  />
+                </button>
               ))}
             </div>
           )}
@@ -1711,6 +1794,60 @@ function CommunityDetail({ id }: { id: string }) {
           <p className="text-stone text-sm">댓글을 사용하지 않는 게시판입니다.</p>
         )}
       </div>
+
+      {/* 이미지 라이트박스 */}
+      {lightboxIndex !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setLightboxIndex(null)}
+        >
+          <button
+            onClick={() => setLightboxIndex(null)}
+            aria-label="닫기"
+            className="absolute top-4 right-4 text-white/80 transition-colors hover:text-white"
+          >
+            <X className="h-7 w-7" />
+          </button>
+          {post.images.length > 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxIndex((i) =>
+                  i === null ? i : (i - 1 + post.images.length) % post.images.length
+                );
+              }}
+              aria-label="이전 사진"
+              className="absolute left-2 text-white/80 transition-colors hover:text-white sm:left-4"
+            >
+              <ChevronLeft className="h-8 w-8" />
+            </button>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={post.images[lightboxIndex]}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[85vh] max-w-full rounded-lg object-contain"
+          />
+          {post.images.length > 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxIndex((i) => (i === null ? i : (i + 1) % post.images.length));
+              }}
+              aria-label="다음 사진"
+              className="absolute right-2 text-white/80 transition-colors hover:text-white sm:right-4"
+            >
+              <ChevronRight className="h-8 w-8" />
+            </button>
+          )}
+          {post.images.length > 1 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm text-white/80">
+              {lightboxIndex + 1} / {post.images.length}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

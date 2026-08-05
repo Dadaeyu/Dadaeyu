@@ -7,7 +7,9 @@ export const CHAT_DEFAULT_RATE_LIMIT_PER_MINUTE = 20;
 export type ChatPolicyEnv = Partial<Pick<NodeJS.ProcessEnv, "CHAT_DEBUG" | "NODE_ENV">>;
 
 export type ChatDebuggableResponse = {
+  card?: unknown;
   debug?: unknown;
+  sources?: unknown[];
 };
 
 export function shouldIncludeChatDebug(env: ChatPolicyEnv = process.env) {
@@ -19,8 +21,10 @@ export function stripChatDebugForPolicy<T extends ChatDebuggableResponse>(
   env: ChatPolicyEnv = process.env
 ): T {
   if (shouldIncludeChatDebug(env)) return response;
-  const safeResponse = { ...response };
+  const safeResponse = { ...response } as T & ChatDebuggableResponse;
+  delete safeResponse.card;
   delete safeResponse.debug;
+  if ("sources" in safeResponse) safeResponse.sources = [];
   return safeResponse as T;
 }
 

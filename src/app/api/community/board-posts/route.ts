@@ -35,7 +35,8 @@ export async function GET(request: Request) {
       .select(LIST_COLUMNS, { count: "exact" })
       .eq("use_yn", true)
       .order("notice_yn", { ascending: false })
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("post_id", { ascending: false });
 
     if (boardIdParam) {
       const boardId = Number(boardIdParam);

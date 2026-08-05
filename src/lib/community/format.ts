@@ -1,5 +1,3 @@
-import DOMPurify from "isomorphic-dompurify";
-
 export function formatCommunityDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -18,7 +16,12 @@ export function looksLikeHtml(content: string): boolean {
   return /<[a-z][\s\S]*>/i.test(content);
 }
 
+// isEmptyRichText 등 다른 export는 DOMPurify가 필요 없다. isomorphic-dompurify는
+// 로드만 해도 서버에서 jsdom을 물고 들어와 무거우니(+환경에 따라 깨지기도 함),
+// 실제로 HTML을 sanitize할 때만 지연 로드한다.
 export function sanitizeCommunityHtml(html: string): string {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const DOMPurify = require("isomorphic-dompurify") as typeof import("isomorphic-dompurify");
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     ADD_ATTR: ["target", "rel", "class", "width", "height", "style", "data-width"]
