@@ -10,6 +10,12 @@ import {
   selectDiverseItems
 } from "@/lib/chat/recommendationDiversity";
 import {
+  formatChatAccessibilityText,
+  formatChatDisplayText,
+  getPublicChatSourceLabel,
+  uniqueChatSuggestions
+} from "@/lib/chat/presentation";
+import {
   CHAT_MAX_BODY_BYTES,
   CHAT_MAX_MESSAGE_LENGTH,
   getRequestBodySizeBytes,
@@ -59,8 +65,6 @@ type PlaceCard = {
   latitude: string | null;
   longitude: string | null;
   source: string | null;
-  tags: string[];
-  followUps: string[];
 };
 
 type DeepSeekChatResponse = {
@@ -295,7 +299,7 @@ const systemPrompt = [
   "'가능해유', '좋아유', '그려유', '있어유'처럼 노골적인 방언형 어미는 쓰지 않는다.",
   "모든 문장 끝에 '~유'를 붙이는 식의 과장된 사투리는 절대 쓰지 않는다.",
   "억지스러운 사투리나 장난스러운 말투는 피한다.",
-  "Supabase 근거 데이터가 제공되면 그 내용을 우선 사용한다.",
+  "공개 안내 자료가 제공되면 그 내용을 우선 사용한다.",
   "근거 데이터에 없는 내용은 확정 정보처럼 단정하지 말고 방문 전 확인이 필요한 부분을 분명히 말한다.",
   "'갈 수 있어요', '이용 가능해요', '편리한 곳이에요'처럼 현장 상태까지 보장하는 표현은 피한다. 대신 '현재 공개된 정보에서는 관련 근거가 확인돼요', '확인된 항목은 이래요'처럼 근거의 범위를 먼저 밝힌다.",
   "특정 장소의 가능 여부를 물어도 답변 첫 문장부터 단정하지 않는다. 확인된 출입구, 엘리베이터, 화장실 등의 항목과 방문 전 다시 확인할 부분을 구분해서 말한다.",
@@ -304,6 +308,7 @@ const systemPrompt = [
   "날씨 데이터가 제공되지 않으면 현재 날씨를 알고 있다고 말하지 않는다.",
   "장소를 추천할 때는 접근성만 나열하지 말고, 각 장소가 어떤 곳인지, 가서 무엇을 볼 수 있는지, 누구에게 맞는지, 왜 가볼 만한지도 함께 말한다.",
   "말풍선 답변은 긴 상세 설명이 아니라 추천 판단 요약이다. 자세한 관광정보와 접근성 목록은 아래 추천 카드에서 확인하게 한다.",
+  "원본 데이터의 HTML 태그, 내부 source ID, API·모델명, DB·검색 방식은 사용자 답변에 절대 노출하지 않는다.",
   "사용자가 쉬운 설명을 원하면 행정 용어를 피하고, 핵심 결론과 방문 전 확인할 점을 짧은 문장으로 나눈다.",
   "사용자가 짧은 동선이나 가까운 곳을 원하면 출입통로, 엘리베이터, 주차, 대중교통처럼 이동 부담을 줄이는 근거를 우선한다.",
   "추천 장소 설명은 관광지 성격과 '가서 할 수 있는 것'을 먼저 짧게 말하고, 그다음 사용자의 접근성 조건과 직접 관련된 핵심 근거만 붙인다.",
@@ -549,11 +554,11 @@ function createStaticSiteFaqResponse(message: string): ChatResponse | null {
   ) {
     return createSiteGuideResponse({
       message:
-        "현재 챗봇 데이터는 한국관광공사 TourAPI 무장애 여행 정보에 대전 공중화장실, 장애인주차장, 문화관광 OpenAPI 데이터를 더해서 정리하고 있어요. 다만 운영 여부나 편의시설은 현장에서 바뀔 수 있잖아요. 그래서 중요한 방문 전에는 공식 홈페이지나 전화로 한 번 더 확인하는 흐름을 권장해요.",
+        "한국관광공사의 관광·무장애 여행정보와 대전시가 공개한 화장실, 장애인 주차장, 문화관광 정보를 함께 확인하고 있어요. 운영 여부나 편의시설은 달라질 수 있으니, 중요한 방문 전에는 공식 홈페이지나 안내처에 한 번 더 확인해 주세요.",
       rows: [
-        "현재 원천: TourAPI, 대전교통공사, 대전광역시, 대전 서구 OpenAPI",
-        "처리 방식: DB 근거를 먼저 찾고 답변 생성",
-        "주의: 운영 정보는 방문 전 재확인 권장"
+        "한국관광공사 관광·무장애 여행정보",
+        "대전시 공공데이터",
+        "운영 정보는 방문 전 재확인 권장"
       ]
     });
   }
@@ -603,7 +608,7 @@ function isConversationalPhrase(value: string, phrases: string[]) {
 }
 
 function normalizeDaiyuTone(value: string) {
-  return value
+  return formatChatDisplayText(value)
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/있어유/g, "있어요")
     .replace(/없어유/g, "없어요")
@@ -699,8 +704,6 @@ function createNoKnowledgeResponse({
 
 function createSuccessResponse({
   message,
-  model,
-  usage,
   inputMessage,
   knowledge,
   analysis,
@@ -709,8 +712,6 @@ function createSuccessResponse({
   weather
 }: {
   message: string;
-  model: string;
-  usage?: DeepSeekChatResponse["usage"];
   inputMessage: string;
   knowledge: KnowledgeResult;
   analysis: QueryAnalysis;
@@ -718,34 +719,10 @@ function createSuccessResponse({
   searchTerms: string[];
   weather?: TourWeatherResult;
 }): ChatResponse {
-  const evidenceCount = knowledge.rows.length;
-  const rows = [
-    knowledge.searchMode === "vector"
-      ? `pgvector 유사도 검색 결과 ${evidenceCount}건 참고`
-      : knowledge.message,
-    "운영 여부와 편의시설은 방문 전 재확인 권장"
-  ];
-
-  const embeddingModel = knowledge.embeddingModel || knowledge.debug?.embedding?.model;
-  if (embeddingModel && knowledge.debug?.embedding?.status === "created") {
-    rows.push(`질문 embedding: ${embeddingModel}`);
-  }
-
-  if (knowledge.fallbackReason) {
-    rows.push(`fallback: ${knowledge.fallbackReason}`);
-  }
-
-  const weatherCardRow = formatWeatherCardRow(weather);
-  if (weatherCardRow) {
-    rows.push(weatherCardRow);
-  }
-
-  if (usage?.total_tokens) {
-    rows.push("AI가 근거 내용을 짧게 요약");
-  }
-
   const places = prioritizeConversationPlaces(buildPlaceCards(knowledge.rows), conversationContext);
-  const placeFollowUpChips = places.flatMap((place) => place.followUps).slice(0, 3);
+  const placeFollowUpChips = places
+    .flatMap((place) => buildPlaceFollowUps(place.title, place.category))
+    .slice(0, 3);
   const responseMessage =
     analysis.intent === "recommend_place" &&
     (places.length >= 2 || (conversationContext.isFollowUp && places.length > 0))
@@ -758,35 +735,25 @@ function createSuccessResponse({
       : analysis.intent === "check_accessibility" && places.length
         ? createGroundedAccessibilityCheckMessage(places[0], analysis.accessibility_needs)
         : message;
-
-  return {
-    message: responseMessage,
-    card: {
-      title: "답변 근거",
-      rows,
-      source:
-        knowledge.searchMode === "vector"
-          ? "대전 무장애/편의시설 공공데이터 + pgvector"
-          : "대전 무장애/편의시설 공공데이터"
-    },
-    places,
-    chips: [
+  const normalizedInput = normalizeStaticFaqText(inputMessage);
+  const chips = uniqueChatSuggestions(
+    [
       ...placeFollowUpChips,
       "유모차 기준으로 다시 추천해줘",
       "문화시설만 더 추천해줘",
       "장애인 화장실 있는 곳 알려줘"
-    ].slice(0, 6),
-    confidence: "medium",
-    sources: [
-      `DeepSeek API (${model})`,
-      ...(knowledge.searchMode === "vector" && knowledge.embeddingModel
-        ? [`OpenAI embeddings (${knowledge.embeddingModel})`]
-        : []),
-      ...(weather?.status === "ready" ? [weather.source] : []),
-      ...knowledge.rows
-        .map((row) => getRowText(row, "source"))
-        .filter((source): source is string => Boolean(source))
     ],
+    8
+  )
+    .filter((suggestion) => normalizeStaticFaqText(suggestion) !== normalizedInput)
+    .slice(0, 4);
+
+  return {
+    message: responseMessage,
+    places,
+    chips,
+    confidence: "medium",
+    sources: [],
     debug: {
       analysis,
       inputMessage,
@@ -1009,39 +976,55 @@ function getPreferredAccessibilityFact(items: string[], needs: string[]) {
 }
 
 function formatAccessibilityFact(item: string) {
-  const [rawLabel, ...rawDetailParts] = item.split(":");
+  const [rawLabel, ...rawDetailParts] = formatChatAccessibilityText(item).split(":");
   const label = rawLabel.trim();
   const detail = rawDetailParts
     .join(":")
     .trim()
-    .replace(/_무장애 편의시설/gu, "");
+    .replace(/_(?:무장애|시각장애인|청각장애인|지체장애인)?\s*편의시설/gu, "")
+    .replace(/동반가능/gu, "동반 가능")
+    .replace(/대여가능/gu, "대여 가능");
+  const sentenceDetail = detail.replace(/\s*\n+\s*/gu, " ").replace(/[\t ]{2,}/gu, " ");
 
-  if (/주출입구.*단차가 없어.*휠체어 접근 가능함/u.test(detail)) {
+  if (label === "접근로" && sentenceDetail.includes("대중교통")) {
+    const stop = detail.match(/대중교통:\s*([^\n.!?]+)/u)?.[1]?.trim();
+    const lowFloorBus = detail.match(/저상버스:\s*([^\n.!?]+)/u)?.[1]?.trim();
+    const transitDetails = [
+      stop ? (stop.endsWith("정류장") ? stop : `${stop} 정류장`) : null,
+      lowFloorBus ? `저상버스 ${lowFloorBus}` : null
+    ].filter((value): value is string => Boolean(value));
+
+    return transitDetails.length
+      ? `대중교통으로 갈 수 있고, ${transitDetails.join("과 ")} 이용 정보가 안내돼 있어요.`
+      : "대중교통으로 갈 수 있다고 안내돼 있어요.";
+  }
+
+  if (/주출입구.*단차가 없어.*휠체어 접근 가능함/u.test(sentenceDetail)) {
     return "주출입구에 단차가 없어 휠체어로 들어갈 수 있다고 나와 있어요.";
   }
-  if (/주출입구.*턱이 없어.*휠체어 접근 가능함/u.test(detail)) {
+  if (/주출입구.*턱이 없어.*휠체어 접근 가능함/u.test(sentenceDetail)) {
     return "주출입구에 턱이 없어 휠체어로 들어갈 수 있다고 나와 있어요.";
   }
-  if (/장애인\s*전용\s*주차구역\s*있음\(지하\)/u.test(detail)) {
+  if (/장애인\s*전용\s*주차구역\s*있음\(지하\)/u.test(sentenceDetail)) {
     return "지하에 장애인 전용 주차구역이 있어요.";
   }
-  if (/장애인\s*전용\s*주차구역\s*있음/u.test(detail)) {
+  if (/장애인\s*전용\s*주차구역\s*있음/u.test(sentenceDetail)) {
     return "장애인 전용 주차구역이 있어요.";
   }
-  if (/엘리베이터.*있음/u.test(detail)) {
+  if (/엘리베이터.*있음/u.test(sentenceDetail)) {
     return "엘리베이터가 있어요.";
   }
-  if (/장애인\s*전용?\s*화장실.*있음/u.test(detail)) {
+  if (/장애인\s*전용?\s*화장실.*있음/u.test(sentenceDetail)) {
     return "장애인 화장실이 있어요.";
   }
-  if (/유모차.*무료대여가능/u.test(detail)) {
+  if (/유모차.*무료\s*대여\s*가능/u.test(sentenceDetail)) {
     return "안내데스크에서 유모차를 무료로 빌릴 수 있어요.";
   }
-  if (/유모차.*대여가능/u.test(detail)) {
+  if (/유모차.*대여\s*가능/u.test(sentenceDetail)) {
     return "유모차를 빌릴 수 있어요.";
   }
 
-  const naturalDetail = detail
+  const naturalDetail = sentenceDetail
     .replace(/가능함$/u, "가능해요")
     .replace(/있음$/u, "있어요")
     .replace(/구비$/u, "갖춰져 있어요");
@@ -1064,13 +1047,15 @@ function buildPlaceCards(rows: KnowledgeRow[]): PlaceCard[] {
 
   return Array.from(groupedRows.values())
     .map((placeRows) => {
-      const title =
-        getFirstTextFromRows(placeRows, (row) => getRowText(row, "title")) || "제목 없음";
-      const category = getBestPlaceCategory(placeRows);
-      const address = getFirstTextFromRows(placeRows, getRowAddress);
-      const tel = getFirstTextFromRows(placeRows, getRowTel);
+      const title = formatChatDisplayText(
+        getFirstTextFromRows(placeRows, (row) => getRowText(row, "title")) || "제목 없음"
+      );
+      const category = cleanOptionalChatText(getBestPlaceCategory(placeRows));
+      const address = cleanOptionalChatText(getFirstTextFromRows(placeRows, getRowAddress));
+      const tel = cleanOptionalChatText(getFirstTextFromRows(placeRows, getRowTel));
       const latitude = getFirstTextFromRows(placeRows, getRowLatitude);
       const longitude = getFirstTextFromRows(placeRows, getRowLongitude);
+      const rawSource = getFirstTextFromRows(placeRows, (row) => getRowText(row, "source"));
       const accessibility = Array.from(
         new Set(placeRows.flatMap((row) => buildPlaceAccessibilitySummary(row)))
       ).slice(0, 6);
@@ -1085,12 +1070,15 @@ function buildPlaceCards(rows: KnowledgeRow[]): PlaceCard[] {
         accessibility,
         latitude,
         longitude,
-        source: getFirstTextFromRows(placeRows, (row) => getRowText(row, "source")),
-        tags: Array.from(new Set(placeRows.flatMap(getRowTags))).slice(0, 6),
-        followUps: buildPlaceFollowUps(title, category)
+        source: getPublicChatSourceLabel(rawSource)
       };
     })
     .slice(0, 5);
+}
+
+function cleanOptionalChatText(value: string | null) {
+  if (!value) return null;
+  return formatChatDisplayText(value) || null;
 }
 
 function getFirstTextFromRows(rows: KnowledgeRow[], getter: (row: KnowledgeRow) => string | null) {
@@ -1166,7 +1154,7 @@ function getMergedActivityHint(rows: KnowledgeRow[]) {
     getFirstTextFromRows(rows, getRowActivityHint) ||
     "방문 목적과 동선을 함께 확인해볼 수 있는 장소";
 
-  return summary ? `${summary} ${activity}` : activity;
+  return formatChatDisplayText(summary ? `${summary} ${activity}` : activity);
 }
 
 function buildPlaceTourDetails(rows: KnowledgeRow[]) {
@@ -1190,10 +1178,14 @@ function buildPlaceTourDetails(rows: KnowledgeRow[]) {
     ];
   });
 
-  return Array.from(new Set(details.filter((detail): detail is string => Boolean(detail)))).slice(
-    0,
-    5
-  );
+  return Array.from(
+    new Set(
+      details
+        .filter((detail): detail is string => Boolean(detail))
+        .map(formatChatDisplayText)
+        .filter(Boolean)
+    )
+  ).slice(0, 5);
 }
 
 function isUsefulTourSummary(summary: string | null, title: string) {
@@ -1210,7 +1202,7 @@ function buildPlaceAccessibilitySummary(row: KnowledgeRow) {
   const items = Object.entries(accessibility)
     .filter(([, value]) => value)
     .slice(0, 4)
-    .map(([key, value]) => `${getAccessibilityLabel(key)}: ${value}`);
+    .map(([key, value]) => formatChatAccessibilityText(`${getAccessibilityLabel(key)}: ${value}`));
 
   const structuredItems = [
     textMetadataValue(metadata.parking_facility)
@@ -1227,7 +1219,9 @@ function buildPlaceAccessibilitySummary(row: KnowledgeRow) {
       : null
   ].filter((item): item is string => Boolean(item));
 
-  return Array.from(new Set([...items, ...structuredItems])).slice(0, 4);
+  return Array.from(
+    new Set([...items, ...structuredItems].map(formatChatAccessibilityText).filter(Boolean))
+  ).slice(0, 4);
 }
 
 function getAccessibilityLabel(key: string) {
@@ -1311,11 +1305,6 @@ function getEmbeddingConfig() {
 function getWeatherDebugPayload(weather?: TourWeatherResult) {
   if (!weather || weather.status === "not_requested") return {};
   return { weather: weather.debug };
-}
-
-function formatWeatherCardRow(weather?: TourWeatherResult) {
-  if (weather?.status !== "ready" || !weather.items.length) return null;
-  return `관광기후지수: ${formatWeatherItem(weather.items[0])}`;
 }
 
 function getSupabaseHeaders(config: ReturnType<typeof getSupabaseConfig>, extra?: HeadersInit) {
@@ -2654,29 +2643,22 @@ function formatKnowledgeContext(knowledge: KnowledgeResult, weather?: TourWeathe
   const weatherContext = formatWeatherContext(weather);
 
   if (!knowledge.rows.length) {
-    return [
-      weatherContext,
-      "Supabase 근거 데이터는 아직 사용할 수 없다.",
-      `상태: ${knowledge.message}`
-    ]
+    return [weatherContext, "현재 확인할 수 있는 공개 안내 자료가 충분하지 않다."]
       .filter(Boolean)
       .join("\n\n");
   }
 
   return [
     weatherContext,
-    "Supabase 근거 데이터:",
+    "확인된 공개 안내 자료:",
     ...knowledge.rows.map((row, index) =>
       [
-        `${index + 1}. ${getRowText(row, "title") || "제목 없음"}`,
-        getRowText(row, "category") ? `분류: ${getRowText(row, "category")}` : null,
-        `방문 활동 힌트: ${getRowActivityHint(row)}`,
+        `${index + 1}. ${formatChatDisplayText(getRowText(row, "title") || "장소")}`,
+        `이곳에서 할 수 있는 것: ${formatChatDisplayText(getRowActivityHint(row))}`,
         buildPlaceTourDetails([row]).length
-          ? `관광지 상세 정보: ${buildPlaceTourDetails([row]).join(" / ")}`
+          ? `방문 정보: ${buildPlaceTourDetails([row]).join(" / ")}`
           : null,
-        row.content ? `내용: ${row.content}` : null,
-        getRowText(row, "source") ? `출처: ${getRowText(row, "source")}` : null,
-        getRowTags(row).length ? `태그: ${getRowTags(row).join(", ")}` : null
+        row.content ? `안내 내용: ${formatChatDisplayText(row.content)}` : null
       ]
         .filter(Boolean)
         .join("\n")
@@ -2957,17 +2939,13 @@ export async function POST(request: Request) {
 
     if (!answer) {
       return jsonChatResponse(
-        createErrorResponse(
-          "DeepSeek 응답은 도착했지만 답변 본문이 비어 있어요. 잠시 뒤 다시 질문해 주세요."
-        )
+        createErrorResponse("답변을 완성하지 못했어요. 잠시 뒤 다시 질문해 주세요.")
       );
     }
 
     return jsonChatResponse(
       createSuccessResponse({
         message: answer,
-        model: data.model || model,
-        usage: data.usage,
         inputMessage: message,
         knowledge,
         analysis,
@@ -2985,7 +2963,7 @@ export async function POST(request: Request) {
 
     const message =
       error instanceof Error && error.name === "AbortError"
-        ? "DeepSeek 응답 시간이 길어져 요청을 중단했어요. 질문을 조금 짧게 해서 다시 시도해 주세요."
+        ? "답변을 준비하는 데 시간이 오래 걸렸어요. 질문을 조금 짧게 해서 다시 시도해 주세요."
         : "응답을 만드는 중 문제가 생겼어요. 잠시 뒤 다시 질문해 주세요.";
 
     return jsonChatResponse(createErrorResponse(message));

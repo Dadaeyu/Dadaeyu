@@ -4,10 +4,12 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import {
+  formatChatAccessibilityText,
+  formatChatDisplayText,
+  getPublicChatSourceLabel
+} from "@/lib/chat/presentation";
+import {
   Accessibility,
-  CheckCircle2,
-  ClipboardCheck,
-  Info,
   MapPin,
   MessageCircle,
   Mic,
@@ -51,11 +53,7 @@ type PlaceRecommendation = {
   latitude: string | null;
   longitude: string | null;
   source: string | null;
-  tags: string[];
-  followUps: string[];
 };
-
-type PlaceInfoTab = "tour" | "accessibility" | "check";
 
 type WeatherDebug = {
   items: Array<{
@@ -172,18 +170,6 @@ const INITIAL_RESPONSE: ChatResponse = {
   ],
   confidence: "high",
   sources: []
-};
-
-const confidenceLabels: Record<Confidence, string> = {
-  high: "확인됨",
-  medium: "근거 기반",
-  low: "근거 부족"
-};
-
-const confidenceTone: Record<Confidence, string> = {
-  high: "border-brand-200 bg-brand-50 text-brand-800",
-  medium: "border-gold-200 bg-gold-50 text-gold-700",
-  low: "border-red-200 bg-red-50 text-red-700"
 };
 
 const DAIYU_AVATAR_SRC = "/daiyu-avatar.png";
@@ -968,145 +954,108 @@ function DaiyuAvatar({
   );
 }
 
-function PlaceRecommendationList({
-  places,
-  disabled,
-  onChipClick
-}: {
-  places: PlaceRecommendation[];
-  disabled: boolean;
-  onChipClick: (message: string) => Promise<void>;
-}) {
-  const [selectedTabs, setSelectedTabs] = useState<Record<string, PlaceInfoTab>>({});
-
+function PlaceRecommendationList({ places }: { places: PlaceRecommendation[] }) {
   return (
-    <section className="mt-4 border-t border-gray-100 pt-4" aria-label="추천 후보">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <strong className="block text-[14px] font-extrabold text-gray-950">추천 후보</strong>
-          <span className="mt-0.5 block text-[12px] font-semibold text-gray-500">
-            관광정보와 접근성을 나눠서 확인해요
-          </span>
+    <section className="mt-5 border-t border-gray-100 pt-5" aria-label="추천 장소">
+      {places.length > 1 ? (
+        <div className="mb-3">
+          <h3 className="text-[15px] font-extrabold text-gray-950">추천 장소</h3>
+          <p className="mt-1 text-[12px] leading-relaxed font-semibold text-gray-500">
+            방문 목적과 이동 편의 정보를 함께 비교해 보세요.
+          </p>
         </div>
-        <span className="bg-brand-50 text-brand-800 ring-brand-100 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1">
-          {places.length}곳
-        </span>
-      </div>
-      <div className="grid gap-3">
+      ) : null}
+
+      <div className="grid gap-4">
         {places.map((place, index) => {
           const placeKey = `${place.source || place.title}-${index}`;
-          const activeTab = selectedTabs[placeKey] || getDefaultPlaceTab(place);
+          const sourceLabel = getPublicChatSourceLabel(place.source);
 
           return (
             <article
               key={placeKey}
-              className="rounded-2xl border border-gray-200 bg-gray-50/80 p-3.5 shadow-sm"
+              className="overflow-hidden rounded-[1.25rem] border border-gray-200 bg-gray-50/70 shadow-sm"
             >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <span className="text-brand-800 mb-1 block text-[11px] font-extrabold">
-                    후보 {index + 1}
-                    {place.category ? ` · ${place.category}` : ""}
-                  </span>
-                  <h4 className="text-[16px] leading-snug font-extrabold text-gray-950">
-                    {place.title}
-                  </h4>
-                </div>
+              <div className="border-b border-gray-200 bg-white px-4 py-4 sm:px-5">
+                <h4 className="text-[17px] leading-snug font-extrabold text-gray-950">
+                  {formatChatDisplayText(place.title)}
+                </h4>
+
+                {place.address || place.tel ? (
+                  <dl className="mt-3 grid gap-1.5 text-[12px] leading-relaxed text-gray-600">
+                    {place.address ? (
+                      <div className="grid grid-cols-[2.5rem_1fr] gap-2">
+                        <dt className="font-extrabold text-gray-800">주소</dt>
+                        <dd>{formatChatDisplayText(place.address)}</dd>
+                      </div>
+                    ) : null}
+                    {place.tel ? (
+                      <div className="grid grid-cols-[2.5rem_1fr] gap-2">
+                        <dt className="font-extrabold text-gray-800">문의</dt>
+                        <dd>{formatChatDisplayText(place.tel)}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                ) : null}
+
                 {place.address || place.latitude ? (
                   <a
                     href={buildMapSearchUrl(place)}
                     target="_blank"
                     rel="noreferrer"
-                    className="border-brand-200 text-brand-800 hover:bg-brand-50 inline-flex min-h-12 items-center gap-1.5 rounded-full border bg-white px-3 py-2 text-[12px] font-extrabold transition-colors"
+                    className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-[12px] font-extrabold transition-colors"
+                    aria-label={`${formatChatDisplayText(place.title)} 지도에서 보기`}
                   >
                     <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-                    위치 보기
+                    지도에서 위치 확인
                   </a>
                 ) : null}
               </div>
 
-              <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-gray-700">
-                <p>
-                  <strong className="font-extrabold text-gray-900">한눈에 보기</strong>{" "}
-                  {place.activity}
-                </p>
-                {place.address || place.tel ? (
-                  <div className="flex flex-wrap gap-1.5 text-[12px] font-bold text-gray-600">
-                    {place.address ? (
-                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-gray-100">
-                        위치 {place.address}
-                      </span>
-                    ) : null}
-                    {place.tel ? (
-                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-gray-100">
-                        문의 {place.tel}
-                      </span>
-                    ) : null}
-                  </div>
+              <div className="grid gap-5 px-4 py-4 sm:px-5">
+                <div>
+                  <h5 className="text-[13px] font-extrabold text-gray-950">
+                    이곳에서 할 수 있는 것
+                  </h5>
+                  <p className="mt-1.5 text-[13px] leading-6 font-semibold whitespace-pre-line text-gray-700">
+                    {formatChatDisplayText(place.activity)}
+                  </p>
+                </div>
+
+                {place.tourDetails?.length ? (
+                  <PlaceDetailSection title="방문 정보" items={place.tourDetails} tone="warm" />
+                ) : null}
+
+                <PlaceDetailSection
+                  title="이동 편의 정보"
+                  items={
+                    place.accessibility.length
+                      ? place.accessibility
+                      : [
+                          "공개된 이동 편의 정보가 충분하지 않아요. 방문 전 안내처에서 출입구와 이동 동선을 확인해 주세요."
+                        ]
+                  }
+                  tone="brand"
+                />
+
+                <div className="rounded-xl border border-gray-200 bg-white px-3.5 py-3">
+                  <h5 className="text-[12px] font-extrabold text-gray-900">방문 전에</h5>
+                  <ul className="mt-2 grid gap-1.5 text-[12px] leading-relaxed text-gray-600">
+                    {getPlaceCheckItems(place).map((item) => (
+                      <li key={item} className="flex gap-2">
+                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-gray-400" />
+                        <span>{formatChatDisplayText(item)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {sourceLabel ? (
+                  <p className="border-t border-gray-200 pt-3 text-[11px] leading-relaxed font-semibold text-gray-500">
+                    정보 기준: {sourceLabel}
+                  </p>
                 ) : null}
               </div>
-
-              <div
-                className="mt-3 grid grid-cols-3 gap-1.5"
-                role="tablist"
-                aria-label={`${place.title} 정보 보기`}
-              >
-                {(["tour", "accessibility", "check"] as PlaceInfoTab[]).map((tab) => {
-                  const isActive = activeTab === tab;
-                  return (
-                    <button
-                      type="button"
-                      key={tab}
-                      role="tab"
-                      aria-selected={isActive}
-                      onClick={() =>
-                        setSelectedTabs((current) => ({
-                          ...current,
-                          [placeKey]: tab
-                        }))
-                      }
-                      className={`inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[12px] font-extrabold transition-colors ${
-                        isActive
-                          ? "bg-brand-800 text-white shadow-sm"
-                          : "hover:bg-brand-50 hover:text-brand-800 bg-white text-gray-600 ring-1 ring-gray-100"
-                      }`}
-                    >
-                      {tab === "tour" ? <Info className="h-3.5 w-3.5" aria-hidden="true" /> : null}
-                      {tab === "accessibility" ? (
-                        <Accessibility className="h-3.5 w-3.5" aria-hidden="true" />
-                      ) : null}
-                      {tab === "check" ? (
-                        <ClipboardCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                      ) : null}
-                      {getPlaceTabLabel(tab)}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-3 border-t border-gray-200 pt-3">
-                <PlaceTabContent place={place} tab={activeTab} />
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {place.followUps.slice(0, 2).map((question) => (
-                  <button
-                    type="button"
-                    key={question}
-                    disabled={disabled}
-                    onClick={() => void onChipClick(question)}
-                    className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 min-h-12 rounded-full border bg-white px-3 py-2 text-left text-[12px] leading-snug font-extrabold transition-colors disabled:opacity-50"
-                  >
-                    {question}
-                  </button>
-                ))}
-              </div>
-
-              {place.source ? (
-                <span className="mt-2 block truncate text-[11px] font-semibold text-gray-600">
-                  출처: {place.source}
-                </span>
-              ) : null}
             </article>
           );
         })}
@@ -1115,61 +1064,29 @@ function PlaceRecommendationList({
   );
 }
 
-function PlaceTabContent({ place, tab }: { place: PlaceRecommendation; tab: PlaceInfoTab }) {
-  if (tab === "tour") {
-    const details = place.tourDetails || [];
-    return (
-      <div className="text-[13px] leading-relaxed text-gray-700">
-        <strong className="block text-[12px] font-extrabold text-gray-950">관광정보</strong>
-        {details.length ? (
-          <ul className="mt-2 grid gap-1.5">
-            {details.map((item) => (
-              <li key={item} className="flex gap-2">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-1.5 text-gray-500">
-            상세 운영정보는 아직 부족하지만, 위의 한눈에 보기 내용을 기준으로 방문 목적을 잡아볼 수
-            있어요.
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  if (tab === "accessibility") {
-    return (
-      <div className="text-[13px] leading-relaxed text-gray-700">
-        <strong className="block text-[12px] font-extrabold text-gray-950">접근성</strong>
-        {place.accessibility.length ? (
-          <ul className="mt-2 grid gap-1.5">
-            {place.accessibility.map((item) => (
-              <li key={item} className="flex gap-2">
-                <span className="bg-brand-400 mt-2 h-1.5 w-1.5 shrink-0 rounded-full" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-1.5 text-gray-500">
-            접근성 세부 항목은 아직 부족해요. 방문 전 공식 안내처로 한 번 더 확인하는 게 좋아요.
-          </p>
-        )}
-      </div>
-    );
-  }
-
+function PlaceDetailSection({
+  title,
+  items,
+  tone
+}: {
+  title: string;
+  items: string[];
+  tone: "brand" | "warm";
+}) {
   return (
-    <div className="text-[13px] leading-relaxed text-gray-700">
-      <strong className="block text-[12px] font-extrabold text-gray-950">방문 전 확인</strong>
-      <ul className="mt-2 grid gap-1.5">
-        {getPlaceCheckItems(place).map((item) => (
+    <div>
+      <h5 className="text-[13px] font-extrabold text-gray-950">{title}</h5>
+      <ul className="mt-2 grid gap-2 text-[13px] leading-6 text-gray-700">
+        {items.map((item) => (
           <li key={item} className="flex gap-2">
-            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-400" />
-            <span>{item}</span>
+            <span
+              className={`mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                tone === "brand" ? "bg-brand-500" : "bg-amber-500"
+              }`}
+            />
+            <span className="whitespace-pre-line">
+              {tone === "brand" ? formatChatAccessibilityText(item) : formatChatDisplayText(item)}
+            </span>
           </li>
         ))}
       </ul>
@@ -1177,23 +1094,12 @@ function PlaceTabContent({ place, tab }: { place: PlaceRecommendation; tab: Plac
   );
 }
 
-function getDefaultPlaceTab(place: PlaceRecommendation): PlaceInfoTab {
-  if (place.tourDetails?.length) return "tour";
-  if (place.accessibility.length) return "accessibility";
-  return "check";
-}
-
-function getPlaceTabLabel(tab: PlaceInfoTab) {
-  if (tab === "tour") return "관광";
-  if (tab === "accessibility") return "접근성";
-  return "확인";
-}
-
 function getPlaceCheckItems(place: PlaceRecommendation) {
   return [
-    "운영시간, 휴무일, 편의시설은 현장에서 바뀔 수 있어요.",
-    place.tel ? `방문 전 문의: ${place.tel}` : "방문 전 공식 홈페이지나 안내처 확인을 권장해요.",
-    "주차장, 출입구, 화장실 위치는 도착 전 지도와 현장 안내를 같이 확인해 주세요."
+    "운영시간과 편의시설은 현장 상황에 따라 달라질 수 있어요.",
+    place.tel
+      ? `출발 전 ${formatChatDisplayText(place.tel)}로 이용 가능 여부를 확인해 주세요.`
+      : "출발 전 공식 홈페이지나 안내처에서 이용 가능 여부를 확인해 주세요."
   ];
 }
 
@@ -1226,23 +1132,11 @@ function AssistantMessage({
   onStopSpeaking: () => void;
   ttsSupported: boolean;
 }) {
-  const showEvidenceBadge = Boolean(response.card || response.debug);
-  const showTechnicalDetails = response.sources.length > 0;
-  const showDebugDetails = false;
-
   return (
     <div className="flex items-start gap-3">
       <DaiyuAvatar className="mt-1" />
       <div className="min-w-0 flex-1 rounded-[1.4rem] rounded-bl-md border border-gray-200 bg-white px-4 py-4 text-sm leading-relaxed text-gray-800 shadow-sm shadow-gray-200/60 sm:px-5 sm:py-5">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          {showEvidenceBadge ? (
-            <span
-              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-extrabold ${confidenceTone[response.confidence]}`}
-            >
-              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-              {confidenceLabels[response.confidence]}
-            </span>
-          ) : null}
+        <div className="-mt-1 mb-1 flex justify-end">
           <button
             type="button"
             disabled={!ttsSupported}
@@ -1253,19 +1147,19 @@ function AssistantMessage({
               }
               onSpeak(messageId, response.message);
             }}
-            className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-full border bg-white px-3 py-1.5 text-[12px] font-extrabold transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-500"
-            aria-label={isSpeaking ? "답변 읽기 중지" : "답변 읽어주기"}
+            className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 inline-flex h-11 w-11 items-center justify-center rounded-xl border bg-white transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-500"
+            aria-label={isSpeaking ? "답변 음성 중지" : "답변 음성 재생"}
+            title={isSpeaking ? "음성 재생 중지" : "답변 음성 재생"}
           >
             {isSpeaking ? (
               <VolumeX className="h-3.5 w-3.5" aria-hidden="true" />
             ) : (
               <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
             )}
-            {isSpeaking ? "중지" : "읽기"}
           </button>
         </div>
         <p className="text-[15px] leading-7 font-semibold whitespace-pre-line text-gray-950 sm:text-[16px] sm:leading-7">
-          {response.message}
+          {formatChatDisplayText(response.message)}
         </p>
         {!ttsSupported ? (
           <span className="mt-2 block text-[12px] font-semibold text-gray-600">
@@ -1273,257 +1167,19 @@ function AssistantMessage({
           </span>
         ) : null}
 
-        {response.places?.length ? (
-          <PlaceRecommendationList
-            places={response.places}
-            disabled={disabled}
-            onChipClick={onChipClick}
-          />
-        ) : null}
-
-        {response.card ? (
-          <details className="border-brand-100 bg-brand-50/70 mt-4 rounded-2xl border px-3.5 py-3 text-gray-700">
-            <summary className="text-brand-800 flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-extrabold select-none">
-              <MapPin className="h-4 w-4" aria-hidden="true" />
-              {response.card.title}
-              <span className="text-brand-800 ml-auto text-[11px] font-bold">근거 보기</span>
-            </summary>
-            <ul className="mt-3 grid gap-2 text-[13px] leading-relaxed text-gray-700">
-              {response.card.rows.map((row) => (
-                <li key={row} className="flex gap-2">
-                  <span className="bg-brand-500 mt-2 h-1.5 w-1.5 shrink-0 rounded-full" />
-                  <span>{row}</span>
-                </li>
-              ))}
-            </ul>
-            <span className="border-brand-200 mt-3 block border-t border-dashed pt-2.5 text-[12px] leading-relaxed text-gray-500">
-              {response.card.source}
-            </span>
-          </details>
-        ) : null}
-
-        {showTechnicalDetails ? (
-          <details className="border-navy-100 bg-navy-50/50 mt-3 rounded-2xl border px-3 py-2.5 text-xs text-gray-800">
-            <summary className="text-navy-700 flex min-h-11 cursor-pointer items-center text-xs font-extrabold select-none">
-              정보 출처
-            </summary>
-            {showDebugDetails && response.debug ? (
-              <>
-                <strong className="text-navy-700 mt-3 block text-[11px] font-extrabold">
-                  질문분류 JSON
-                </strong>
-                <pre className="ring-navy-100 mt-2 max-h-48 overflow-auto rounded-xl bg-white p-3 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap text-gray-800 ring-1">
-                  {JSON.stringify(response.debug.analysis, null, 2)}
-                </pre>
-                {response.debug.searchTerms.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {response.debug.searchTerms.map((term) => (
-                      <span
-                        key={term}
-                        className="text-navy-600 ring-navy-100 rounded-full bg-white px-2 py-1 text-[11px] font-semibold ring-1"
-                      >
-                        {term}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                {response.debug.inputMessage ? (
-                  <div className="ring-navy-100 mt-3 rounded-xl bg-white p-3 text-[12px] leading-relaxed text-gray-800 ring-1">
-                    <strong className="text-navy-700 mb-1 block text-[11px] font-extrabold">
-                      입력 질문
-                    </strong>
-                    {response.debug.inputMessage}
-                  </div>
-                ) : null}
-                {response.debug.rag ? (
-                  <div className="border-navy-100 mt-3 rounded-2xl border bg-white/70 p-3">
-                    <strong className="text-navy-700 block text-[11px] font-extrabold">
-                      RAG 디버그
-                    </strong>
-                    <div className="mt-2 grid gap-2 text-[12px] leading-relaxed text-gray-700">
-                      <div className="ring-navy-100 rounded-xl bg-white p-3 ring-1">
-                        <span className="block font-extrabold text-gray-900">1. 검색 상태</span>
-                        <span className="mt-1 block">방식: {response.debug.rag.searchMode}</span>
-                        <span className="block">상태: {response.debug.rag.statusMessage}</span>
-                        {typeof response.debug.rag.vectorCandidateCount === "number" ? (
-                          <span className="block">
-                            pgvector 후보: {response.debug.rag.vectorCandidateCount}개
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {response.debug.rag.embedding ? (
-                        <div className="ring-navy-100 rounded-xl bg-white p-3 ring-1">
-                          <span className="block font-extrabold text-gray-900">
-                            2. 질문 embedding
-                          </span>
-                          <div className="mt-1 grid gap-1">
-                            <span>상태: {response.debug.rag.embedding.status}</span>
-                            {response.debug.rag.embedding.model ? (
-                              <span>모델: {response.debug.rag.embedding.model}</span>
-                            ) : null}
-                            {response.debug.rag.embedding.dimensions ? (
-                              <span>차원: {response.debug.rag.embedding.dimensions}</span>
-                            ) : null}
-                          </div>
-                          {response.debug.rag.embedding.input ? (
-                            <>
-                              <span className="mt-3 block font-extrabold text-gray-900">
-                                embedding 입력
-                              </span>
-                              <pre className="bg-navy-50/70 mt-1 max-h-36 overflow-auto rounded-lg p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap text-gray-800">
-                                {response.debug.rag.embedding.input}
-                              </pre>
-                            </>
-                          ) : null}
-                          {response.debug.rag.embedding.vectorPreview?.length ? (
-                            <>
-                              <span className="mt-3 block font-extrabold text-gray-900">
-                                embedding 벡터 샘플
-                              </span>
-                              <pre className="bg-navy-50/70 mt-1 max-h-28 overflow-auto rounded-lg p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap text-gray-800">
-                                {JSON.stringify(response.debug.rag.embedding.vectorPreview)}
-                              </pre>
-                              {response.debug.rag.embedding.vectorPreviewNote ? (
-                                <span className="mt-1 block text-[11px] text-gray-500">
-                                  {response.debug.rag.embedding.vectorPreviewNote}
-                                </span>
-                              ) : null}
-                            </>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      <div className="ring-navy-100 rounded-xl bg-white p-3 ring-1">
-                        <span className="block font-extrabold text-gray-900">3. DB 매칭 결과</span>
-                        {response.debug.rag.dbMatches.length > 0 ? (
-                          <ol className="mt-2 grid gap-2">
-                            {response.debug.rag.dbMatches.map((match) => (
-                              <li
-                                key={`${match.rank}-${match.source || match.title || "match"}`}
-                                className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2"
-                              >
-                                <div className="flex flex-wrap items-center gap-1.5 font-bold text-gray-900">
-                                  <span>{match.rank}.</span>
-                                  <span>{match.title || "제목 없음"}</span>
-                                  {typeof match.similarity === "number" ? (
-                                    <span className="bg-brand-50 text-brand-700 ring-brand-100 rounded-full px-2 py-0.5 text-[11px] ring-1">
-                                      유사도 {match.similarity.toFixed(4)}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <div className="mt-1 text-[11px] text-gray-500">
-                                  {match.category || "분류 없음"}
-                                  {match.chunkIndex !== null ? ` · chunk ${match.chunkIndex}` : ""}
-                                  {match.source ? ` · ${match.source}` : ""}
-                                </div>
-                                {match.contentPreview ? (
-                                  <p className="mt-1 line-clamp-3 text-[12px] leading-relaxed text-gray-700">
-                                    {match.contentPreview}
-                                  </p>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ol>
-                        ) : (
-                          <span className="mt-1 block text-gray-500">매칭된 DB 근거 없음</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-                {response.debug.weather ? (
-                  <div className="border-navy-100 mt-3 rounded-2xl border bg-white/70 p-3">
-                    <strong className="text-navy-700 block text-[11px] font-extrabold">
-                      날씨 디버그
-                    </strong>
-                    <div className="ring-navy-100 mt-2 rounded-xl bg-white p-3 text-[12px] leading-relaxed text-gray-700 ring-1">
-                      <span className="block font-extrabold text-gray-900">조회 상태</span>
-                      <span className="mt-1 block">상태: {response.debug.weather.status}</span>
-                      <span className="block">메시지: {response.debug.weather.statusMessage}</span>
-                      {response.debug.weather.request ? (
-                        <>
-                          <span className="mt-3 block font-extrabold text-gray-900">요청 조건</span>
-                          <span className="block">
-                            기준시각: {response.debug.weather.request.currentDate}
-                          </span>
-                          <span className="block">
-                            예보기간: {response.debug.weather.request.day}일
-                          </span>
-                          {response.debug.weather.request.cityAreaId ? (
-                            <span className="block">
-                              CITY_AREA_ID: {response.debug.weather.request.cityAreaId}
-                            </span>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </div>
-                    <div className="ring-navy-100 mt-2 rounded-xl bg-white p-3 text-[12px] leading-relaxed text-gray-700 ring-1">
-                      <span className="block font-extrabold text-gray-900">관광기후지수 매칭</span>
-                      {response.debug.weather.items.length > 0 ? (
-                        <ol className="mt-2 grid gap-2">
-                          {response.debug.weather.items.map((item, index) => (
-                            <li
-                              key={`${item.cityAreaId || item.cityName || "weather"}-${index}`}
-                              className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2"
-                            >
-                              <div className="font-bold text-gray-900">
-                                {item.totalCityName ||
-                                  [item.doName, item.cityName].filter(Boolean).join(" ") ||
-                                  "지역명 없음"}
-                              </div>
-                              <div className="mt-1 text-[11px] text-gray-500">
-                                {item.tciGrade ? `등급 ${item.tciGrade}` : "등급 없음"}
-                                {item.kmaTci ? ` · 지수 ${item.kmaTci}` : ""}
-                                {item.tm ? ` · ${item.tm}` : ""}
-                              </div>
-                            </li>
-                          ))}
-                        </ol>
-                      ) : (
-                        <span className="mt-1 block text-gray-500">매칭된 관광기후지수 없음</span>
-                      )}
-                      <span className="mt-2 block text-[11px] text-gray-500">
-                        {response.debug.weather.source}
-                      </span>
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-            {response.sources.length > 0 ? (
-              <div className="border-navy-100 mt-3 border-t pt-3">
-                <strong className="text-navy-700 block text-[11px] font-extrabold">
-                  답변에 사용한 정보
-                </strong>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {response.sources.map((source) => (
-                    <span
-                      key={source}
-                      className="text-navy-600 ring-navy-100 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold ring-1"
-                    >
-                      {source}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </details>
-        ) : null}
+        {response.places?.length ? <PlaceRecommendationList places={response.places} /> : null}
 
         {response.chips.length > 0 ? (
           <div className="mt-4 border-t border-gray-100 pt-3">
-            <span className="mb-2 block text-[12px] font-extrabold text-gray-500">
-              이어서 물어보기
-            </span>
-            <div className="flex flex-wrap gap-2">
+            <span className="mb-2 block text-[12px] font-extrabold text-gray-500">다음 질문</span>
+            <div className="grid gap-2 sm:grid-cols-2">
               {response.chips.map((chip) => (
                 <button
                   type="button"
                   key={chip}
                   disabled={disabled}
                   onClick={() => void onChipClick(chip)}
-                  className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 min-h-11 rounded-full border bg-white px-3 py-2 text-left text-[13px] leading-snug font-bold transition-colors disabled:opacity-50"
+                  className="border-brand-100 text-brand-900 hover:border-brand-300 hover:bg-brand-50 min-h-12 rounded-xl border bg-white px-3.5 py-3 text-left text-[13px] leading-snug font-bold transition-colors disabled:opacity-50"
                 >
                   {chip}
                 </button>
