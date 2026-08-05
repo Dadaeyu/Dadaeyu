@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { awardPoints, POINT_REASON } from "@/lib/community/points";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function POST(_request: Request, { params }: Params) {
 
     const { data: post, error: postError } = await supabase
       .from("tb_post")
-      .select("post_id, like_cnt")
+      .select("post_id, like_cnt, writer_id")
       .eq("post_id", postId)
       .maybeSingle();
 
@@ -69,6 +70,19 @@ export async function POST(_request: Request, { params }: Params) {
       .select("like_cnt")
       .single();
     if (updateError) throw updateError;
+
+    if (post.writer_id && post.writer_id !== user.id) {
+      try {
+        await awardPoints({
+          userId: post.writer_id,
+          reason: POINT_REASON.LIKE_RECEIVED,
+          refType: `board_liker:${user.id}`,
+          refId: postId
+        });
+      } catch {
+        // 좋아요 등록은 유지
+      }
+    }
 
     return NextResponse.json({ liked: true, like_cnt: updated.like_cnt });
   } catch (e) {

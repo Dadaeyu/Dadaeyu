@@ -9,6 +9,20 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { AdminFormShell, AdminListShell } from "./AdminListShell";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { useAdminListMode } from "./useAdminListMode";
+import {
+  fieldInputClass,
+  fieldLabelClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  tableBodyClass,
+  tableClass,
+  tableHeadRowClass,
+  tableRowClass,
+  tableTdCenterClass,
+  tableThClass,
+  tableThLeftClass,
+  tableWrapClass
+} from "./adminUi";
 
 type AdminNotice = {
   id: number;
@@ -309,29 +323,30 @@ export function NoticesSection() {
   if (isCreating || isEditing) {
     return (
       <AdminFormShell
-        title={isEditing ? `팝업 수정 (#${editingId})` : "새 팝업 작성"}
+        title={isEditing ? "팝업 수정" : "새 팝업 작성"}
+        subtitle={isEditing && editingId != null ? `번호 ${editingId}` : undefined}
         error={error}
         formError={formError}
         saving={saving || loading}
         onBack={goList}
         onSubmit={saveNotice}
-        submitLabel={isEditing ? "수정 저장" : "팝업 등록"}
+        submitLabel={isEditing ? "저장" : "팝업 등록"}
       >
         <div className="grid gap-3 md:grid-cols-2">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-500">제목</label>
+          <div>
+            <label className={fieldLabelClass}>제목</label>
             <input
               value={form.title}
               onChange={(e) => {
                 setForm((prev) => ({ ...prev, title: e.target.value }));
                 setFormError(null);
               }}
-              className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+              className={fieldInputClass}
               placeholder="예) 서비스 점검 안내"
             />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-500">우선순위</label>
+          <div>
+            <label className={fieldLabelClass}>우선순위</label>
             <input
               type="number"
               value={form.priority}
@@ -339,36 +354,36 @@ export function NoticesSection() {
                 setForm((prev) => ({ ...prev, priority: Number(e.target.value) }));
                 setFormError(null);
               }}
-              className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+              className={fieldInputClass}
               min={0}
             />
-            <p className="text-stone text-xs">
+            <p className="text-stone mt-1.5 text-xs">
               숫자가 클수록 먼저 노출됩니다. 여러 팝업을 동시에 활성화할 수 있습니다.
             </p>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-500">시작(선택)</label>
+          <div>
+            <label className={fieldLabelClass}>시작(선택)</label>
             <input
               type="datetime-local"
               value={form.startsAt}
               max={form.endsAt || undefined}
               onChange={(e) => handleStartsAtChange(e.target.value)}
-              className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+              className={fieldInputClass}
             />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-500">종료(선택)</label>
+          <div>
+            <label className={fieldLabelClass}>종료(선택)</label>
             <input
               type="datetime-local"
               value={form.endsAt}
               min={form.startsAt || undefined}
               onChange={(e) => handleEndsAtChange(e.target.value)}
-              className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+              className={fieldInputClass}
             />
           </div>
         </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-gray-500">내용</label>
+        <div>
+          <label className={fieldLabelClass}>내용</label>
           <textarea
             value={form.content}
             onChange={(e) => {
@@ -376,7 +391,7 @@ export function NoticesSection() {
               setFormError(null);
             }}
             rows={5}
-            className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+            className={fieldTextareaClass}
           />
         </div>
         <label className="text-stone flex items-center gap-2 text-sm">
@@ -421,7 +436,7 @@ export function NoticesSection() {
           <select
             value={activeFilter}
             onChange={(e) => setFilter("active", e.target.value === "all" ? null : e.target.value)}
-            className="border-hairline rounded-lg border px-3 py-2.5 text-sm"
+            className={fieldSelectClass}
           >
             <option value="all">전체 상태</option>
             <option value="active">활성</option>
@@ -430,21 +445,21 @@ export function NoticesSection() {
         </>
       }
     >
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className={tableWrapClass}>
+        <table className={tableClass}>
           <thead>
-            <tr className="border-hairline-soft bg-surface-soft border-b">
-              {["ID", "노출 상태", "제목", "우선순위", "노출 기간", "액션"].map((h) => (
-                <th
-                  key={h}
-                  className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
+            <tr className={tableHeadRowClass}>
+              <th className={tableThClass}>ID</th>
+              <th className={tableThClass}>노출 상태</th>
+              <th className={`${tableThLeftClass} min-w-[14rem]`}>제목</th>
+              <th className={tableThClass}>우선순위</th>
+              <th className={tableThClass}>노출 기간</th>
+              <th className={tableThClass}>
+                <span className="sr-only">작업</span>
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={tableBodyClass}>
             {loading && (
               <tr>
                 <td colSpan={6} className="text-stone px-4 py-8 text-center">
@@ -463,23 +478,27 @@ export function NoticesSection() {
               items.map((n) => {
                 const exposure = getExposureStatus(n);
                 return (
-                  <tr key={n.id} className="border-hairline-soft hover:bg-surface-soft border-b">
-                    <td className="text-stone px-4 py-3">#{n.id}</td>
-                    <td className="px-4 py-3">
+                  <tr key={n.id} className={tableRowClass}>
+                    <td className={`${tableTdCenterClass} text-stone whitespace-nowrap`}>
+                      #{n.id}
+                    </td>
+                    <td className={`${tableTdCenterClass} whitespace-nowrap`}>
                       <Badge tone={EXPOSURE_TONES[exposure]}>{EXPOSURE_LABELS[exposure]}</Badge>
                     </td>
-                    <td className="text-ink px-4 py-3 font-semibold">{n.title}</td>
-                    <td className="text-stone px-4 py-3">{n.priority}</td>
-                    <td className="text-stone px-4 py-3 text-xs whitespace-nowrap">
+                    <td className="text-ink max-w-[20rem] min-w-[14rem] px-4 py-3.5 text-left font-semibold">
+                      <span className="line-clamp-2 break-keep">{n.title}</span>
+                    </td>
+                    <td className={`${tableTdCenterClass} text-stone`}>{n.priority}</td>
+                    <td className={`${tableTdCenterClass} text-stone text-xs whitespace-nowrap`}>
                       {n.starts_at || n.ends_at
                         ? `${toLocalInputValue(n.starts_at) || "즉시"} ~ ${toLocalInputValue(n.ends_at) || "무기한"}`
                         : "항상"}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
+                    <td className={tableTdCenterClass}>
+                      <div className="flex flex-wrap justify-center gap-1.5">
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="outline"
                           disabled={saving}
                           onClick={() => goEdit(n.id)}
                         >
@@ -488,7 +507,7 @@ export function NoticesSection() {
                         {n.is_active ? (
                           <Button
                             size="sm"
-                            variant="ghost"
+                            variant="secondary"
                             disabled={saving}
                             onClick={() => patchNotice(n.id, { is_active: false })}
                           >
@@ -497,7 +516,7 @@ export function NoticesSection() {
                         ) : (
                           <Button
                             size="sm"
-                            variant="ghost"
+                            variant="accent"
                             disabled={saving}
                             onClick={() => patchNotice(n.id, { is_active: true })}
                           >
@@ -506,7 +525,7 @@ export function NoticesSection() {
                         )}
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="destructive"
                           disabled={saving}
                           onClick={() => deleteNotice(n.id)}
                         >

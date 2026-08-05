@@ -10,6 +10,19 @@ import { AdminFormShell, AdminListShell } from "./AdminListShell";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { useAdminListMode } from "./useAdminListMode";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
+import {
+  fieldInputClass,
+  fieldLabelClass,
+  fieldSelectClass,
+  tableBodyClass,
+  tableClass,
+  tableHeadRowClass,
+  tableRowClass,
+  tableTdCenterClass,
+  tableThClass,
+  tableThLeftClass,
+  tableWrapClass
+} from "./adminUi";
 
 type CommunityNotice = {
   id: number;
@@ -248,21 +261,24 @@ export function CommunityNoticesSection() {
   if (isCreating || isEditing) {
     return (
       <AdminFormShell
-        title={isEditing ? `공지 수정 (#${editingId})` : "새 공지 작성"}
-        subtitle="커뮤니티 공지사항 탭에 노출되는 게시글입니다."
+        title={isEditing ? "공지 수정" : "새 공지 작성"}
+        subtitle={isEditing && editingId != null ? `번호 ${editingId}` : undefined}
         error={error}
         formError={formError}
         saving={saving || loading}
         onBack={goList}
         onSubmit={submit}
-        submitLabel={isEditing ? "수정 저장" : "등록"}
+        submitLabel={isEditing ? "저장" : "등록"}
       >
-        <input
-          value={form.title}
-          onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-          placeholder="제목"
-          className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-navy-400 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-        />
+        <div>
+          <label className={fieldLabelClass}>제목</label>
+          <input
+            value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            placeholder="제목"
+            className={fieldInputClass}
+          />
+        </div>
         {isCreating || (isEditing && hydratedEditId === editingId) ? (
           <RichTextEditor
             key={editingId ?? "new-notice"}
@@ -272,7 +288,7 @@ export function CommunityNoticesSection() {
             disabled={saving || loading}
           />
         ) : (
-          <div className="border-hairline text-stone rounded-lg border px-3 py-10 text-center text-sm">
+          <div className="border-hairline bg-surface-soft text-stone rounded-xl border px-3 py-10 text-center text-sm">
             본문 불러오는 중…
           </div>
         )}
@@ -298,25 +314,25 @@ export function CommunityNoticesSection() {
             />
             커뮤니티 노출
           </label>
-          <label className="text-steel text-sm">
-            <span className="mb-1 block text-xs font-semibold">정렬 순서</span>
+          <div>
+            <label className={fieldLabelClass}>정렬 순서</label>
             <input
               type="number"
               value={form.sortOrder}
               onChange={(e) => setForm((f) => ({ ...f, sortOrder: Number(e.target.value) || 0 }))}
-              className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+              className={fieldInputClass}
             />
-          </label>
+          </div>
         </div>
-        <label className="text-steel block text-sm">
-          <span className="mb-1 block text-xs font-semibold">게시일</span>
+        <div>
+          <label className={fieldLabelClass}>게시일</label>
           <input
             type="datetime-local"
             value={form.publishedAt}
             onChange={(e) => setForm((f) => ({ ...f, publishedAt: e.target.value }))}
-            className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+            className={fieldInputClass}
           />
-        </label>
+        </div>
       </AdminFormShell>
     );
   }
@@ -339,7 +355,7 @@ export function CommunityNoticesSection() {
           <select
             value={visibleFilter}
             onChange={(e) => setFilter("visible", e.target.value === "all" ? null : e.target.value)}
-            className="border-hairline rounded-lg border px-3 py-2.5 text-sm"
+            className={fieldSelectClass}
           >
             <option value="all">전체 노출</option>
             <option value="visible">노출</option>
@@ -348,7 +364,7 @@ export function CommunityNoticesSection() {
           <select
             value={pinnedFilter}
             onChange={(e) => setFilter("pinned", e.target.value === "all" ? null : e.target.value)}
-            className="border-hairline rounded-lg border px-3 py-2.5 text-sm"
+            className={fieldSelectClass}
           >
             <option value="all">전체 고정</option>
             <option value="pinned">고정</option>
@@ -357,21 +373,22 @@ export function CommunityNoticesSection() {
         </>
       }
     >
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className={tableWrapClass}>
+        <table className={tableClass}>
           <thead>
-            <tr className="border-hairline-soft bg-surface-soft border-b">
-              {["ID", "제목", "고정", "노출", "게시일", "정렬", "액션"].map((h) => (
-                <th
-                  key={h}
-                  className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
+            <tr className={tableHeadRowClass}>
+              <th className={tableThClass}>ID</th>
+              <th className={`${tableThLeftClass} min-w-[14rem]`}>제목</th>
+              <th className={tableThClass}>고정</th>
+              <th className={tableThClass}>노출</th>
+              <th className={tableThClass}>게시일</th>
+              <th className={tableThClass}>정렬</th>
+              <th className={tableThClass}>
+                <span className="sr-only">작업</span>
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={tableBodyClass}>
             {loading && (
               <tr>
                 <td colSpan={7} className="text-stone px-4 py-8 text-center">
@@ -388,35 +405,60 @@ export function CommunityNoticesSection() {
             )}
             {!loading &&
               items.map((notice) => (
-                <tr key={notice.id} className="border-hairline-soft hover:bg-surface-soft border-b">
-                  <td className="text-stone px-4 py-3">#{notice.id}</td>
-                  <td className="text-ink px-4 py-3 font-semibold">{notice.title}</td>
-                  <td className="px-4 py-3">
+                <tr key={notice.id} className={tableRowClass}>
+                  <td className={`${tableTdCenterClass} text-stone whitespace-nowrap`}>
+                    #{notice.id}
+                  </td>
+                  <td className="text-ink max-w-[20rem] min-w-[14rem] px-4 py-3.5 text-left font-semibold">
+                    <span className="line-clamp-2 break-keep">{notice.title}</span>
+                  </td>
+                  <td className={`${tableTdCenterClass} whitespace-nowrap`}>
                     {notice.pinned ? <Badge tone="brand">고정</Badge> : "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className={`${tableTdCenterClass} whitespace-nowrap`}>
                     {notice.is_visible ? (
                       <Badge tone="brand">노출</Badge>
                     ) : (
                       <Badge tone="neutral">숨김</Badge>
                     )}
                   </td>
-                  <td className="text-stone px-4 py-3 text-xs whitespace-nowrap">
+                  <td className={`${tableTdCenterClass} text-stone text-xs whitespace-nowrap`}>
                     {formatCommunityDate(notice.published_at)}
                   </td>
-                  <td className="text-stone px-4 py-3">{notice.sort_order}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => goEdit(notice.id)}>
-                        수정
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => toggleVisible(notice)}>
-                        {notice.is_visible ? "숨기기" : "노출"}
-                      </Button>
+                  <td className={`${tableTdCenterClass} text-stone`}>{notice.sort_order}</td>
+                  <td className={tableTdCenterClass}>
+                    <div className="flex flex-wrap justify-center gap-1.5">
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="text-red-600"
+                        variant="outline"
+                        disabled={saving}
+                        onClick={() => goEdit(notice.id)}
+                      >
+                        수정
+                      </Button>
+                      {notice.is_visible ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={saving}
+                          onClick={() => toggleVisible(notice)}
+                        >
+                          숨기기
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="accent"
+                          disabled={saving}
+                          onClick={() => toggleVisible(notice)}
+                        >
+                          노출
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={saving}
                         onClick={() => deleteNotice(notice.id)}
                       >
                         삭제

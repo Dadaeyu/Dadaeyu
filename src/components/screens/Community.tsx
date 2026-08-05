@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
@@ -11,11 +10,7 @@ import {
   ArrowLeft,
   Image as ImageIcon,
   X,
-  Megaphone,
-  Calendar,
   ChevronDown,
-  HelpCircle,
-  Pin,
   MapPin,
   Route,
   Search,
@@ -26,7 +21,6 @@ import {
   Download
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
 import { formatCommunityDate } from "@/lib/community/format";
@@ -35,6 +29,12 @@ import { ListPagination } from "@/components/community/ListPagination";
 import { useOptionalAuth } from "@/context/AuthContext";
 import { requireLoginOrRedirect } from "@/lib/auth/require-login-redirect";
 import { CommunityLevelBadge } from "@/components/community/CommunityLevelBadge";
+import {
+  CommunityBoardList,
+  CommunityEventGrid,
+  CommunityFaqAccordion,
+  CommunityNoticeList
+} from "@/components/community/CommunityListViews";
 
 type CommunityNoticeItem = {
   id: number;
@@ -58,6 +58,7 @@ type CommunityEventItem = {
 type CommunityFaqItem = {
   id: number;
   question: string;
+  answer?: string;
 };
 
 type CommunityBoard = {
@@ -151,13 +152,13 @@ function PageSizeSelect({
   disabled?: boolean;
 }) {
   return (
-    <label className="text-steel flex items-center gap-2 text-sm">
+    <label className="text-steel flex min-h-11 items-center gap-2 text-sm">
       <span className="whitespace-nowrap">표시</span>
       <select
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="border-hairline bg-background text-ink focus:ring-brand-500 rounded-md border px-2 py-1.5 text-sm focus:ring-2 focus:outline-none"
+        className="border-hairline bg-background text-ink focus:ring-brand-500 min-h-11 rounded-xl border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
       >
         {COMMUNITY_PAGE_SIZES.map((n) => (
           <option key={n} value={n}>
@@ -191,6 +192,19 @@ export default function Community() {
     }
     return "board";
   });
+
+  const handleMainTabChange = useCallback(
+    (key: string) => {
+      const next = key as MainTab;
+      setMainTab(next);
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === "board") params.delete("tab");
+      else params.set("tab", next);
+      const qs = params.toString();
+      router.replace(qs ? `/community?${qs}` : "/community", { scroll: false });
+    },
+    [router, searchParams]
+  );
   const [filter, setFilter] = useState<string>(initialBoardId ?? "all");
   const [boards, setBoards] = useState<CommunityBoard[]>([]);
   const [boardPosts, setBoardPosts] = useState<BoardPostItem[]>([]);
@@ -222,6 +236,7 @@ export default function Community() {
   const [faqPageSize, setFaqPageSize] = useState(COMMUNITY_DEFAULT_PAGE_SIZE);
   const [faqLoading, setFaqLoading] = useState(false);
   const [faqError, setFaqError] = useState<string | null>(null);
+  const [openFaqId, setOpenFaqId] = useState<number | null>(null);
 
   const loadBoardPosts = useCallback(
     async (isCancelled: () => boolean) => {
@@ -433,10 +448,17 @@ export default function Community() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-ink text-2xl font-bold">커뮤니티</h1>
+    <div className="space-y-7">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-brand-700 text-sm font-semibold">대전 나들이</p>
+          <h1 className="text-ink mt-1 text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">
+            커뮤니티
+          </h1>
+          <p className="text-slate mt-2 max-w-xl text-sm leading-6">
+            후기·팁을 나누고, 공지와 이벤트를 한곳에서 확인하세요.
+          </p>
+        </div>
         {mainTab === "board" && (
           <Button
             variant="accent"
@@ -455,25 +477,23 @@ export default function Community() {
         )}
       </div>
 
-      {/* Main Tabs */}
       <Tabs
         items={mainTabs}
         value={mainTab}
-        onValueChange={(k) => setMainTab(k as MainTab)}
+        onValueChange={handleMainTabChange}
         variant="segmented"
       />
 
-      {/* ── 게시판 ── */}
       {mainTab === "board" && (
         <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative min-w-0 flex-1">
-              <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+              <Search className="text-stone absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2" />
               <input
                 value={boardSearchInput}
                 onChange={(e) => setBoardSearchInput(e.target.value)}
-                placeholder="제목 검색"
-                className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
+                placeholder="제목으로 검색"
+                className="border-hairline bg-background text-ink placeholder:text-stone focus:border-brand-400 focus:ring-brand-500/30 w-full rounded-xl border py-3 pr-4 pl-10 text-sm focus:ring-2 focus:outline-none"
               />
             </div>
             <PageSizeSelect
@@ -486,28 +506,54 @@ export default function Community() {
             />
           </div>
 
-          <Tabs
-            variant="pill"
-            value={filter}
-            onValueChange={(k) => {
-              setFilter(k);
-              setBoardPage(0);
-            }}
-            items={[
-              { key: "all", label: "전체" },
-              ...boards.map((b) => ({ key: String(b.board_id), label: b.board_nm }))
-            ]}
-          />
+          <div className="flex [scrollbar-width:none] gap-1.5 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden">
+            <button
+              type="button"
+              onClick={() => {
+                setFilter("all");
+                setBoardPage(0);
+              }}
+              className={`min-h-11 shrink-0 rounded-full px-3.5 text-xs font-semibold transition-colors ${
+                filter === "all"
+                  ? "border-brand-600 bg-brand-600 text-fixed-white border"
+                  : "border-stone/50 text-steel hover:bg-surface bg-background border"
+              }`}
+            >
+              전체
+            </button>
+            {boards.map((b) => {
+              const key = String(b.board_id);
+              const active = filter === key;
+              return (
+                <button
+                  key={b.board_id}
+                  type="button"
+                  onClick={() => {
+                    setFilter(key);
+                    setBoardPage(0);
+                  }}
+                  className={`min-h-11 shrink-0 rounded-full px-3.5 text-xs font-semibold transition-colors ${
+                    active
+                      ? "border-brand-600 bg-brand-600 text-fixed-white border"
+                      : "border-stone/50 text-steel hover:bg-surface bg-background border"
+                  }`}
+                >
+                  {b.board_nm}
+                </button>
+              );
+            })}
+          </div>
 
           {contentIdFilter && (
-            <div className="bg-brand-50 text-brand-700 flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium">
-              <span>선택한 장소의 게시글만 보는 중</span>
+            <div className="bg-brand-50 text-brand-700 flex flex-wrap items-center justify-between gap-2 rounded-xl px-3.5 py-2.5 text-xs font-medium">
+              <span className="min-w-0 flex-1">선택한 장소의 게시글만 보는 중</span>
               <button
+                type="button"
                 onClick={() => {
                   setContentIdFilter(null);
                   setBoardPage(0);
                 }}
-                className="underline"
+                className="shrink-0 underline"
               >
                 초기화
               </button>
@@ -521,60 +567,7 @@ export default function Community() {
             />
           )}
 
-          <div className="space-y-3">
-            {boardLoading && (
-              <Card className="border-hairline-soft text-stone animate-pulse p-6 text-center text-sm">
-                불러오는 중…
-              </Card>
-            )}
-            {!boardLoading && !boardError && boardPosts.length === 0 && (
-              <Card className="border-hairline-soft p-8 text-center">
-                <p className="text-stone text-sm">게시글이 없습니다.</p>
-              </Card>
-            )}
-            {!boardLoading &&
-              boardPosts.map((post) => (
-                <Card key={post.id} asChild variant="interactive">
-                  <Link href={`/community/${post.id}`} className="block">
-                    <div className="flex items-start gap-3">
-                      <Badge
-                        tone={post.notice_yn ? "warn" : "tag"}
-                        shape="tag"
-                        className="shrink-0"
-                      >
-                        {post.notice_yn ? "공지" : post.board_nm}
-                      </Badge>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-ink mb-2 truncate font-semibold">{post.title}</h3>
-                        <div className="text-steel flex flex-wrap items-center gap-2 text-sm">
-                          <CommunityLevelBadge
-                            level={post.writer_community_level}
-                            size="sm"
-                            showLabel={false}
-                          />
-                          <span>{post.writer_nm}</span>
-                          <span>{formatCommunityDate(post.created_at)}</span>
-                        </div>
-                        <div className="text-steel mt-2 flex items-center gap-4 text-sm">
-                          <div className="flex items-center gap-1">
-                            <Eye className="h-3.5 w-3.5" />
-                            <span>{post.view_cnt}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Heart className="h-3.5 w-3.5" />
-                            <span>{post.like_cnt}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <MessageCircle className="h-3.5 w-3.5" />
-                            <span>{post.comment_cnt}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                </Card>
-              ))}
-          </div>
+          {!boardError && <CommunityBoardList loading={boardLoading} items={boardPosts} />}
 
           <ListPagination
             page={boardPage}
@@ -586,10 +579,13 @@ export default function Community() {
         </div>
       )}
 
-      {/* ── 공지사항 ── */}
       {mainTab === "notice" && (
-        <div className="space-y-3">
-          <div className="flex justify-end">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-ink text-lg font-semibold tracking-[-0.02em]">공지사항</h2>
+              <p className="text-stone mt-1 text-sm">서비스 소식과 안내를 확인하세요.</p>
+            </div>
             <PageSizeSelect
               value={noticePageSize}
               disabled={noticeLoading}
@@ -601,43 +597,8 @@ export default function Community() {
           </div>
           {noticeError ? (
             <CommunityContentError message={noticeError} onRetry={() => loadNotices(() => false)} />
-          ) : noticeLoading ? (
-            <p className="text-stone text-sm">불러오는 중…</p>
-          ) : notices.length === 0 ? (
-            <p className="text-stone text-sm">등록된 공지가 없습니다.</p>
           ) : (
-            notices.map((notice) => (
-              <Link key={notice.id} href={`/community/notice/${notice.id}`}>
-                <Card
-                  variant="interactive"
-                  padding="none"
-                  className="flex cursor-pointer items-center gap-3 px-4 py-3.5"
-                >
-                  <div
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${notice.pinned ? "bg-brand-100" : "bg-surface"}`}
-                  >
-                    {notice.pinned ? (
-                      <Pin className="text-brand-600 fill-brand-600 h-4 w-4" />
-                    ) : (
-                      <Megaphone className="text-steel h-4 w-4" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      {notice.pinned && (
-                        <span className="bg-brand-500 text-ink shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold">
-                          고정
-                        </span>
-                      )}
-                      <h3 className="text-ink truncate font-semibold">{notice.title}</h3>
-                    </div>
-                    <p className="text-stone mt-0.5 text-xs">
-                      {formatCommunityDate(notice.published_at)}
-                    </p>
-                  </div>
-                </Card>
-              </Link>
-            ))
+            <CommunityNoticeList loading={noticeLoading} items={notices} />
           )}
           <ListPagination
             page={noticePage}
@@ -649,10 +610,13 @@ export default function Community() {
         </div>
       )}
 
-      {/* ── 이벤트 ── */}
       {mainTab === "event" && (
-        <div className="space-y-3">
-          <div className="flex justify-end">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-ink text-lg font-semibold tracking-[-0.02em]">이벤트</h2>
+              <p className="text-stone mt-1 text-sm">진행 중인 나들이 이벤트와 혜택을 모았어요.</p>
+            </div>
             <PageSizeSelect
               value={eventPageSize}
               disabled={eventLoading}
@@ -662,64 +626,11 @@ export default function Community() {
               }}
             />
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {eventError ? (
-              <div className="sm:col-span-2">
-                <CommunityContentError
-                  message={eventError}
-                  onRetry={() => loadEvents(() => false)}
-                />
-              </div>
-            ) : eventLoading ? (
-              <p className="text-stone text-sm">불러오는 중…</p>
-            ) : events.length === 0 ? (
-              <p className="text-stone text-sm">등록된 이벤트가 없습니다.</p>
-            ) : (
-              events.map((ev) => (
-                <Link key={ev.id} href={`/community/event/${ev.id}`}>
-                  <Card
-                    variant="interactive"
-                    padding="none"
-                    className="cursor-pointer overflow-hidden"
-                  >
-                    <div
-                      className={`relative flex h-32 items-center justify-center overflow-hidden bg-gradient-to-br ${ev.cover_gradient}`}
-                    >
-                      {ev.cover_image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={ev.cover_image_url}
-                          alt=""
-                          className="absolute inset-0 h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-5xl">{ev.emoji}</span>
-                      )}
-                    </div>
-                    <div className="bg-white p-4">
-                      <div className="mb-1.5 flex items-center justify-between">
-                        {ev.badge_label ? (
-                          <Badge tone="custom" className={`font-semibold ${ev.badge_color}`}>
-                            {ev.badge_label}
-                          </Badge>
-                        ) : (
-                          <span />
-                        )}
-                        <span className="text-stone flex items-center gap-1 text-xs">
-                          <Calendar className="h-3 w-3" />
-                          {ev.period_label}
-                        </span>
-                      </div>
-                      <p className="text-ink mb-1 leading-snug font-bold">{ev.title}</p>
-                      <p className="text-steel line-clamp-2 text-sm leading-relaxed">
-                        {ev.summary}
-                      </p>
-                    </div>
-                  </Card>
-                </Link>
-              ))
-            )}
-          </div>
+          {eventError ? (
+            <CommunityContentError message={eventError} onRetry={() => loadEvents(() => false)} />
+          ) : (
+            <CommunityEventGrid loading={eventLoading} items={events} />
+          )}
           <ListPagination
             page={eventPage}
             total={eventTotal}
@@ -730,10 +641,13 @@ export default function Community() {
         </div>
       )}
 
-      {/* ── FAQ ── */}
       {mainTab === "faq" && (
-        <div className="space-y-2.5">
-          <div className="flex justify-end">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-ink text-lg font-semibold tracking-[-0.02em]">FAQ</h2>
+              <p className="text-stone mt-1 text-sm">자주 묻는 질문을 빠르게 찾아보세요.</p>
+            </div>
             <PageSizeSelect
               value={faqPageSize}
               disabled={faqLoading}
@@ -745,24 +659,13 @@ export default function Community() {
           </div>
           {faqError ? (
             <CommunityContentError message={faqError} onRetry={() => loadFaqs(() => false)} />
-          ) : faqLoading ? (
-            <p className="text-stone text-sm">불러오는 중…</p>
-          ) : faqs.length === 0 ? (
-            <p className="text-stone text-sm">등록된 FAQ가 없습니다.</p>
           ) : (
-            faqs.map((faq) => (
-              <Link key={faq.id} href={`/community/faq/${faq.id}`}>
-                <Card variant="interactive" padding="none" className="overflow-hidden">
-                  <div className="hover:bg-surface-soft flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors">
-                    <span className="bg-brand-100 text-brand-700 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs font-bold">
-                      Q
-                    </span>
-                    <span className="text-ink flex-1 text-sm font-semibold">{faq.question}</span>
-                    <ChevronDown className="text-stone h-4 w-4 shrink-0 -rotate-90" />
-                  </div>
-                </Card>
-              </Link>
-            ))
+            <CommunityFaqAccordion
+              loading={faqLoading}
+              items={faqs}
+              openId={openFaqId}
+              onToggle={(id) => setOpenFaqId((prev) => (prev === id ? null : id))}
+            />
           )}
           <ListPagination
             page={faqPage}
@@ -771,10 +674,6 @@ export default function Community() {
             disabled={faqLoading}
             onChange={setFaqPage}
           />
-          <div className="text-stone flex items-center justify-center gap-2 pt-3 text-sm">
-            <HelpCircle className="h-4 w-4" />
-            <span>원하는 답변이 없나요? 게시판에 질문을 남겨주세요.</span>
-          </div>
         </div>
       )}
     </div>
@@ -1017,21 +916,23 @@ function CommunityWrite() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Button
           variant="ghost"
           size="icon"
+          className="min-h-11 min-w-11"
           onClick={() => router.push("/community")}
           aria-label="뒤로"
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className="text-ink flex-1 text-xl font-bold">
+        <h1 className="text-ink min-w-0 flex-1 text-xl font-bold">
           {isEditing ? "게시글 수정" : "글쓰기"}
         </h1>
         <Button
           variant="accent"
           size="sm"
+          className="hidden sm:inline-flex"
           onClick={handleSubmit}
           disabled={!canSubmit || submitting}
         >
@@ -1139,12 +1040,14 @@ function CommunityWrite() {
           <div className="flex flex-wrap gap-2">
             {images.map((img, i) => (
               <div key={img} className="bg-surface relative h-20 w-20 overflow-hidden rounded-lg">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={img} alt="" className="h-full w-full object-cover" />
                 <button
                   onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
-                  className="bg-opacity-60 bg-charcoal absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full"
+                  className="bg-opacity-60 bg-charcoal absolute top-1 right-1 flex h-8 w-8 items-center justify-center rounded-full"
+                  aria-label="이미지 삭제"
                 >
-                  <X className="h-2.5 w-2.5 text-white" />
+                  <X className="text-fixed-white h-3.5 w-3.5" />
                 </button>
               </div>
             ))}
@@ -1192,8 +1095,9 @@ function CommunityWrite() {
                 <button
                   onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
                   aria-label="파일 첨부 해제"
+                  className="text-stone hover:text-ink flex min-h-11 min-w-11 items-center justify-center"
                 >
-                  <X className="text-stone hover:text-ink h-4 w-4" />
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             ))}
@@ -1227,8 +1131,9 @@ function CommunityWrite() {
           장소 첨부 <span className="text-stone font-normal">(선택)</span>
         </p>
         {selectedPlace ? (
-          <span className="bg-brand-50 border-brand-200 inline-flex items-center gap-2 rounded-full border py-1.5 pr-3 pl-1.5 text-sm">
+          <span className="bg-brand-50 border-brand-200 inline-flex max-w-full items-center gap-2 rounded-full border py-1.5 pr-2 pl-1.5 text-sm">
             {selectedPlace.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={selectedPlace.image}
                 alt=""
@@ -1239,8 +1144,14 @@ function CommunityWrite() {
                 <MapPin className="text-brand-600 h-3.5 w-3.5" />
               </span>
             )}
-            <span className="text-brand-800 font-medium">{selectedPlace.name}</span>
-            <button onClick={() => setSelectedPlace(null)} aria-label="장소 첨부 해제">
+            <span className="text-brand-800 min-w-0 truncate font-medium">
+              {selectedPlace.name}
+            </span>
+            <button
+              onClick={() => setSelectedPlace(null)}
+              aria-label="장소 첨부 해제"
+              className="flex min-h-11 min-w-11 shrink-0 items-center justify-center"
+            >
               <X className="text-brand-400 hover:text-brand-700 h-3.5 w-3.5" />
             </button>
           </span>
@@ -1248,20 +1159,20 @@ function CommunityWrite() {
           <div className="relative">
             <button
               onClick={() => setShowPlacePicker((v) => !v)}
-              className="border-hairline text-steel hover:bg-surface-soft flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors"
+              className="border-hairline text-steel hover:bg-surface-soft flex min-h-11 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors"
             >
               <MapPin className="h-4 w-4" />
               장소 추가
             </button>
             {showPlacePicker && (
-              <div className="border-hairline absolute top-full left-0 z-20 mt-1 w-72 overflow-hidden rounded-lg border bg-white shadow-lg">
+              <div className="border-hairline bg-background absolute top-full left-0 z-20 mt-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border shadow-lg">
                 <div className="border-hairline-soft border-b p-2">
                   <input
                     autoFocus
                     value={placeKeyword}
                     onChange={(e) => setPlaceKeyword(e.target.value)}
                     placeholder="장소 이름 검색"
-                    className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+                    className="border-hairline bg-background text-ink w-full rounded-lg border px-3 py-2 text-sm"
                   />
                 </div>
                 <div className="max-h-64 overflow-y-auto">
@@ -1282,6 +1193,7 @@ function CommunityWrite() {
                         className="border-hairline-soft hover:bg-surface-soft flex w-full items-center gap-2.5 border-b px-3 py-2.5 text-left transition-colors last:border-0"
                       >
                         {p.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={p.image}
                             alt=""
@@ -1492,7 +1404,25 @@ function CommunityDetail({ id }: { id: string }) {
         error?: string;
       };
       if (!res.ok) throw new Error(json.error ?? "게시글을 불러오지 못했습니다.");
-      setPost(json.post ?? null);
+      const loaded = json.post ?? null;
+      setPost(loaded);
+
+      // 세션당 1회만 조회수 증가 (Strict Mode 이중 effect·재진입 중복 방지)
+      if (loaded && typeof window !== "undefined") {
+        const key = `board-post-viewed:${id}`;
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, "1");
+          void fetch(`/api/community/board-posts/${id}/view`, { method: "POST" })
+            .then(async (r) => {
+              if (!r.ok) return;
+              const body = (await r.json().catch(() => ({}))) as { view_cnt?: number };
+              if (typeof body.view_cnt === "number") {
+                setPost((prev) => (prev ? { ...prev, view_cnt: body.view_cnt! } : prev));
+              }
+            })
+            .catch(() => {});
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "로드 실패");
     } finally {
@@ -1521,25 +1451,28 @@ function CommunityDetail({ id }: { id: string }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <Button
           variant="ghost"
           size="icon"
+          className="min-h-11 min-w-11"
           onClick={() => router.push("/community")}
-          aria-label="뒤로"
+          aria-label="목록"
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
+        <span className="text-steel text-sm font-medium">게시판</span>
         <Badge tone={post.notice_yn ? "warn" : "tag"} shape="tag">
           {post.notice_yn ? "공지" : post.board_nm}
         </Badge>
         {post.can_edit && (
-          <div className="ml-auto flex items-center gap-1">
+          <div className="flex w-full items-center gap-1 sm:ml-auto sm:w-auto">
             <Button
               variant="ghost"
               size="sm"
+              className="min-h-11 flex-1 sm:flex-none"
               onClick={() => router.push(`/community/new?edit=${post.id}`)}
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -1548,7 +1481,7 @@ function CommunityDetail({ id }: { id: string }) {
             <Button
               variant="ghost"
               size="sm"
-              className="text-red-600"
+              className="text-error min-h-11 flex-1 sm:flex-none"
               disabled={deleting}
               onClick={handleDelete}
             >
@@ -1560,46 +1493,50 @@ function CommunityDetail({ id }: { id: string }) {
       </div>
 
       {/* Post */}
-      <div>
-        <h1 className="text-ink mb-3 text-xl font-bold">{post.title}</h1>
-        <div className="border-hairline-soft text-steel flex flex-wrap items-center gap-2 border-b pb-4 text-sm">
-          <CommunityLevelBadge level={post.writer_community_level} size="sm" />
-          <span className="text-slate font-medium">{post.writer_nm}</span>
-          <span>{formatCommunityDate(post.created_at)}</span>
-        </div>
-      </div>
+      <article className="border-hairline-soft bg-background overflow-hidden rounded-2xl border">
+        <header className="border-hairline-soft space-y-3 border-b px-5 py-5 sm:px-7 sm:py-6">
+          <h1 className="text-ink text-xl leading-snug font-semibold tracking-[-0.03em] sm:text-2xl">
+            {post.title}
+          </h1>
+          <div className="text-steel flex flex-wrap items-center gap-2 text-sm">
+            <CommunityLevelBadge level={post.writer_community_level} size="sm" />
+            <span className="text-slate font-medium">{post.writer_nm}</span>
+            <span className="text-stone">{formatCommunityDate(post.created_at)}</span>
+          </div>
+        </header>
+        <div className="bg-surface-soft/40 px-5 py-6 sm:px-7 sm:py-8">
+          <p className="text-steel text-sm leading-relaxed whitespace-pre-wrap md:text-base">
+            {post.content}
+          </p>
 
-      <Card padding="lg">
-        <p className="text-slate leading-relaxed whitespace-pre-wrap">{post.content}</p>
-      </Card>
+          {post.images.length > 0 && (
+            <div className="mt-6 flex flex-wrap gap-2">
+              {post.images.map((img) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={img} src={img} alt="" className="h-28 w-28 rounded-lg object-cover" />
+              ))}
+            </div>
+          )}
 
-      {/* 첨부 이미지 */}
-      {post.images.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {post.images.map((img) => (
-            <img key={img} src={img} alt="" className="h-28 w-28 rounded-lg object-cover" />
-          ))}
+          {post.files.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {post.files.map((f) => (
+                <a
+                  key={f.url}
+                  href={f.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="border-hairline hover:bg-surface bg-background flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+                >
+                  <Paperclip className="text-stone h-4 w-4 shrink-0" />
+                  <span className="text-ink min-w-0 flex-1 truncate">{f.name}</span>
+                  <Download className="text-stone h-4 w-4 shrink-0" />
+                </a>
+              ))}
+            </div>
+          )}
         </div>
-      )}
-
-      {/* 첨부 파일 */}
-      {post.files.length > 0 && (
-        <div className="space-y-2">
-          {post.files.map((f) => (
-            <a
-              key={f.url}
-              href={f.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="border-hairline hover:bg-surface-soft flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-            >
-              <Paperclip className="text-stone h-4 w-4 shrink-0" />
-              <span className="text-ink min-w-0 flex-1 truncate">{f.name}</span>
-              <Download className="text-stone h-4 w-4 shrink-0" />
-            </a>
-          ))}
-        </div>
-      )}
+      </article>
 
       {/* 첨부된 장소 · 코스 */}
       <div className="space-y-2">
@@ -1607,9 +1544,10 @@ function CommunityDetail({ id }: { id: string }) {
         {post.attached_place && (
           <button
             onClick={() => router.push(`/map?contentId=${post.attached_place!.content_id}`)}
-            className="border-brand-100 hover:bg-brand-50 hover:border-brand-300 flex w-full items-center gap-3 rounded-full border bg-white p-3.5 text-left transition-colors"
+            className="border-brand-100 hover:bg-brand-50 hover:border-brand-300 bg-background flex w-full items-center gap-3 rounded-full border p-3.5 text-left transition-colors"
           >
             {post.attached_place.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={post.attached_place.image}
                 alt=""
@@ -1629,7 +1567,7 @@ function CommunityDetail({ id }: { id: string }) {
         )}
         <button
           onClick={() => router.push(`/course/${HARDCODED_COURSE.id}`)}
-          className="border-navy-100 hover:border-navy-300 hover:bg-navy-50 flex w-full items-center gap-3 rounded-full border bg-white p-3.5 text-left transition-colors"
+          className="border-navy-100 hover:border-navy-300 hover:bg-navy-50 bg-background flex w-full items-center gap-3 rounded-full border p-3.5 text-left transition-colors"
         >
           <div className="bg-navy-100 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
             <Route className="text-navy-600 h-5 w-5" />
@@ -1657,7 +1595,7 @@ function CommunityDetail({ id }: { id: string }) {
         <button
           onClick={handleToggleLike}
           disabled={liking}
-          className={`flex items-center gap-1 rounded-full px-1 transition-colors ${
+          className={`flex min-h-11 items-center gap-1.5 rounded-full px-3 transition-colors ${
             post.liked ? "text-red-500" : "hover:text-red-500"
           }`}
         >
@@ -1699,16 +1637,16 @@ function CommunityDetail({ id }: { id: string }) {
                     <span className="text-stone">{formatCommunityDate(c.created_at)}</span>
                   </div>
                   {c.can_edit && editingCommentId !== c.id && (
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-1">
                       <button
                         onClick={() => startEditComment(c)}
-                        className="text-stone hover:text-ink text-xs font-semibold"
+                        className="text-stone hover:text-ink min-h-11 px-2 text-xs font-semibold"
                       >
                         수정
                       </button>
                       <button
                         onClick={() => handleCommentDelete(c.id)}
-                        className="text-stone text-xs font-semibold hover:text-red-600"
+                        className="text-stone hover:text-error min-h-11 px-2 text-xs font-semibold"
                       >
                         삭제
                       </button>
@@ -1716,20 +1654,32 @@ function CommunityDetail({ id }: { id: string }) {
                   )}
                 </div>
                 {editingCommentId === c.id ? (
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <input
                       type="text"
                       value={editingContent}
                       onChange={(e) => setEditingContent(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && saveEditComment()}
-                      className="border-hairline focus:ring-brand-500 flex-1 rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+                      className="border-hairline bg-background text-ink focus:ring-brand-500 min-h-11 flex-1 rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
                     />
-                    <Button size="sm" variant="accent" onClick={saveEditComment}>
-                      저장
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingCommentId(null)}>
-                      취소
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="accent"
+                        className="min-h-11 flex-1 sm:flex-none"
+                        onClick={saveEditComment}
+                      >
+                        저장
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-11 flex-1 sm:flex-none"
+                        onClick={() => setEditingCommentId(null)}
+                      >
+                        취소
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <p className="text-slate text-sm">{c.content}</p>
@@ -1739,20 +1689,20 @@ function CommunityDetail({ id }: { id: string }) {
         </div>
 
         {post.comment_yn ? (
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
               value={commentInput}
               onChange={(e) => setCommentInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCommentSubmit()}
               placeholder="댓글을 입력하세요"
-              className="focus:ring-brand-500 border-hairline flex-1 rounded-lg border px-4 py-3 text-sm focus:ring-2 focus:outline-none"
+              className="focus:ring-brand-500 border-hairline bg-background text-ink min-h-11 flex-1 rounded-lg border px-4 py-3 text-sm focus:ring-2 focus:outline-none"
             />
             <Button
               variant="accent"
               onClick={handleCommentSubmit}
               disabled={!commentInput.trim() || commentSubmitting}
-              className="px-5 py-3"
+              className="min-h-11 px-5 py-3 sm:w-auto"
             >
               등록
             </Button>

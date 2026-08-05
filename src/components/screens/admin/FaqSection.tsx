@@ -8,6 +8,20 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { AdminFormShell, AdminListShell } from "./AdminListShell";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { useAdminListMode } from "./useAdminListMode";
+import {
+  fieldInputClass,
+  fieldLabelClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  tableBodyClass,
+  tableClass,
+  tableHeadRowClass,
+  tableRowClass,
+  tableTdCenterClass,
+  tableThClass,
+  tableThLeftClass,
+  tableWrapClass
+} from "./adminUi";
 
 type CommunityFaq = {
   id: number;
@@ -203,28 +217,34 @@ export function FaqSection() {
   if (isCreating || isEditing) {
     return (
       <AdminFormShell
-        title={isEditing ? `FAQ 수정 (#${editingId})` : "새 FAQ 작성"}
-        subtitle="커뮤니티 FAQ 목록과 상세 답변을 관리합니다."
+        title={isEditing ? "FAQ 수정" : "새 FAQ 작성"}
+        subtitle={isEditing && editingId != null ? `번호 ${editingId}` : undefined}
         error={error}
         formError={formError}
         saving={saving || loading}
         onBack={goList}
         onSubmit={submit}
-        submitLabel={isEditing ? "수정 저장" : "등록"}
+        submitLabel={isEditing ? "저장" : "등록"}
       >
-        <input
-          value={form.question}
-          onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
-          placeholder="질문"
-          className="border-hairline bg-background text-ink placeholder:text-stone w-full rounded-lg border px-3 py-2 text-sm"
-        />
-        <textarea
-          value={form.answer}
-          onChange={(e) => setForm((f) => ({ ...f, answer: e.target.value }))}
-          placeholder="답변 (상세 내용)"
-          rows={8}
-          className="border-hairline bg-background text-ink placeholder:text-stone w-full resize-y rounded-lg border px-3 py-2 text-sm leading-relaxed"
-        />
+        <div>
+          <label className={fieldLabelClass}>질문</label>
+          <input
+            value={form.question}
+            onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
+            placeholder="질문"
+            className={fieldInputClass}
+          />
+        </div>
+        <div>
+          <label className={fieldLabelClass}>답변</label>
+          <textarea
+            value={form.answer}
+            onChange={(e) => setForm((f) => ({ ...f, answer: e.target.value }))}
+            placeholder="답변 (상세 내용)"
+            rows={8}
+            className={fieldTextareaClass}
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-4">
           <label className="text-steel flex items-center gap-2 text-sm">
             <input
@@ -240,7 +260,7 @@ export function FaqSection() {
               type="number"
               value={form.sortOrder}
               onChange={(e) => setForm((f) => ({ ...f, sortOrder: Number(e.target.value) || 0 }))}
-              className="border-hairline ml-2 w-20 rounded-lg border px-2 py-1 text-sm"
+              className={`${fieldInputClass} ml-2 w-20`}
             />
           </label>
         </div>
@@ -270,7 +290,7 @@ export function FaqSection() {
           <select
             value={visibleFilter}
             onChange={(e) => setFilter("visible", e.target.value === "all" ? null : e.target.value)}
-            className="border-hairline rounded-lg border px-3 py-2.5 text-sm"
+            className={fieldSelectClass}
           >
             <option value="all">전체 노출</option>
             <option value="visible">노출</option>
@@ -279,21 +299,20 @@ export function FaqSection() {
         </>
       }
     >
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className={tableWrapClass}>
+        <table className={tableClass}>
           <thead>
-            <tr className="border-hairline-soft bg-surface-soft border-b">
-              {["ID", "질문", "노출", "정렬", "액션"].map((h) => (
-                <th
-                  key={h}
-                  className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
+            <tr className={tableHeadRowClass}>
+              <th className={tableThClass}>ID</th>
+              <th className={`${tableThLeftClass} min-w-[14rem]`}>질문</th>
+              <th className={tableThClass}>노출</th>
+              <th className={tableThClass}>정렬</th>
+              <th className={tableThClass}>
+                <span className="sr-only">작업</span>
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={tableBodyClass}>
             {loading && (
               <tr>
                 <td colSpan={5} className="text-stone px-4 py-8 text-center">
@@ -310,29 +329,54 @@ export function FaqSection() {
             )}
             {!loading &&
               items.map((faq) => (
-                <tr key={faq.id} className="border-hairline-soft hover:bg-surface-soft border-b">
-                  <td className="text-stone px-4 py-3">#{faq.id}</td>
-                  <td className="text-ink px-4 py-3 font-semibold">{faq.question}</td>
-                  <td className="px-4 py-3">
+                <tr key={faq.id} className={tableRowClass}>
+                  <td className={`${tableTdCenterClass} text-stone whitespace-nowrap`}>
+                    #{faq.id}
+                  </td>
+                  <td className="text-ink max-w-[20rem] min-w-[14rem] px-4 py-3.5 text-left font-semibold">
+                    <span className="line-clamp-2 break-keep">{faq.question}</span>
+                  </td>
+                  <td className={`${tableTdCenterClass} whitespace-nowrap`}>
                     {faq.is_visible ? (
                       <Badge tone="brand">노출</Badge>
                     ) : (
                       <Badge tone="neutral">숨김</Badge>
                     )}
                   </td>
-                  <td className="text-stone px-4 py-3">{faq.sort_order}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => goEdit(faq.id)}>
-                        수정
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => toggleVisible(faq)}>
-                        {faq.is_visible ? "숨기기" : "노출"}
-                      </Button>
+                  <td className={`${tableTdCenterClass} text-stone`}>{faq.sort_order}</td>
+                  <td className={tableTdCenterClass}>
+                    <div className="flex flex-wrap justify-center gap-1.5">
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="text-red-600"
+                        variant="outline"
+                        disabled={saving}
+                        onClick={() => goEdit(faq.id)}
+                      >
+                        수정
+                      </Button>
+                      {faq.is_visible ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={saving}
+                          onClick={() => toggleVisible(faq)}
+                        >
+                          숨기기
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="accent"
+                          disabled={saving}
+                          onClick={() => toggleVisible(faq)}
+                        >
+                          노출
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={saving}
                         onClick={() => deleteFaq(faq.id)}
                       >
                         삭제

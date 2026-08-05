@@ -9,6 +9,20 @@ import { formatDate } from "./helpers";
 import { AdminFormShell, AdminListShell } from "./AdminListShell";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { useAdminListMode } from "./useAdminListMode";
+import {
+  fieldInputClass,
+  fieldLabelClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  tableBodyClass,
+  tableClass,
+  tableHeadRowClass,
+  tableRowClass,
+  tableTdCenterClass,
+  tableThClass,
+  tableThLeftClass,
+  tableWrapClass
+} from "./adminUi";
 
 type AdminBoardPost = {
   post_id: number;
@@ -204,13 +218,14 @@ export function BoardPostsSection() {
   if (isEditing) {
     return (
       <AdminFormShell
-        title={`게시글 수정 (#${editingId})`}
+        title="게시글 수정"
+        subtitle={editingId != null ? `번호 ${editingId}` : undefined}
         error={error}
         formError={formError}
         saving={saving || loading}
         onBack={goList}
         onSubmit={savePost}
-        submitLabel="수정 저장"
+        submitLabel="저장"
       >
         {editPost && (
           <div className="text-stone flex flex-wrap gap-x-4 gap-y-1 text-xs">
@@ -223,19 +238,19 @@ export function BoardPostsSection() {
             <span>작성일 {formatDate(editPost.created_at)}</span>
           </div>
         )}
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-gray-500">제목</label>
+        <div>
+          <label className={fieldLabelClass}>제목</label>
           <input
             value={form.title}
             onChange={(e) => {
               setForm((prev) => ({ ...prev, title: e.target.value }));
               setFormError(null);
             }}
-            className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+            className={fieldInputClass}
           />
         </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-gray-500">내용</label>
+        <div>
+          <label className={fieldLabelClass}>내용</label>
           <textarea
             value={form.content}
             onChange={(e) => {
@@ -243,7 +258,7 @@ export function BoardPostsSection() {
               setFormError(null);
             }}
             rows={8}
-            className="border-hairline w-full rounded-lg border px-3 py-2 text-sm"
+            className={fieldTextareaClass}
           />
         </div>
         <div className="flex flex-wrap gap-4 pt-1">
@@ -257,11 +272,10 @@ export function BoardPostsSection() {
           </label>
         </div>
         {editPost && (
-          <div className="flex justify-end border-t pt-4">
+          <div className="border-hairline-soft flex justify-end border-t pt-4">
             <Button
               size="sm"
-              variant="ghost"
-              className="text-red-600"
+              variant="destructive"
               disabled={saving}
               onClick={() => deletePost(editPost.post_id)}
             >
@@ -293,7 +307,7 @@ export function BoardPostsSection() {
           <select
             value={boardFilter}
             onChange={(e) => setFilter("boardId", e.target.value === "all" ? null : e.target.value)}
-            className="border-hairline bg-background text-foreground rounded-lg border px-3 py-2.5 text-sm"
+            className={fieldSelectClass}
           >
             <option value="all">전체 게시판</option>
             {boards.map((b) => (
@@ -305,33 +319,26 @@ export function BoardPostsSection() {
         </>
       }
     >
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className={tableWrapClass}>
+        <table className={tableClass}>
           <thead>
-            <tr className="border-hairline-soft bg-surface-soft border-b">
-              {[
-                "ID",
-                "게시판",
-                "제목",
-                "작성자",
-                "조회",
-                "좋아요",
-                "댓글",
-                "공지",
-                "사용 여부",
-                "작성일",
-                "액션"
-              ].map((h) => (
-                <th
-                  key={h}
-                  className="text-steel px-4 py-3 text-center text-xs font-bold whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
+            <tr className={tableHeadRowClass}>
+              <th className={tableThClass}>ID</th>
+              <th className={tableThClass}>게시판</th>
+              <th className={`${tableThLeftClass} min-w-[14rem]`}>제목</th>
+              <th className={tableThClass}>작성자</th>
+              <th className={tableThClass}>조회</th>
+              <th className={tableThClass}>좋아요</th>
+              <th className={tableThClass}>댓글</th>
+              <th className={tableThClass}>공지</th>
+              <th className={tableThClass}>사용 여부</th>
+              <th className={tableThClass}>작성일</th>
+              <th className={tableThClass}>
+                <span className="sr-only">작업</span>
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={tableBodyClass}>
             {loading && (
               <tr>
                 <td colSpan={11} className="text-stone px-4 py-8 text-center">
@@ -348,28 +355,36 @@ export function BoardPostsSection() {
             )}
             {!loading &&
               items.map((p) => (
-                <tr key={p.post_id} className="border-hairline-soft hover:bg-surface-soft border-b">
-                  <td className="text-stone px-4 py-3">#{p.post_id}</td>
-                  <td className="text-stone px-4 py-3 whitespace-nowrap">{p.board_nm}</td>
-                  <td className="text-ink px-4 py-3 font-semibold">{p.title}</td>
-                  <td className="text-stone px-4 py-3">{p.writer_nm}</td>
-                  <td className="text-stone px-4 py-3">{p.view_cnt}</td>
-                  <td className="text-stone px-4 py-3">{p.like_cnt}</td>
-                  <td className="text-stone px-4 py-3">{p.comment_cnt}</td>
-                  <td className="px-4 py-3">{p.notice_yn && <Badge tone="warn">공지</Badge>}</td>
-                  <td className="px-4 py-3">
+                <tr key={p.post_id} className={tableRowClass}>
+                  <td className={`${tableTdCenterClass} text-stone whitespace-nowrap`}>
+                    #{p.post_id}
+                  </td>
+                  <td className={`${tableTdCenterClass} text-stone whitespace-nowrap`}>
+                    {p.board_nm}
+                  </td>
+                  <td className="text-ink max-w-[20rem] min-w-[14rem] px-4 py-3.5 text-left font-semibold">
+                    <span className="line-clamp-2 break-keep">{p.title}</span>
+                  </td>
+                  <td className={`${tableTdCenterClass} text-stone`}>{p.writer_nm}</td>
+                  <td className={`${tableTdCenterClass} text-stone`}>{p.view_cnt}</td>
+                  <td className={`${tableTdCenterClass} text-stone`}>{p.like_cnt}</td>
+                  <td className={`${tableTdCenterClass} text-stone`}>{p.comment_cnt}</td>
+                  <td className={tableTdCenterClass}>
+                    {p.notice_yn && <Badge tone="warn">공지</Badge>}
+                  </td>
+                  <td className={tableTdCenterClass}>
                     <Badge tone={p.use_yn ? "brand" : "error"}>
                       {p.use_yn ? "사용" : "미사용"}
                     </Badge>
                   </td>
-                  <td className="text-stone px-4 py-3 text-xs whitespace-nowrap">
+                  <td className={`${tableTdCenterClass} text-stone text-xs whitespace-nowrap`}>
                     {formatDate(p.created_at)}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-center gap-1">
+                  <td className={tableTdCenterClass}>
+                    <div className="flex justify-center gap-1.5">
                       <Button
                         size="iconSm"
-                        variant="ghost"
+                        variant="outline"
                         disabled={saving}
                         title="수정"
                         aria-label="수정"
@@ -379,7 +394,7 @@ export function BoardPostsSection() {
                       </Button>
                       <Button
                         size="iconSm"
-                        variant="ghost"
+                        variant={p.use_yn ? "secondary" : "accent"}
                         disabled={saving}
                         title={p.use_yn ? "미사용으로 변경" : "사용으로 변경"}
                         aria-label={p.use_yn ? "미사용으로 변경" : "사용으로 변경"}
@@ -389,11 +404,10 @@ export function BoardPostsSection() {
                       </Button>
                       <Button
                         size="iconSm"
-                        variant="ghost"
+                        variant="destructive"
                         disabled={saving}
                         title="삭제"
                         aria-label="삭제"
-                        className="text-red-600 hover:text-red-700"
                         onClick={() => deletePost(p.post_id)}
                       >
                         <Trash2 className="size-4" />

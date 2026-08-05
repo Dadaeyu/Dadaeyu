@@ -5,6 +5,7 @@ import { ArrowLeft, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { TablePagination } from "./TablePagination";
 import { totalPages as calcTotalPages } from "@/lib/pagination";
+import { adminAlertClass, adminFormPanelClass, adminPanelClass } from "./adminUi";
 
 type AdminListShellProps = {
   title: string;
@@ -55,12 +56,12 @@ export function AdminListShell({
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-ink text-xl font-bold">{title}</h1>
-          {subtitle && <p className="text-stone mt-1 text-sm">{subtitle}</p>}
+          <h1 className="text-ink text-xl font-semibold tracking-[-0.02em]">{title}</h1>
+          {subtitle && <p className="text-stone mt-1 text-sm leading-5">{subtitle}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {headerExtra}
-          <span className="text-stone text-sm">총 {total}건</span>
+          <span className="text-stone text-sm tabular-nums">총 {total}건</span>
           {onCreateClick && (
             <Button variant="accent" size="sm" onClick={onCreateClick}>
               <Plus className="h-4 w-4" />
@@ -70,15 +71,11 @@ export function AdminListShell({
         </div>
       </div>
 
-      {error && (
-        <div className="border-error/30 text-error rounded-lg border bg-red-50 px-4 py-3 text-sm">
-          {error}
-        </div>
-      )}
+      {error && <div className={adminAlertClass}>{error}</div>}
 
       {toolbar && <div className="flex flex-wrap items-center gap-3">{toolbar}</div>}
 
-      <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
+      <div className={adminPanelClass}>
         {children}
         {total > 0 && (
           <TablePagination
@@ -107,32 +104,24 @@ export function AdminFormShell({
   children
 }: AdminFormShellProps) {
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-3xl space-y-5">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" disabled={saving} onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
           목록으로
         </Button>
         <div>
-          <h1 className="text-ink text-xl font-bold">{title}</h1>
+          <h1 className="text-ink text-xl font-semibold tracking-[-0.02em]">{title}</h1>
           {subtitle && <p className="text-stone mt-0.5 text-sm">{subtitle}</p>}
         </div>
       </div>
 
-      {error && (
-        <div className="border-error/30 text-error rounded-lg border bg-red-50 px-4 py-3 text-sm">
-          {error}
-        </div>
-      )}
+      {error && <div className={adminAlertClass}>{error}</div>}
 
-      <div className="border-hairline-soft space-y-4 rounded-lg border bg-white p-4">
-        {formError && (
-          <div className="border-error/30 text-error rounded-lg border bg-red-50 px-3 py-2 text-sm">
-            {formError}
-          </div>
-        )}
+      <div className={adminFormPanelClass}>
+        {formError && <div className={adminAlertClass}>{formError}</div>}
         {children}
-        <div className="flex justify-end gap-2 border-t pt-4">
+        <div className="border-hairline-soft flex justify-end gap-2 border-t pt-4">
           <Button variant="ghost" disabled={saving} onClick={onBack}>
             취소
           </Button>

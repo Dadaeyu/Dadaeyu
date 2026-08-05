@@ -65,8 +65,8 @@ export function TablePagination({
             aria-current={p === page ? "page" : undefined}
             className={`flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-xs font-semibold transition-colors disabled:opacity-40 ${
               p === page
-                ? "bg-navy-600 text-white"
-                : "border-hairline text-steel hover:bg-surface-soft border"
+                ? "bg-navy-600 text-fixed-white"
+                : "border-hairline text-steel hover:bg-surface-soft bg-background border"
             }`}
           >
             {p + 1}

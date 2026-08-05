@@ -28,7 +28,7 @@ export default function Header() {
   };
 
   return (
-    <header className="border-hairline sticky top-0 z-40 border-b bg-white/85 backdrop-blur-md">
+    <header className="border-hairline bg-background/85 sticky top-0 z-40 border-b backdrop-blur-md">
       <div className="relative mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 lg:gap-4 lg:px-6">
         {/* 브랜드 로고 — 마크(위치핀+하트) + 워드마크 */}
         <Link

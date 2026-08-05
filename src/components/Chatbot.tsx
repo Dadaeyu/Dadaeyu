@@ -181,9 +181,9 @@ const confidenceLabels: Record<Confidence, string> = {
 };
 
 const confidenceTone: Record<Confidence, string> = {
-  high: "border-brand-200 bg-brand-50 text-brand-800",
-  medium: "border-gold-200 bg-gold-50 text-gold-700",
-  low: "border-red-200 bg-red-50 text-red-700"
+  high: "border-hairline bg-brand-50 text-brand-600",
+  medium: "border-hairline bg-gold-50 text-gold-600",
+  low: "border-hairline bg-red-50 text-red-600"
 };
 
 const DAIYU_AVATAR_SRC = "/daiyu-avatar.png";
@@ -645,10 +645,10 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
         event.preventDefault();
         closeChat();
       }}
-      className="backdrop:bg-ink/45 shadow-navy-900/25 md:border-hairline fixed inset-0 m-0 h-[100dvh] max-h-none w-screen max-w-none grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-white p-0 shadow-2xl open:grid md:inset-y-4 md:right-4 md:left-auto md:h-auto md:w-[min(440px,calc(100vw-2rem))] md:rounded-lg md:border"
+      className="backdrop:bg-ink/45 shadow-navy-900/25 md:border-hairline bg-background fixed inset-0 m-0 h-[100dvh] max-h-none w-screen max-w-none grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 shadow-2xl open:grid md:inset-y-4 md:right-4 md:left-auto md:h-auto md:w-[min(440px,calc(100vw-2rem))] md:rounded-lg md:border"
       aria-label="다유 챗봇"
     >
-      <div className="border-hairline border-b bg-white">
+      <div className="border-hairline bg-background border-b">
         <header className="flex min-h-16 items-center justify-between gap-4 px-4 py-2">
           <div className="flex min-w-0 items-center gap-3">
             <DaiyuAvatar size="lg" variant="full" />
@@ -678,7 +678,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
 
         <details className="border-hairline border-t px-4 py-2">
           <summary className="text-slate flex min-h-12 cursor-pointer items-center gap-2 text-sm font-medium select-none">
-            <Accessibility className="text-brand-700 h-4 w-4" aria-hidden="true" />
+            <Accessibility className="text-brand-600 h-4 w-4" aria-hidden="true" />
             음성 부가 설정
             <span className="text-steel ml-auto text-xs">
               대화 {isConversationMode ? "켜짐" : "꺼짐"} · 자동 읽기{" "}
@@ -695,7 +695,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
                 className={`min-h-12 w-full rounded-md border px-3 text-left text-sm font-medium disabled:opacity-45 ${
                   isConversationMode
                     ? "border-gold-500 bg-gold-50 text-gold-900"
-                    : "border-hairline text-slate bg-white"
+                    : "border-hairline text-slate bg-card"
                 }`}
               >
                 <span className="flex items-center justify-between gap-2">
@@ -716,7 +716,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
               className={`min-h-12 rounded-md border px-3 text-left text-sm font-medium disabled:opacity-45 ${
                 isAutoTtsEnabled
                   ? "border-brand-600 bg-brand-50 text-brand-900"
-                  : "border-hairline text-slate bg-white"
+                  : "border-hairline text-slate bg-card"
               }`}
             >
               <span className="flex items-center justify-between gap-2">
@@ -736,7 +736,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
       </div>
 
       <div
-        className="min-h-0 space-y-4 overflow-y-auto bg-[#f6faf8] px-4 py-5 sm:px-6 lg:px-7"
+        className="bg-surface-soft min-h-0 space-y-4 overflow-y-auto px-4 py-5 sm:px-6 lg:px-7"
         aria-live="polite"
       >
         {messages.map((message, index) => {
@@ -770,7 +770,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
         {isLoading ? (
           <div className="flex items-end gap-2.5">
             <DaiyuAvatar />
-            <div className="flex gap-1 rounded-2xl rounded-bl-md border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <div className="border-hairline bg-card flex gap-1 rounded-2xl rounded-bl-md border px-4 py-3 shadow-sm">
               <span className="bg-brand-500 h-2 w-2 animate-bounce rounded-full [animation-delay:-0.2s]" />
               <span className="bg-brand-500 h-2 w-2 animate-bounce rounded-full [animation-delay:-0.1s]" />
               <span className="bg-brand-500 h-2 w-2 animate-bounce rounded-full" />
@@ -781,7 +781,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
       </div>
 
       <form
-        className="border-hairline flex items-center gap-2.5 border-t bg-white/95 px-4 py-3 backdrop-blur sm:px-5"
+        className="border-hairline bg-background flex items-center gap-2.5 border-t px-4 py-3 sm:px-5"
         onSubmit={handleSubmit}
       >
         <input
@@ -802,7 +802,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
           }
           aria-label="질문 입력"
           disabled={isLoading || isConversationMode}
-          className="focus:border-brand-400 min-w-0 flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-[16px] transition-colors placeholder:text-gray-600 focus:bg-white disabled:opacity-60"
+          className="focus:border-brand-400 text-ink placeholder:text-stone focus:bg-surface border-hairline bg-background min-w-0 flex-1 rounded-2xl border px-4 py-3.5 text-[16px] transition-colors disabled:opacity-60"
         />
         <button
           type="button"
@@ -953,7 +953,7 @@ function DaiyuAvatar({
 
   return (
     <span
-      className={`${sizeClass} shadow-brand-500/20 ring-brand-100 shrink-0 overflow-hidden bg-white shadow-sm ring-1 ${className}`}
+      className={`${sizeClass} shadow-brand-500/20 ring-hairline bg-surface shrink-0 overflow-hidden shadow-sm ring-1 ${className}`}
       aria-hidden="true"
     >
       <Image
@@ -980,15 +980,16 @@ function PlaceRecommendationList({
   const [selectedTabs, setSelectedTabs] = useState<Record<string, PlaceInfoTab>>({});
 
   return (
-    <section className="mt-4 border-t border-gray-100 pt-4" aria-label="추천 후보">
+    <section className="border-hairline-soft mt-4 border-t pt-4" aria-label="추천 후보">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <strong className="block text-[14px] font-extrabold text-gray-950">추천 후보</strong>
-          <span className="mt-0.5 block text-[12px] font-semibold text-gray-500">
+          <strong className="text-ink block text-[14px] font-extrabold">추천 후보</strong>
+          <span className="text-stone mt-0.5 block text-[12px] font-semibold">
             관광정보와 접근성을 나눠서 확인해요
           </span>
         </div>
-        <span className="bg-brand-50 text-brand-800 ring-brand-100 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1">
+        <span className="bg-brand-50 text-brand-600 ring-brand-100 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1">
+          {" "}
           {places.length}곳
         </span>
       </div>
@@ -1000,15 +1001,16 @@ function PlaceRecommendationList({
           return (
             <article
               key={placeKey}
-              className="rounded-2xl border border-gray-200 bg-gray-50/80 p-3.5 shadow-sm"
+              className="border-hairline bg-surface-soft rounded-2xl border p-3.5 shadow-sm"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <span className="text-brand-800 mb-1 block text-[11px] font-extrabold">
+                  <span className="text-brand-600 mb-1 block text-[11px] font-extrabold">
+                    {" "}
                     후보 {index + 1}
                     {place.category ? ` · ${place.category}` : ""}
                   </span>
-                  <h4 className="text-[16px] leading-snug font-extrabold text-gray-950">
+                  <h4 className="text-ink text-[16px] leading-snug font-extrabold">
                     {place.title}
                   </h4>
                 </div>
@@ -1017,7 +1019,7 @@ function PlaceRecommendationList({
                     href={buildMapSearchUrl(place)}
                     target="_blank"
                     rel="noreferrer"
-                    className="border-brand-200 text-brand-800 hover:bg-brand-50 inline-flex min-h-12 items-center gap-1.5 rounded-full border bg-white px-3 py-2 text-[12px] font-extrabold transition-colors"
+                    className="border-brand-200 text-brand-600 hover:bg-brand-50 bg-card inline-flex min-h-12 items-center gap-1.5 rounded-full border px-3 py-2 text-[12px] font-extrabold transition-colors"
                   >
                     <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
                     위치 보기
@@ -1025,20 +1027,19 @@ function PlaceRecommendationList({
                 ) : null}
               </div>
 
-              <div className="mt-3 grid gap-2 text-[13px] leading-relaxed text-gray-700">
+              <div className="text-slate mt-3 grid gap-2 text-[13px] leading-relaxed">
                 <p>
-                  <strong className="font-extrabold text-gray-900">한눈에 보기</strong>{" "}
-                  {place.activity}
+                  <strong className="text-ink font-extrabold">한눈에 보기</strong> {place.activity}
                 </p>
                 {place.address || place.tel ? (
-                  <div className="flex flex-wrap gap-1.5 text-[12px] font-bold text-gray-600">
+                  <div className="text-steel flex flex-wrap gap-1.5 text-[12px] font-bold">
                     {place.address ? (
-                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-gray-100">
+                      <span className="bg-surface ring-hairline rounded-full px-2.5 py-1 ring-1">
                         위치 {place.address}
                       </span>
                     ) : null}
                     {place.tel ? (
-                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-gray-100">
+                      <span className="bg-surface ring-hairline rounded-full px-2.5 py-1 ring-1">
                         문의 {place.tel}
                       </span>
                     ) : null}
@@ -1067,8 +1068,8 @@ function PlaceRecommendationList({
                       }
                       className={`inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[12px] font-extrabold transition-colors ${
                         isActive
-                          ? "bg-brand-800 text-white shadow-sm"
-                          : "hover:bg-brand-50 hover:text-brand-800 bg-white text-gray-600 ring-1 ring-gray-100"
+                          ? "bg-brand-600 text-white shadow-sm"
+                          : "hover:bg-brand-50 hover:text-brand-600 bg-surface text-steel ring-hairline ring-1"
                       }`}
                     >
                       {tab === "tour" ? <Info className="h-3.5 w-3.5" aria-hidden="true" /> : null}
@@ -1084,7 +1085,7 @@ function PlaceRecommendationList({
                 })}
               </div>
 
-              <div className="mt-3 border-t border-gray-200 pt-3">
+              <div className="border-hairline mt-3 border-t pt-3">
                 <PlaceTabContent place={place} tab={activeTab} />
               </div>
 
@@ -1095,7 +1096,7 @@ function PlaceRecommendationList({
                     key={question}
                     disabled={disabled}
                     onClick={() => void onChipClick(question)}
-                    className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 min-h-12 rounded-full border bg-white px-3 py-2 text-left text-[12px] leading-snug font-extrabold transition-colors disabled:opacity-50"
+                    className="border-brand-200 text-brand-600 hover:border-brand-400 hover:bg-brand-50 bg-card min-h-12 rounded-full border px-3 py-2 text-left text-[12px] leading-snug font-extrabold transition-colors disabled:opacity-50"
                   >
                     {question}
                   </button>
@@ -1103,7 +1104,8 @@ function PlaceRecommendationList({
               </div>
 
               {place.source ? (
-                <span className="mt-2 block truncate text-[11px] font-semibold text-gray-600">
+                <span className="text-stone mt-2 block truncate text-[11px] font-semibold">
+                  {" "}
                   출처: {place.source}
                 </span>
               ) : null}
@@ -1119,8 +1121,8 @@ function PlaceTabContent({ place, tab }: { place: PlaceRecommendation; tab: Plac
   if (tab === "tour") {
     const details = place.tourDetails || [];
     return (
-      <div className="text-[13px] leading-relaxed text-gray-700">
-        <strong className="block text-[12px] font-extrabold text-gray-950">관광정보</strong>
+      <div className="text-slate text-[13px] leading-relaxed">
+        <strong className="text-ink block text-[12px] font-extrabold">관광정보</strong>
         {details.length ? (
           <ul className="mt-2 grid gap-1.5">
             {details.map((item) => (
@@ -1131,7 +1133,7 @@ function PlaceTabContent({ place, tab }: { place: PlaceRecommendation; tab: Plac
             ))}
           </ul>
         ) : (
-          <p className="mt-1.5 text-gray-500">
+          <p className="text-stone mt-1.5">
             상세 운영정보는 아직 부족하지만, 위의 한눈에 보기 내용을 기준으로 방문 목적을 잡아볼 수
             있어요.
           </p>
@@ -1142,8 +1144,8 @@ function PlaceTabContent({ place, tab }: { place: PlaceRecommendation; tab: Plac
 
   if (tab === "accessibility") {
     return (
-      <div className="text-[13px] leading-relaxed text-gray-700">
-        <strong className="block text-[12px] font-extrabold text-gray-950">접근성</strong>
+      <div className="text-slate text-[13px] leading-relaxed">
+        <strong className="text-ink block text-[12px] font-extrabold">접근성</strong>
         {place.accessibility.length ? (
           <ul className="mt-2 grid gap-1.5">
             {place.accessibility.map((item) => (
@@ -1154,7 +1156,7 @@ function PlaceTabContent({ place, tab }: { place: PlaceRecommendation; tab: Plac
             ))}
           </ul>
         ) : (
-          <p className="mt-1.5 text-gray-500">
+          <p className="text-stone mt-1.5">
             접근성 세부 항목은 아직 부족해요. 방문 전 공식 안내처로 한 번 더 확인하는 게 좋아요.
           </p>
         )}
@@ -1163,12 +1165,12 @@ function PlaceTabContent({ place, tab }: { place: PlaceRecommendation; tab: Plac
   }
 
   return (
-    <div className="text-[13px] leading-relaxed text-gray-700">
-      <strong className="block text-[12px] font-extrabold text-gray-950">방문 전 확인</strong>
+    <div className="text-slate text-[13px] leading-relaxed">
+      <strong className="text-ink block text-[12px] font-extrabold">방문 전 확인</strong>
       <ul className="mt-2 grid gap-1.5">
         {getPlaceCheckItems(place).map((item) => (
           <li key={item} className="flex gap-2">
-            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-400" />
+            <span className="bg-stone mt-2 h-1.5 w-1.5 shrink-0 rounded-full" />
             <span>{item}</span>
           </li>
         ))}
@@ -1233,7 +1235,7 @@ function AssistantMessage({
   return (
     <div className="flex items-start gap-3">
       <DaiyuAvatar className="mt-1" />
-      <div className="min-w-0 flex-1 rounded-[1.4rem] rounded-bl-md border border-gray-200 bg-white px-4 py-4 text-sm leading-relaxed text-gray-800 shadow-sm shadow-gray-200/60 sm:px-5 sm:py-5">
+      <div className="border-hairline bg-card text-ink min-w-0 flex-1 rounded-[1.4rem] rounded-bl-md border px-4 py-4 text-sm leading-relaxed shadow-sm sm:px-5 sm:py-5">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {showEvidenceBadge ? (
             <span
@@ -1253,7 +1255,7 @@ function AssistantMessage({
               }
               onSpeak(messageId, response.message);
             }}
-            className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-full border bg-white px-3 py-1.5 text-[12px] font-extrabold transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-500"
+            className="border-brand-200 text-brand-600 hover:border-brand-400 hover:bg-brand-50 bg-card disabled:border-hairline disabled:text-stone ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-extrabold transition-colors disabled:cursor-not-allowed"
             aria-label={isSpeaking ? "답변 읽기 중지" : "답변 읽어주기"}
           >
             {isSpeaking ? (
@@ -1264,11 +1266,12 @@ function AssistantMessage({
             {isSpeaking ? "중지" : "읽기"}
           </button>
         </div>
-        <p className="text-[15px] leading-7 font-semibold whitespace-pre-line text-gray-950 sm:text-[16px] sm:leading-7">
+        <p className="text-ink text-[15px] leading-7 font-semibold whitespace-pre-line sm:text-[16px] sm:leading-7">
           {response.message}
         </p>
         {!ttsSupported ? (
-          <span className="mt-2 block text-[12px] font-semibold text-gray-600">
+          <span className="text-stone mt-2 block text-[12px] font-semibold">
+            {" "}
             현재 음성 읽어주기를 사용할 수 없어요.
           </span>
         ) : null}
@@ -1282,13 +1285,14 @@ function AssistantMessage({
         ) : null}
 
         {response.card ? (
-          <details className="border-brand-100 bg-brand-50/70 mt-4 rounded-2xl border px-3.5 py-3 text-gray-700">
+          <details className="border-brand-100 bg-brand-50/70 text-slate mt-4 rounded-2xl border px-3.5 py-3">
             <summary className="text-brand-800 flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-extrabold select-none">
+              {" "}
               <MapPin className="h-4 w-4" aria-hidden="true" />
               {response.card.title}
               <span className="text-brand-800 ml-auto text-[11px] font-bold">근거 보기</span>
             </summary>
-            <ul className="mt-3 grid gap-2 text-[13px] leading-relaxed text-gray-700">
+            <ul className="text-slate mt-3 grid gap-2 text-[13px] leading-relaxed">
               {response.card.rows.map((row) => (
                 <li key={row} className="flex gap-2">
                   <span className="bg-brand-500 mt-2 h-1.5 w-1.5 shrink-0 rounded-full" />
@@ -1296,15 +1300,16 @@ function AssistantMessage({
                 </li>
               ))}
             </ul>
-            <span className="border-brand-200 mt-3 block border-t border-dashed pt-2.5 text-[12px] leading-relaxed text-gray-500">
+            <span className="border-brand-200 text-stone mt-3 block border-t border-dashed pt-2.5 text-[12px] leading-relaxed">
               {response.card.source}
             </span>
           </details>
         ) : null}
 
         {showTechnicalDetails ? (
-          <details className="border-navy-100 bg-navy-50/50 mt-3 rounded-2xl border px-3 py-2.5 text-xs text-gray-800">
+          <details className="border-navy-100 bg-navy-50/50 text-ink mt-3 rounded-2xl border px-3 py-2.5 text-xs">
             <summary className="text-navy-700 flex min-h-11 cursor-pointer items-center text-xs font-extrabold select-none">
+              {" "}
               정보 출처
             </summary>
             {showDebugDetails && response.debug ? (
@@ -1312,7 +1317,7 @@ function AssistantMessage({
                 <strong className="text-navy-700 mt-3 block text-[11px] font-extrabold">
                   질문분류 JSON
                 </strong>
-                <pre className="ring-navy-100 mt-2 max-h-48 overflow-auto rounded-xl bg-white p-3 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap text-gray-800 ring-1">
+                <pre className="ring-navy-100 bg-surface text-ink mt-2 max-h-48 overflow-auto rounded-xl p-3 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap ring-1">
                   {JSON.stringify(response.debug.analysis, null, 2)}
                 </pre>
                 {response.debug.searchTerms.length > 0 ? (
@@ -1320,7 +1325,7 @@ function AssistantMessage({
                     {response.debug.searchTerms.map((term) => (
                       <span
                         key={term}
-                        className="text-navy-600 ring-navy-100 rounded-full bg-white px-2 py-1 text-[11px] font-semibold ring-1"
+                        className="text-navy-600 ring-navy-100 bg-surface rounded-full px-2 py-1 text-[11px] font-semibold ring-1"
                       >
                         {term}
                       </span>
@@ -1328,7 +1333,7 @@ function AssistantMessage({
                   </div>
                 ) : null}
                 {response.debug.inputMessage ? (
-                  <div className="ring-navy-100 mt-3 rounded-xl bg-white p-3 text-[12px] leading-relaxed text-gray-800 ring-1">
+                  <div className="ring-navy-100 bg-surface text-ink mt-3 rounded-xl p-3 text-[12px] leading-relaxed ring-1">
                     <strong className="text-navy-700 mb-1 block text-[11px] font-extrabold">
                       입력 질문
                     </strong>
@@ -1336,13 +1341,13 @@ function AssistantMessage({
                   </div>
                 ) : null}
                 {response.debug.rag ? (
-                  <div className="border-navy-100 mt-3 rounded-2xl border bg-white/70 p-3">
+                  <div className="border-navy-100 bg-surface mt-3 rounded-2xl border p-3">
                     <strong className="text-navy-700 block text-[11px] font-extrabold">
                       RAG 디버그
                     </strong>
-                    <div className="mt-2 grid gap-2 text-[12px] leading-relaxed text-gray-700">
-                      <div className="ring-navy-100 rounded-xl bg-white p-3 ring-1">
-                        <span className="block font-extrabold text-gray-900">1. 검색 상태</span>
+                    <div className="text-slate mt-2 grid gap-2 text-[12px] leading-relaxed">
+                      <div className="ring-navy-100 bg-surface rounded-xl p-3 ring-1">
+                        <span className="text-ink block font-extrabold">1. 검색 상태</span>
                         <span className="mt-1 block">방식: {response.debug.rag.searchMode}</span>
                         <span className="block">상태: {response.debug.rag.statusMessage}</span>
                         {typeof response.debug.rag.vectorCandidateCount === "number" ? (
@@ -1353,10 +1358,8 @@ function AssistantMessage({
                       </div>
 
                       {response.debug.rag.embedding ? (
-                        <div className="ring-navy-100 rounded-xl bg-white p-3 ring-1">
-                          <span className="block font-extrabold text-gray-900">
-                            2. 질문 embedding
-                          </span>
+                        <div className="ring-navy-100 bg-surface rounded-xl p-3 ring-1">
+                          <span className="text-ink block font-extrabold">2. 질문 embedding</span>
                           <div className="mt-1 grid gap-1">
                             <span>상태: {response.debug.rag.embedding.status}</span>
                             {response.debug.rag.embedding.model ? (
@@ -1368,24 +1371,24 @@ function AssistantMessage({
                           </div>
                           {response.debug.rag.embedding.input ? (
                             <>
-                              <span className="mt-3 block font-extrabold text-gray-900">
+                              <span className="text-ink mt-3 block font-extrabold">
                                 embedding 입력
                               </span>
-                              <pre className="bg-navy-50/70 mt-1 max-h-36 overflow-auto rounded-lg p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap text-gray-800">
+                              <pre className="bg-navy-50/70 text-ink mt-1 max-h-36 overflow-auto rounded-lg p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap">
                                 {response.debug.rag.embedding.input}
                               </pre>
                             </>
                           ) : null}
                           {response.debug.rag.embedding.vectorPreview?.length ? (
                             <>
-                              <span className="mt-3 block font-extrabold text-gray-900">
+                              <span className="text-ink mt-3 block font-extrabold">
                                 embedding 벡터 샘플
                               </span>
-                              <pre className="bg-navy-50/70 mt-1 max-h-28 overflow-auto rounded-lg p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap text-gray-800">
+                              <pre className="bg-navy-50/70 text-ink mt-1 max-h-28 overflow-auto rounded-lg p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap">
                                 {JSON.stringify(response.debug.rag.embedding.vectorPreview)}
                               </pre>
                               {response.debug.rag.embedding.vectorPreviewNote ? (
-                                <span className="mt-1 block text-[11px] text-gray-500">
+                                <span className="text-stone mt-1 block text-[11px]">
                                   {response.debug.rag.embedding.vectorPreviewNote}
                                 </span>
                               ) : null}
@@ -1394,31 +1397,31 @@ function AssistantMessage({
                         </div>
                       ) : null}
 
-                      <div className="ring-navy-100 rounded-xl bg-white p-3 ring-1">
-                        <span className="block font-extrabold text-gray-900">3. DB 매칭 결과</span>
+                      <div className="ring-navy-100 bg-surface rounded-xl p-3 ring-1">
+                        <span className="text-ink block font-extrabold">3. DB 매칭 결과</span>
                         {response.debug.rag.dbMatches.length > 0 ? (
                           <ol className="mt-2 grid gap-2">
                             {response.debug.rag.dbMatches.map((match) => (
                               <li
                                 key={`${match.rank}-${match.source || match.title || "match"}`}
-                                className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2"
+                                className="border-hairline-soft bg-surface-soft rounded-lg border px-2.5 py-2"
                               >
-                                <div className="flex flex-wrap items-center gap-1.5 font-bold text-gray-900">
+                                <div className="text-ink flex flex-wrap items-center gap-1.5 font-bold">
                                   <span>{match.rank}.</span>
                                   <span>{match.title || "제목 없음"}</span>
                                   {typeof match.similarity === "number" ? (
-                                    <span className="bg-brand-50 text-brand-700 ring-brand-100 rounded-full px-2 py-0.5 text-[11px] ring-1">
+                                    <span className="bg-brand-50 text-brand-600 ring-brand-100 rounded-full px-2 py-0.5 text-[11px] ring-1">
                                       유사도 {match.similarity.toFixed(4)}
                                     </span>
                                   ) : null}
                                 </div>
-                                <div className="mt-1 text-[11px] text-gray-500">
+                                <div className="text-stone mt-1 text-[11px]">
                                   {match.category || "분류 없음"}
                                   {match.chunkIndex !== null ? ` · chunk ${match.chunkIndex}` : ""}
                                   {match.source ? ` · ${match.source}` : ""}
                                 </div>
                                 {match.contentPreview ? (
-                                  <p className="mt-1 line-clamp-3 text-[12px] leading-relaxed text-gray-700">
+                                  <p className="text-slate mt-1 line-clamp-3 text-[12px] leading-relaxed">
                                     {match.contentPreview}
                                   </p>
                                 ) : null}
@@ -1426,24 +1429,24 @@ function AssistantMessage({
                             ))}
                           </ol>
                         ) : (
-                          <span className="mt-1 block text-gray-500">매칭된 DB 근거 없음</span>
+                          <span className="text-stone mt-1 block">매칭된 DB 근거 없음</span>
                         )}
                       </div>
                     </div>
                   </div>
                 ) : null}
                 {response.debug.weather ? (
-                  <div className="border-navy-100 mt-3 rounded-2xl border bg-white/70 p-3">
+                  <div className="border-navy-100 bg-surface mt-3 rounded-2xl border p-3">
                     <strong className="text-navy-700 block text-[11px] font-extrabold">
                       날씨 디버그
                     </strong>
-                    <div className="ring-navy-100 mt-2 rounded-xl bg-white p-3 text-[12px] leading-relaxed text-gray-700 ring-1">
-                      <span className="block font-extrabold text-gray-900">조회 상태</span>
+                    <div className="ring-navy-100 bg-surface text-slate mt-2 rounded-xl p-3 text-[12px] leading-relaxed ring-1">
+                      <span className="text-ink block font-extrabold">조회 상태</span>
                       <span className="mt-1 block">상태: {response.debug.weather.status}</span>
                       <span className="block">메시지: {response.debug.weather.statusMessage}</span>
                       {response.debug.weather.request ? (
                         <>
-                          <span className="mt-3 block font-extrabold text-gray-900">요청 조건</span>
+                          <span className="text-ink mt-3 block font-extrabold">요청 조건</span>
                           <span className="block">
                             기준시각: {response.debug.weather.request.currentDate}
                           </span>
@@ -1458,21 +1461,21 @@ function AssistantMessage({
                         </>
                       ) : null}
                     </div>
-                    <div className="ring-navy-100 mt-2 rounded-xl bg-white p-3 text-[12px] leading-relaxed text-gray-700 ring-1">
-                      <span className="block font-extrabold text-gray-900">관광기후지수 매칭</span>
+                    <div className="ring-navy-100 bg-surface text-slate mt-2 rounded-xl p-3 text-[12px] leading-relaxed ring-1">
+                      <span className="text-ink block font-extrabold">관광기후지수 매칭</span>
                       {response.debug.weather.items.length > 0 ? (
                         <ol className="mt-2 grid gap-2">
                           {response.debug.weather.items.map((item, index) => (
                             <li
                               key={`${item.cityAreaId || item.cityName || "weather"}-${index}`}
-                              className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2"
+                              className="border-hairline-soft bg-surface-soft rounded-lg border px-2.5 py-2"
                             >
-                              <div className="font-bold text-gray-900">
+                              <div className="text-ink font-bold">
                                 {item.totalCityName ||
                                   [item.doName, item.cityName].filter(Boolean).join(" ") ||
                                   "지역명 없음"}
                               </div>
-                              <div className="mt-1 text-[11px] text-gray-500">
+                              <div className="text-stone mt-1 text-[11px]">
                                 {item.tciGrade ? `등급 ${item.tciGrade}` : "등급 없음"}
                                 {item.kmaTci ? ` · 지수 ${item.kmaTci}` : ""}
                                 {item.tm ? ` · ${item.tm}` : ""}
@@ -1481,9 +1484,9 @@ function AssistantMessage({
                           ))}
                         </ol>
                       ) : (
-                        <span className="mt-1 block text-gray-500">매칭된 관광기후지수 없음</span>
+                        <span className="text-stone mt-1 block">매칭된 관광기후지수 없음</span>
                       )}
-                      <span className="mt-2 block text-[11px] text-gray-500">
+                      <span className="text-stone mt-2 block text-[11px]">
                         {response.debug.weather.source}
                       </span>
                     </div>
@@ -1500,7 +1503,7 @@ function AssistantMessage({
                   {response.sources.map((source) => (
                     <span
                       key={source}
-                      className="text-navy-600 ring-navy-100 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold ring-1"
+                      className="text-navy-600 ring-navy-100 bg-surface rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1"
                     >
                       {source}
                     </span>
@@ -1512,8 +1515,8 @@ function AssistantMessage({
         ) : null}
 
         {response.chips.length > 0 ? (
-          <div className="mt-4 border-t border-gray-100 pt-3">
-            <span className="mb-2 block text-[12px] font-extrabold text-gray-500">
+          <div className="border-hairline-soft mt-4 border-t pt-3">
+            <span className="text-stone mb-2 block text-[12px] font-extrabold">
               이어서 물어보기
             </span>
             <div className="flex flex-wrap gap-2">
@@ -1523,7 +1526,7 @@ function AssistantMessage({
                   key={chip}
                   disabled={disabled}
                   onClick={() => void onChipClick(chip)}
-                  className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 min-h-11 rounded-full border bg-white px-3 py-2 text-left text-[13px] leading-snug font-bold transition-colors disabled:opacity-50"
+                  className="border-brand-200 text-brand-600 hover:border-brand-400 hover:bg-brand-50 bg-card min-h-11 rounded-full border px-3 py-2 text-left text-[13px] leading-snug font-bold transition-colors disabled:opacity-50"
                 >
                   {chip}
                 </button>

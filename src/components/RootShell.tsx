@@ -15,6 +15,7 @@ import NoticeModal, {
   snoozeStorageKey,
   type ActiveNotice
 } from "@/components/NoticeModal";
+import { NavigationProgress } from "@/components/NavigationProgress";
 
 function isSnoozedToday(noticeId: number): boolean {
   try {
@@ -79,7 +80,8 @@ export default function RootShell({
       <AccessibilityProvider>
         <PlacesProvider initialPlaces={places} initialDetails={placeDetails} fromDb={fromDb}>
           <CourseProvider>
-            <div className="min-h-screen bg-white">
+            <div className="bg-background min-h-screen">
+              <NavigationProgress />
               <a
                 href="#main"
                 className="focus:bg-brand-500 sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:rounded-lg focus:px-4 focus:py-2 focus:font-semibold focus:text-white"

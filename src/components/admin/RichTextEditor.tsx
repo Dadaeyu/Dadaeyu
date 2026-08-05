@@ -90,7 +90,7 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm max-w-none min-h-[200px] px-3 py-2 focus:outline-none text-ink [&_p]:my-2 [&_ul]:my-2 [&_ol]:my-2 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:text-base [&_h3]:font-semibold [&_img.ProseMirror-selectednode]:outline [&_img.ProseMirror-selectednode]:outline-2 [&_img.ProseMirror-selectednode]:outline-navy-400 [&_img.ProseMirror-selectednode]:outline-offset-2"
+          "prose prose-sm dark:prose-invert max-w-none min-h-[200px] px-3 py-2 focus:outline-none text-ink prose-headings:text-ink prose-p:text-steel [&_p]:my-2 [&_ul]:my-2 [&_ol]:my-2 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:text-base [&_h3]:font-semibold [&_img.ProseMirror-selectednode]:outline [&_img.ProseMirror-selectednode]:outline-2 [&_img.ProseMirror-selectednode]:outline-navy-400 [&_img.ProseMirror-selectednode]:outline-offset-2"
       }
     }
   });
@@ -168,9 +168,9 @@ export function RichTextEditor({
 
   return (
     <div
-      className={`border-hairline overflow-hidden rounded-lg border bg-white ${disabled ? "opacity-60" : ""}`}
+      className={`border-hairline bg-background overflow-hidden rounded-2xl border ${disabled ? "opacity-60" : ""}`}
     >
-      <div className="border-hairline-soft bg-surface-soft/50 flex flex-wrap gap-1 border-b p-2">
+      <div className="border-hairline-soft bg-surface-soft flex flex-wrap gap-1 border-b p-2">
         <button
           type="button"
           className={`${toolBtn} ${editor.isActive("bold") ? activeBtn : ""}`}
@@ -276,7 +276,7 @@ export function RichTextEditor({
       </div>
 
       {imageSelected && (
-        <div className="border-hairline-soft bg-navy-50/40 flex flex-wrap items-center gap-1.5 border-b px-2 py-1.5">
+        <div className="border-hairline-soft bg-surface-soft flex flex-wrap items-center gap-1.5 border-b px-2 py-1.5">
           <span className="text-steel mr-1 text-xs font-medium">이미지 크기</span>
           {IMAGE_SIZE_PRESETS.map((preset) => (
             <button

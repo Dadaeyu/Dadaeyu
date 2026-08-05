@@ -5,14 +5,20 @@ import { isAdminMember } from "@/lib/community/ownership";
 export const dynamic = "force-dynamic";
 
 const DETAIL_COLUMNS =
-  "post_id, board_id, title, content, writer_id, writer_nm, rating, view_cnt, like_cnt, comment_cnt, notice_yn, created_at, content_id, tb_board(board_nm, comment_yn), tb_post_image(image_url, sort_order), tb_post_file(file_url, file_name, file_size, sort_order)";
+  "post_id, board_id, title, content, writer_id, writer_nm, rating, view_cnt, like_cnt, comment_cnt, notice_yn, created_at, content_id, tb_board(board_nm, comment_yn), tb_members!writer_id(community_level), tb_post_image(image_url, sort_order), tb_post_file(file_url, file_name, file_size, sort_order)";
 
 type BoardRef =
   { board_nm: string; comment_yn: boolean } | { board_nm: string; comment_yn: boolean }[] | null;
+type MemberLevelRef = { community_level?: number } | { community_level?: number }[] | null;
 
 function boardInfoOf(ref: BoardRef): { board_nm: string; comment_yn: boolean } {
   const b = Array.isArray(ref) ? ref[0] : ref;
   return { board_nm: b?.board_nm ?? "알 수 없음", comment_yn: b?.comment_yn ?? false };
+}
+
+function communityLevelOf(ref: MemberLevelRef): number {
+  const row = Array.isArray(ref) ? ref[0] : ref;
+  return row?.community_level ?? 1;
 }
 
 type Params = { params: Promise<{ id: string }> };
@@ -37,16 +43,18 @@ export async function GET(_request: Request, { params }: Params) {
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const { tb_board, tb_post_image, tb_post_file, writer_id, ...rest } = data as typeof data & {
-      tb_board: BoardRef;
-      tb_post_image: { image_url: string; sort_order: number }[];
-      tb_post_file: {
-        file_url: string;
-        file_name: string;
-        file_size: number | null;
-        sort_order: number;
-      }[];
-    };
+    const { tb_board, tb_members, tb_post_image, tb_post_file, writer_id, ...rest } =
+      data as typeof data & {
+        tb_board: BoardRef;
+        tb_members: MemberLevelRef;
+        tb_post_image: { image_url: string; sort_order: number }[];
+        tb_post_file: {
+          file_url: string;
+          file_name: string;
+          file_size: number | null;
+          sort_order: number;
+        }[];
+      };
 
     const images = [...(tb_post_image ?? [])]
       .sort((a, b) => a.sort_order - b.sort_order)
@@ -55,14 +63,7 @@ export async function GET(_request: Request, { params }: Params) {
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((f) => ({ url: f.file_url, name: f.file_name, size: f.file_size }));
 
-    void supabase
-      .from("tb_post")
-      .update({ view_cnt: rest.view_cnt + 1 })
-      .eq("post_id", postId)
-      .then(
-        () => {},
-        () => {}
-      );
+    // 조회수 증가는 POST .../view 에서만 (GET 중복·수정 로드·Strict Mode 이중 호출 방지)
 
     let attachedPlace: { content_id: number; name: string; image: string } | null = null;
     if (rest.content_id != null) {
@@ -104,6 +105,7 @@ export async function GET(_request: Request, { params }: Params) {
         ...rest,
         board_nm: boardInfo.board_nm,
         comment_yn: boardInfo.comment_yn,
+        writer_community_level: communityLevelOf(tb_members),
         attached_place: attachedPlace,
         images,
         files,

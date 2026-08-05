@@ -83,7 +83,7 @@ export interface LikedCourse {
   registtime: string;
 }
 
-/** tb_course_detail + tb_place 조인 결과 */
+/** tb_course_detail + tb_place 조인 결과 (시간은 starthour/endhour → HH:00) */
 export interface TourismCoursePlace {
   detail_id: number;
   place_id: number;

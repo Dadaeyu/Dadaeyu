@@ -475,6 +475,11 @@
   color: var(--color-ink) !important;
 }
 
+/* 사진 위 오버레이 등 — 다크모드에서도 항상 순백 글자 */
+.text-fixed-white {
+  color: var(--color-fixed-white) !important;
+}
+
 /* Native <select>: 다크/고대비 테마에서도 드롭다운 옵션 가독성 유지 */
 .select-on-light,
 .select-on-light option {
@@ -676,4 +681,21 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+}
+
+/* 페이지 전환 상단 로딩 바 */
+@keyframes nav-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(150%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+.nav-progress-bar {
+  animation: nav-progress-slide 1.1s ease-in-out infinite;
 }

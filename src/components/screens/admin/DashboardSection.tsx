@@ -11,10 +11,10 @@ import {
   ShieldCheck,
   ChevronRight
 } from "lucide-react";
-import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import type { DbPlaceReport, ReportStatus } from "@/lib/supabase/types";
 import { formatDate, formatMonthLabel, reportTone, REPORT_STATUS_LABELS } from "./helpers";
+import { adminAlertClass, adminPanelClass } from "./adminUi";
 
 type Stats = {
   totalMembers: number;
@@ -100,8 +100,8 @@ export function DashboardSection() {
           value: stats.suspendedMembers.toLocaleString(),
           sub: "정지 계정",
           icon: ShieldOff,
-          bg: "bg-red-50",
-          color: "text-red-600"
+          bg: "bg-surface-soft",
+          color: "text-error"
         },
         {
           label: "제보 대기",
@@ -117,7 +117,7 @@ export function DashboardSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-ink text-xl font-bold">관리자 대시보드</h1>
+        <h1 className="text-ink text-xl font-semibold tracking-[-0.02em]">관리자 대시보드</h1>
         <p className="text-stone mt-0.5 text-sm">
           {new Date().toLocaleDateString("ko-KR", {
             year: "numeric",
@@ -128,43 +128,35 @@ export function DashboardSection() {
         </p>
       </div>
 
-      {error && (
-        <div className="border-error/30 text-error rounded-lg border bg-red-50 px-4 py-3 text-sm">
-          {error}
-        </div>
-      )}
+      {error && <div className={adminAlertClass}>{error}</div>}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <Card
-                key={i}
-                padding="none"
-                className="border-hairline-soft h-32 animate-pulse p-5"
-              />
+              <div key={i} className={`${adminPanelClass} h-32 animate-pulse p-5`} />
             ))
           : cards.map(({ label, value, sub, icon: Icon, bg, color }) => (
-              <Card key={label} padding="none" className="border-hairline-soft p-5">
-                <div className={`h-10 w-10 ${bg} mb-3 flex items-center justify-center rounded-lg`}>
+              <div key={label} className={`${adminPanelClass} p-5`}>
+                <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${bg}`}>
                   <Icon className={`h-5 w-5 ${color}`} />
                 </div>
-                <p className="text-ink text-2xl font-bold">{value}</p>
-                <div className="mt-1 flex items-center justify-between">
+                <p className="text-ink text-2xl font-bold tabular-nums">{value}</p>
+                <div className="mt-1 flex items-center justify-between gap-2">
                   <p className="text-steel text-sm">{label}</p>
-                  <span className="text-annotate text-xs font-semibold">{sub}</span>
+                  <span className="text-stone text-xs font-semibold">{sub}</span>
                 </div>
-              </Card>
+              </div>
             ))}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="border-hairline-soft rounded-lg border bg-white p-5">
+        <div className={`${adminPanelClass} p-5`}>
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-ink font-bold">월별 가입자 (최근 6개월)</h3>
+            <h3 className="text-ink font-semibold">월별 가입자 (최근 6개월)</h3>
             <TrendingUp className="text-brand-500 h-4 w-4" />
           </div>
           {loading ? (
-            <div className="bg-surface-soft h-28 animate-pulse rounded-lg" />
+            <div className="bg-surface-soft h-28 animate-pulse rounded-xl" />
           ) : monthly.length === 0 ? (
             <p className="text-stone py-8 text-center text-sm">가입 데이터가 없습니다.</p>
           ) : (
@@ -188,9 +180,9 @@ export function DashboardSection() {
           )}
         </div>
 
-        <div className="border-hairline-soft rounded-lg border bg-white p-5">
+        <div className={`${adminPanelClass} p-5`}>
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-ink font-bold">처리 필요 제보</h3>
+            <h3 className="text-ink font-semibold">처리 필요 제보</h3>
             <Link
               href="/admin/reports"
               className="text-navy-600 flex items-center gap-0.5 text-xs font-semibold hover:underline"
@@ -206,7 +198,7 @@ export function DashboardSection() {
             {recentReports.map((r) => (
               <div
                 key={r.id}
-                className="bg-surface-soft flex items-start justify-between gap-3 rounded-lg p-3"
+                className="bg-surface-soft flex items-start justify-between gap-3 rounded-xl p-3"
               >
                 <div className="min-w-0">
                   <p className="text-ink text-sm font-semibold">{r.target_name}</p>
@@ -225,11 +217,11 @@ export function DashboardSection() {
         </div>
       </div>
 
-      <div className="border-navy-100 bg-navy-50 flex items-start gap-4 rounded-lg border p-5">
+      <div className="border-navy-100 bg-navy-50 flex items-start gap-4 rounded-2xl border p-5">
         <ShieldCheck className="text-navy-500 mt-0.5 h-8 w-8 shrink-0" />
         <div>
-          <p className="text-navy-800 mb-1 font-bold">관리자 접근 권한</p>
-          <p className="text-navy-600 text-sm">
+          <p className="text-navy-800 mb-1 font-semibold">관리자 접근 권한</p>
+          <p className="text-navy-600 text-sm leading-6">
             회원·게시물·제보는 실시간 DB와 연동됩니다. 장소·코스·이벤트는 정적/목업 데이터로
             유지됩니다.
             {stats && (

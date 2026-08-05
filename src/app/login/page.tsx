@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/components/AuthLayout";
 import OAuthButtons, { AuthDivider, AuthLinks } from "@/components/AuthForms";
@@ -14,6 +14,8 @@ import {
 } from "@/lib/auth/actions";
 import { mapAuthError } from "@/lib/auth/errors";
 
+const REMEMBER_EMAIL_KEY = "dadaeyu:remember-email";
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -23,6 +25,7 @@ function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(
     authError === "account_suspended"
@@ -51,6 +54,20 @@ function LoginForm() {
           : null
   );
 
+  useEffect(() => {
+    queueMicrotask(() => {
+      try {
+        const saved = localStorage.getItem(REMEMBER_EMAIL_KEY);
+        if (saved) {
+          setEmail(saved);
+          setRememberEmail(true);
+        }
+      } catch {
+        // ignore storage errors
+      }
+    });
+  }, []);
+
   const handleEmailSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
@@ -64,6 +81,17 @@ function LoginForm() {
     try {
       const { error } = await signInWithEmail(submittedEmail, password);
       if (error) throw error;
+
+      try {
+        if (rememberEmail) {
+          localStorage.setItem(REMEMBER_EMAIL_KEY, submittedEmail);
+        } else {
+          localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        }
+      } catch {
+        // ignore storage errors
+      }
+
       const dest = await resolvePostLoginPath(next);
       router.push(dest);
       router.refresh();
@@ -119,6 +147,15 @@ function LoginForm() {
           placeholder="비밀번호"
           className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full rounded-xl border px-4 py-2.5 text-sm focus:ring-2 focus:outline-none"
         />
+        <label className="text-steel flex min-h-11 cursor-pointer items-center gap-2.5 px-0.5 text-sm select-none">
+          <input
+            type="checkbox"
+            checked={rememberEmail}
+            onChange={(e) => setRememberEmail(e.target.checked)}
+            className="border-hairline text-brand-600 focus:ring-brand-500 h-5 w-5 rounded"
+          />
+          아이디 저장
+        </label>
         <button
           type="submit"
           disabled={loading}
@@ -130,14 +167,14 @@ function LoginForm() {
 
       {message && (
         <div className="space-y-2">
-          <p className="text-center text-sm text-red-600" role="alert">
+          <p className="text-error text-center text-sm" role="alert">
             {message}
           </p>
           {(authError === "email_not_confirmed" ||
             authError === "auth_callback_failed" ||
             message.includes("이메일 인증이 완료되지 않았습니다") ||
             message.includes("인증 링크가 만료")) && (
-            <p className="text-center text-xs text-gray-500">
+            <p className="text-stone text-center text-xs">
               메일이 오지 않았나요?{" "}
               <Link
                 href={

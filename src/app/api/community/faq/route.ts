@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data, error, count } = await supabase
       .from("tb_community_faq")
-      .select("id, question", { count: "exact" })
+      .select("id, question, answer", { count: "exact" })
       .eq("is_visible", true)
       .order("sort_order", { ascending: true })
       .order("updated_at", { ascending: false })

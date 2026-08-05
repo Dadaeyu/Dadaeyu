@@ -1,13 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { type UserRole, type UserStatus } from "@/lib/supabase/types";
 import { CommunityLevelBadge } from "@/components/community/CommunityLevelBadge";
+import { AdminSearchBar } from "./AdminSearchBar";
 import { formatDate } from "./helpers";
+import {
+  adminAlertClass,
+  adminPanelClass,
+  emptyStateClass,
+  fieldLabelClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  tableBodyClass,
+  tableClass,
+  tableHeadRowClass,
+  tableRowClass,
+  tableTdCenterClass,
+  tableThClass,
+  tableThLeftClass,
+  tableWrapClass
+} from "./adminUi";
 
 type AdminUser = {
   id: string;
@@ -29,14 +44,14 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 ];
 
 const TABLE_COLUMNS = [
-  { key: "no", label: "No.", className: "w-12 text-center" },
-  { key: "nickname", label: "닉네임", className: "w-[7.5rem]" },
-  { key: "email", label: "이메일", className: "min-w-[10rem]" },
-  { key: "created_at", label: "가입일", className: "w-28 text-center" },
-  { key: "level", label: "등급", className: "w-24 text-center" },
-  { key: "role", label: "역할", className: "w-20 text-center" },
-  { key: "status", label: "상태", className: "w-20 text-center" },
-  { key: "actions", label: "관리", className: "w-44 text-center" }
+  { key: "no", label: "No.", align: "center" as const, className: "w-12" },
+  { key: "nickname", label: "닉네임", align: "left" as const, className: "w-[7.5rem]" },
+  { key: "email", label: "이메일", align: "left" as const, className: "min-w-[10rem]" },
+  { key: "created_at", label: "가입일", align: "center" as const, className: "w-28" },
+  { key: "level", label: "등급", align: "center" as const, className: "w-24" },
+  { key: "role", label: "역할", align: "center" as const, className: "w-20" },
+  { key: "status", label: "상태", align: "center" as const, className: "w-20" },
+  { key: "actions", label: null, align: "center" as const, className: "w-44" }
 ] as const;
 
 function sortUsers(users: AdminUser[], sortKey: SortKey): AdminUser[] {
@@ -121,32 +136,23 @@ export function UsersSection() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-ink text-xl font-bold">사용자 관리</h1>
-        <span className="text-stone text-sm">총 {users.length}명</span>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-ink text-xl font-semibold tracking-[-0.02em]">사용자 관리</h1>
+          <p className="text-stone mt-1 text-sm">역할·정지 상태를 관리합니다.</p>
+        </div>
+        <span className="text-stone text-sm tabular-nums">총 {users.length}명</span>
       </div>
 
-      {error && (
-        <div className="border-error/30 text-error rounded-lg border bg-red-50 px-4 py-3 text-sm">
-          {error}
-        </div>
-      )}
+      {error && <div className={adminAlertClass}>{error}</div>}
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div className="relative min-w-0 flex-1">
-          <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="닉네임 또는 이메일 검색"
-            className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-navy-400 w-full rounded-lg border px-4 py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
-          />
-        </div>
+        <AdminSearchBar value={query} onChange={setQuery} placeholder="닉네임 또는 이메일 검색" />
         <div className="flex shrink-0 gap-2">
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value as "all" | UserRole)}
-            className="select-on-light border-hairline min-w-[7.5rem] rounded-lg border px-3 py-2.5 text-sm"
+            className={`${fieldSelectClass} min-w-[7.5rem]`}
           >
             <option value="all">전체 역할</option>
             <option value="user">일반</option>
@@ -155,7 +161,7 @@ export function UsersSection() {
           <select
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
-            className="select-on-light border-hairline min-w-[8.5rem] rounded-lg border px-3 py-2.5 text-sm"
+            className={`${fieldSelectClass} min-w-[8.5rem]`}
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -166,60 +172,56 @@ export function UsersSection() {
         </div>
       </div>
 
-      {loading ? (
-        <Card className="border-hairline-soft animate-pulse p-8 text-center">
-          <p className="text-stone text-sm">불러오는 중…</p>
-        </Card>
-      ) : sortedUsers.length === 0 ? (
-        <Card className="border-hairline-soft p-8 text-center">
-          <p className="text-stone text-sm">검색 결과가 없습니다.</p>
-        </Card>
-      ) : (
-        <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[52rem] table-fixed text-sm">
+      <div className={adminPanelClass}>
+        {loading ? (
+          <p className={emptyStateClass}>불러오는 중…</p>
+        ) : sortedUsers.length === 0 ? (
+          <p className={emptyStateClass}>검색 결과가 없습니다.</p>
+        ) : (
+          <div className={tableWrapClass}>
+            <table className={`${tableClass} min-w-[52rem] table-fixed`}>
               <thead>
-                <tr className="border-hairline-soft bg-surface-soft border-b">
+                <tr className={tableHeadRowClass}>
                   {TABLE_COLUMNS.map((col) => (
                     <th
                       key={col.key}
-                      className={`text-steel px-4 py-3 text-xs font-bold whitespace-nowrap ${col.className}`}
+                      className={`${col.align === "left" ? tableThLeftClass : tableThClass} ${col.className}`}
                     >
-                      {col.label}
+                      {col.label ?? <span className="sr-only">작업</span>}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-hairline-soft divide-y">
+              <tbody className={tableBodyClass}>
                 {sortedUsers.map((u, index) => (
-                  <tr key={u.id} className="hover:bg-surface-soft/60 transition-colors">
-                    <td className="text-stone px-4 py-3.5 text-center align-middle tabular-nums">
-                      {index + 1}
-                    </td>
-                    <td className="text-ink px-4 py-3.5 align-middle font-semibold">
+                  <tr key={u.id} className={tableRowClass}>
+                    <td className={`${tableTdCenterClass} text-stone tabular-nums`}>{index + 1}</td>
+                    <td className="text-ink px-4 py-3.5 text-left align-middle font-semibold">
                       <span className="block truncate" title={u.nickname}>
                         {u.nickname}
                       </span>
                     </td>
-                    <td className="text-steel px-4 py-3.5 align-middle">
+                    <td className="text-steel px-4 py-3.5 text-left align-middle">
                       <span className="block truncate" title={u.email ?? undefined}>
                         {u.email ?? "—"}
                       </span>
                     </td>
-                    <td className="text-stone px-4 py-3.5 text-center align-middle whitespace-nowrap tabular-nums">
+                    <td
+                      className={`${tableTdCenterClass} text-stone whitespace-nowrap tabular-nums`}
+                    >
                       {formatDate(u.created_at)}
                     </td>
-                    <td className="px-4 py-3.5 text-center align-middle">
+                    <td className={tableTdCenterClass}>
                       <div className="flex justify-center">
                         <CommunityLevelBadge level={u.community_level} size="sm" />
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-center align-middle">
+                    <td className={tableTdCenterClass}>
                       <Badge tone={u.role === "admin" ? "brand" : "neutral"}>
                         {u.role === "admin" ? "관리자" : "일반"}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3.5 text-center align-middle">
+                    <td className={tableTdCenterClass}>
                       <Badge
                         tone={
                           u.status === "active"
@@ -236,7 +238,7 @@ export function UsersSection() {
                             : "정지"}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3.5 text-center align-middle">
+                    <td className={tableTdCenterClass}>
                       <div className="flex items-center justify-center gap-1.5">
                         {u.status === "withdrawn" ? (
                           <span className="text-stone text-xs">—</span>
@@ -244,7 +246,7 @@ export function UsersSection() {
                           <>
                             <Button
                               size="sm"
-                              variant="ghost"
+                              variant={u.role === "admin" ? "secondary" : "outline"}
                               disabled={saving}
                               className="h-8 px-2.5 text-xs whitespace-nowrap"
                               onClick={() =>
@@ -258,7 +260,7 @@ export function UsersSection() {
                             {u.status === "active" ? (
                               <Button
                                 size="sm"
-                                variant="ghost"
+                                variant="destructive"
                                 disabled={saving}
                                 className="h-8 px-2.5 text-xs whitespace-nowrap"
                                 onClick={() => {
@@ -271,7 +273,7 @@ export function UsersSection() {
                             ) : (
                               <Button
                                 size="sm"
-                                variant="ghost"
+                                variant="accent"
                                 disabled={saving}
                                 className="h-8 px-2.5 text-xs whitespace-nowrap"
                                 onClick={() => patchUser(u.id, { status: "active" })}
@@ -288,23 +290,23 @@ export function UsersSection() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {suspendTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="text-ink mb-1 text-lg font-bold">활동 정지</h3>
+          <div className="border-hairline-soft bg-background w-full max-w-md rounded-2xl border p-6 shadow-xl">
+            <h3 className="text-ink mb-1 text-lg font-semibold">활동 정지</h3>
             <p className="text-steel mb-4 text-sm">
-              <strong>{suspendTarget.nickname}</strong> 계정을 정지합니다.
+              <strong className="text-ink">{suspendTarget.nickname}</strong> 계정을 정지합니다.
             </p>
-            <label className="text-steel mb-1 block text-xs font-semibold">정지 사유</label>
+            <label className={fieldLabelClass}>정지 사유</label>
             <textarea
               value={suspendReason}
               onChange={(e) => setSuspendReason(e.target.value)}
               rows={3}
               placeholder="정지 사유를 입력하세요"
-              className="border-hairline bg-background text-ink placeholder:text-stone mb-4 w-full rounded-lg border p-3 text-sm"
+              className={`${fieldTextareaClass} mb-4`}
             />
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setSuspendTarget(null)} disabled={saving}>

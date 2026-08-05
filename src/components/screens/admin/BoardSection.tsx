@@ -8,6 +8,16 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { AdminFormShell, AdminListShell } from "./AdminListShell";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { useAdminListMode } from "./useAdminListMode";
+import {
+  tableBodyClass,
+  tableClass,
+  tableHeadRowClass,
+  tableRowClass,
+  tableTdCenterClass,
+  tableThClass,
+  tableThLeftClass,
+  tableWrapClass
+} from "./adminUi";
 
 type AdminBoard = {
   board_id: number;
@@ -243,13 +253,14 @@ export function BoardSection() {
   if (isCreating || isEditing) {
     return (
       <AdminFormShell
-        title={isEditing ? `게시판 수정 (#${editingId})` : "새 게시판 만들기"}
+        title={isEditing ? "게시판 수정" : "새 게시판 만들기"}
+        subtitle={isEditing && editingId != null ? `번호 ${editingId}` : undefined}
         error={error}
         formError={formError}
         saving={saving || loading}
         onBack={goList}
         onSubmit={saveBoard}
-        submitLabel={isEditing ? "수정 저장" : "게시판 등록"}
+        submitLabel={isEditing ? "저장" : "게시판 등록"}
       >
         <div className="grid gap-3 md:grid-cols-2">
           <div className="space-y-1">
@@ -382,23 +393,24 @@ export function BoardSection() {
         <AdminSearchBar value={searchInput} onChange={setSearchInput} placeholder="게시판명 검색" />
       }
     >
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className={tableWrapClass}>
+        <table className={tableClass}>
           <thead>
-            <tr className="border-hairline-soft bg-surface-soft border-b">
-              {["ID", "게시판명", "타입", "정렬", "댓글", "답글", "별점", "사용 여부", "액션"].map(
-                (h) => (
-                  <th
-                    key={h}
-                    className="text-steel px-4 py-3 text-center text-xs font-bold whitespace-nowrap"
-                  >
-                    {h}
-                  </th>
-                )
-              )}
+            <tr className={tableHeadRowClass}>
+              <th className={tableThClass}>ID</th>
+              <th className={`${tableThLeftClass} min-w-[10rem]`}>게시판명</th>
+              <th className={tableThClass}>타입</th>
+              <th className={tableThClass}>정렬</th>
+              <th className={tableThClass}>댓글</th>
+              <th className={tableThClass}>답글</th>
+              <th className={tableThClass}>별점</th>
+              <th className={tableThClass}>사용 여부</th>
+              <th className={tableThClass}>
+                <span className="sr-only">작업</span>
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={tableBodyClass}>
             {loading && (
               <tr>
                 <td colSpan={9} className="text-stone px-4 py-8 text-center">
@@ -415,43 +427,44 @@ export function BoardSection() {
             )}
             {!loading &&
               items.map((b) => (
-                <tr
-                  key={b.board_id}
-                  className="border-hairline-soft hover:bg-surface-soft border-b"
-                >
-                  <td className="text-stone px-4 py-3">#{b.board_id}</td>
-                  <td className="text-ink px-4 py-3 font-semibold">{b.board_nm}</td>
-                  <td className="px-4 py-3">
+                <tr key={b.board_id} className={tableRowClass}>
+                  <td className={`${tableTdCenterClass} text-stone whitespace-nowrap`}>
+                    #{b.board_id}
+                  </td>
+                  <td className="text-ink min-w-[10rem] px-4 py-3.5 text-left font-semibold">
+                    {b.board_nm}
+                  </td>
+                  <td className={tableTdCenterClass}>
                     <Badge tone="neutral" className="text-[10px]">
                       {b.board_type}
                     </Badge>
                   </td>
-                  <td className="text-stone px-4 py-3">{b.sort_order}</td>
-                  <td className="px-4 py-3">
+                  <td className={`${tableTdCenterClass} text-stone`}>{b.sort_order}</td>
+                  <td className={tableTdCenterClass}>
                     <Badge tone={b.comment_yn ? "brand" : "neutral"}>
                       {b.comment_yn ? "허용" : "미허용"}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className={tableTdCenterClass}>
                     <Badge tone={b.reply_yn ? "brand" : "neutral"}>
                       {b.reply_yn ? "허용" : "미허용"}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className={tableTdCenterClass}>
                     <Badge tone={b.rating_yn ? "brand" : "neutral"}>
                       {b.rating_yn ? "사용" : "미사용"}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className={tableTdCenterClass}>
                     <Badge tone={b.use_yn ? "brand" : "error"}>
                       {b.use_yn ? "사용" : "미사용"}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-center gap-1">
+                  <td className={tableTdCenterClass}>
+                    <div className="flex justify-center gap-1.5">
                       <Button
                         size="iconSm"
-                        variant="ghost"
+                        variant="outline"
                         disabled={saving}
                         title="수정"
                         aria-label="수정"
@@ -461,7 +474,7 @@ export function BoardSection() {
                       </Button>
                       <Button
                         size="iconSm"
-                        variant="ghost"
+                        variant={b.use_yn ? "secondary" : "accent"}
                         disabled={saving}
                         title={b.use_yn ? "미사용으로 변경" : "사용으로 변경"}
                         aria-label={b.use_yn ? "미사용으로 변경" : "사용으로 변경"}
@@ -471,11 +484,10 @@ export function BoardSection() {
                       </Button>
                       <Button
                         size="iconSm"
-                        variant="ghost"
+                        variant="destructive"
                         disabled={saving}
                         title="삭제"
                         aria-label="삭제"
-                        className="text-red-600 hover:text-red-700"
                         onClick={() => deleteBoard(b)}
                       >
                         <Trash2 className="size-4" />

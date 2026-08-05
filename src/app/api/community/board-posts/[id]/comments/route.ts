@@ -1,16 +1,23 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminMember } from "@/lib/community/ownership";
+import { awardPoints, POINT_REASON } from "@/lib/community/points";
 
 export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
-type MemberRef = { nickname: string } | { nickname: string }[] | null;
+type MemberRef =
+  | { nickname: string; community_level?: number }
+  | { nickname: string; community_level?: number }[]
+  | null;
 
-function nicknameOf(ref: MemberRef): string {
-  if (Array.isArray(ref)) return ref[0]?.nickname ?? "알 수 없음";
-  return ref?.nickname ?? "알 수 없음";
+function memberOf(ref: MemberRef): { nickname: string; community_level: number } {
+  const row = Array.isArray(ref) ? ref[0] : ref;
+  return {
+    nickname: row?.nickname ?? "알 수 없음",
+    community_level: row?.community_level ?? 1
+  };
 }
 
 export async function GET(_request: Request, { params }: Params) {
@@ -25,7 +32,7 @@ export async function GET(_request: Request, { params }: Params) {
 
     const { data, error } = await supabase
       .from("tb_community_comments")
-      .select("id, content, created_at, author_id, tb_members!author_id(nickname)")
+      .select("id, content, created_at, author_id, tb_members!author_id(nickname, community_level)")
       .eq("post_id", postId)
       .order("created_at", { ascending: true });
 
@@ -36,13 +43,17 @@ export async function GET(_request: Request, { params }: Params) {
     } = await supabase.auth.getUser();
     const admin = user ? await isAdminMember(supabase, user.id) : false;
 
-    const comments = (data ?? []).map((c) => ({
-      id: c.id,
-      content: c.content,
-      created_at: c.created_at,
-      author_nickname: nicknameOf(c.tb_members as MemberRef),
-      can_edit: !!user && (user.id === c.author_id || admin)
-    }));
+    const comments = (data ?? []).map((c) => {
+      const author = memberOf(c.tb_members as MemberRef);
+      return {
+        id: c.id,
+        content: c.content,
+        created_at: c.created_at,
+        author_nickname: author.nickname,
+        author_community_level: author.community_level,
+        can_edit: !!user && (user.id === c.author_id || admin)
+      };
+    });
 
     return NextResponse.json({ comments });
   } catch (e) {
@@ -107,6 +118,17 @@ export async function POST(request: Request, { params }: Params) {
       .from("tb_post")
       .update({ comment_cnt: post.comment_cnt + 1 })
       .eq("post_id", postId);
+
+    try {
+      await awardPoints({
+        userId: user.id,
+        reason: POINT_REASON.COMMENT_CREATE,
+        refType: "comment",
+        refId: comment.id
+      });
+    } catch {
+      // 댓글 등록은 유지
+    }
 
     return NextResponse.json({ comment }, { status: 201 });
   } catch (e) {

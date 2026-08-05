@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import NicknameField from "@/components/NicknameField";
 import {
@@ -19,9 +19,8 @@ const GENDERS = ["남성", "여성", "비공개"] as const;
 const AGES = AGE_GROUP_UI_OPTIONS;
 
 function OnboardingForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const next = getSafeNextPath(searchParams.get("next"), "/mypage");
+  const next = getSafeNextPath(searchParams.get("next"), "/");
   const { user, member, preferences, refreshMember, loading: authLoading } = useAuth();
 
   const skipNickname = isEmailSignupMember(member);
@@ -109,12 +108,12 @@ function OnboardingForm() {
       }
 
       await updateMember(user.id, patch);
-      await refreshMember();
-      router.push(next);
-      router.refresh();
+      // soft router + refreshMember 대기로 「저장 중」에 멈추던 문제 방지.
+      // 전체 이동으로 홈(또는 next) 진입 — AuthContext는 다음 페이지에서 다시 로드됨.
+      window.location.assign(next);
+      return;
     } catch (err) {
       setError(err instanceof Error ? err.message : "저장에 실패했습니다.");
-    } finally {
       setLoading(false);
     }
   };

@@ -57,29 +57,38 @@ export default function MyPage() {
     if (!user) return;
     setDataLoading(true);
     try {
-      const [placeLikes, courseLikes, favPlaces, favCourses, courses, posts, myReports, pointsRes] =
-        await Promise.all([
-          fetchMyPlaceLikes(user.id),
-          fetchMyCourseLikes(user.id),
-          fetchFavorites(user.id, "place"),
-          fetchFavorites(user.id, "course"),
-          fetchMyCourses(user.id),
-          fetchMyPosts(user.id),
-          fetchMyReports(user.id),
-          fetch("/api/community/points?limit=8").then((r) => r.json().catch(() => ({}))),
-          refreshMember()
-        ]);
-      setLikedPlaces(placeLikes);
-      setLikedCourses(courseLikes);
-      setSavedPlaceIds(favPlaces.map((f) => f.target_id));
-      setSavedCourseIds(favCourses.map((f) => f.target_id));
-      setMyCourses(courses);
-      setMyPosts(posts);
-      setReports(myReports);
-      const items = (pointsRes as { items?: typeof pointEvents }).items ?? [];
-      setPointEvents(items);
-    } catch {
-      // DB 미적용 시 빈 목록 유지
+      // 하나 실패해도 나머지가 비지 않도록 개별 settled 처리
+      // (이전 Promise.all 은 좋아요/게시글 등 한 건 실패 시 내 코스까지 전부 버림)
+      const settled = await Promise.allSettled([
+        fetchMyPlaceLikes(user.id),
+        fetchMyCourseLikes(user.id),
+        fetchFavorites(user.id, "place"),
+        fetchFavorites(user.id, "course"),
+        fetchMyCourses(user.id),
+        fetchMyPosts(user.id),
+        fetchMyReports(user.id),
+        fetch("/api/community/points?limit=8").then((r) => r.json().catch(() => ({}))),
+        refreshMember()
+      ]);
+
+      const value = <T,>(i: number, fallback: T): T =>
+        settled[i]?.status === "fulfilled"
+          ? (settled[i] as PromiseFulfilledResult<T>).value
+          : fallback;
+
+      setLikedPlaces(value(0, []));
+      setLikedCourses(value(1, []));
+      setSavedPlaceIds(
+        value(2, [] as Awaited<ReturnType<typeof fetchFavorites>>).map((f) => f.target_id)
+      );
+      setSavedCourseIds(
+        value(3, [] as Awaited<ReturnType<typeof fetchFavorites>>).map((f) => f.target_id)
+      );
+      setMyCourses(value(4, []));
+      setMyPosts(value(5, []));
+      setReports(value(6, []));
+      const pointsRes = value(7, {} as { items?: typeof pointEvents });
+      setPointEvents(pointsRes.items ?? []);
     } finally {
       setDataLoading(false);
     }

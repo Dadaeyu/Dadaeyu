@@ -27,14 +27,12 @@ import {
   ShieldCheck,
   Megaphone,
   HelpCircle,
-  Layers,
-  MessageSquare
+  Layers
 } from "lucide-react";
 import { PLACES, PLACE_COLORS } from "@/data/placesData";
 import { Button } from "@/components/ui/Button";
 import { DashboardSection } from "@/components/screens/admin/DashboardSection";
 import { UsersSection } from "@/components/screens/admin/UsersSection";
-import { PostsSection } from "@/components/screens/admin/PostsSection";
 import { BoardSection } from "@/components/screens/admin/BoardSection";
 import { BoardPostsSection } from "@/components/screens/admin/BoardPostsSection";
 import { ReportsSection } from "@/components/screens/admin/ReportsSection";
@@ -54,7 +52,6 @@ const SECTIONS = [
   { key: "faq", label: "FAQ 관리", icon: HelpCircle },
   { key: "board-settings", label: "게시판 관리", icon: Layers },
   { key: "board-posts", label: "게시글 관리", icon: FileText },
-  { key: "posts", label: "커뮤니티 게시글", icon: MessageSquare },
   { key: "places", label: "장소 관리", icon: MapPin },
   { key: "courses", label: "코스 관리", icon: Route },
   { key: "reports", label: "제보 확인", icon: Flag },
@@ -155,7 +152,7 @@ export default function Admin() {
       style={{ minHeight: "calc(100vh - 64px)" }}
     >
       {/* 데스크톱 사이드바 */}
-      <aside className="border-hairline-soft hidden w-56 shrink-0 flex-col gap-0.5 border-r bg-white px-3 py-6 md:flex">
+      <aside className="border-hairline-soft bg-background hidden w-56 shrink-0 flex-col gap-0.5 border-r px-3 py-6 md:flex">
         <p className="text-stone mb-2 px-3 text-[10px] font-bold tracking-widest uppercase">
           관리자
         </p>
@@ -165,7 +162,7 @@ export default function Admin() {
             <button
               key={key}
               onClick={() => router.push(key === "dashboard" ? "/admin" : `/admin/${key}`)}
-              className={`flex items-center gap-2.5 rounded-full px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
+              className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
                 active
                   ? "bg-navy-50 text-navy-700"
                   : "text-steel hover:bg-surface-soft hover:text-ink"
@@ -174,7 +171,7 @@ export default function Admin() {
               <Icon className={`h-4 w-4 shrink-0 ${active ? "text-navy-600" : "text-stone"}`} />
               {label}
               {key === "reports" && pendingReports > 0 && (
-                <span className="ml-auto rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
+                <span className="bg-surface-soft text-error border-error/30 ml-auto rounded-full border px-1.5 py-0.5 text-[10px] font-bold">
                   {pendingReports}
                 </span>
               )}
@@ -184,16 +181,16 @@ export default function Admin() {
       </aside>
 
       {/* 메인 영역 */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="bg-surface-soft/40 flex min-w-0 flex-1 flex-col">
         {/* 모바일 탭바 */}
-        <div className="border-hairline-soft flex gap-1 overflow-x-auto border-b bg-white px-4 py-2 md:hidden">
+        <div className="border-hairline-soft bg-background flex gap-1 overflow-x-auto border-b px-4 py-2 md:hidden">
           {SECTIONS.map(({ key, label, icon: Icon }) => {
             const active = section === key;
             return (
               <button
                 key={key}
                 onClick={() => router.push(key === "dashboard" ? "/admin" : `/admin/${key}`)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
                   active ? "bg-navy-50 text-navy-700" : "text-steel hover:bg-surface-soft"
                 }`}
               >
@@ -209,7 +206,6 @@ export default function Admin() {
           {section === "users" && <UsersSection />}
           {section === "board-settings" && <BoardSection />}
           {section === "board-posts" && <BoardPostsSection />}
-          {section === "posts" && <PostsSection />}
           {section === "notices" && <NoticesSection />}
           {section === "community-notices" && <CommunityNoticesSection />}
           {section === "places" && <PlaceManagement />}

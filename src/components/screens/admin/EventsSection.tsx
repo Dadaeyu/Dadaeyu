@@ -17,6 +17,19 @@ import { AdminFormShell, AdminListShell } from "./AdminListShell";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { useAdminListMode } from "./useAdminListMode";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
+import {
+  fieldInputClass,
+  fieldLabelClass,
+  fieldSelectClass,
+  tableBodyClass,
+  tableClass,
+  tableHeadRowClass,
+  tableRowClass,
+  tableTdCenterClass,
+  tableThClass,
+  tableThLeftClass,
+  tableWrapClass
+} from "./adminUi";
 
 type CommunityEvent = {
   id: number;
@@ -61,11 +74,8 @@ const EMPTY_FORM: FormState = {
   sortOrder: 0
 };
 
-const fieldLabelClass = "text-ink shrink-0 text-sm font-semibold sm:w-24";
-const fieldInputClass =
-  "border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full rounded-lg border px-3 py-2.5 text-sm focus:ring-2 focus:outline-none";
-const dateInputClass =
-  "border-hairline bg-background text-ink focus:ring-brand-500 min-w-[10.5rem] flex-1 rounded-lg border px-3 py-2.5 text-sm focus:ring-2 focus:outline-none";
+const dateInputClass = `${fieldInputClass} min-w-[10.5rem] flex-1`;
+const sideLabelClass = "text-stone shrink-0 text-xs font-semibold sm:mb-0 sm:w-24";
 
 function toDateInputValue(value: string | null | undefined): string {
   if (!value) return "";
@@ -303,16 +313,15 @@ export function EventsSection() {
   if (isCreating || isEditing) {
     return (
       <AdminFormShell
-        title={isEditing ? `이벤트 수정 (#${editingId})` : "새 이벤트 등록"}
-        subtitle="썸네일·기간·본문을 입력하면 커뮤니티 이벤트 탭에 카드로 표시됩니다."
+        title={isEditing ? "이벤트 수정" : "새 이벤트 등록"}
+        subtitle={isEditing && editingId != null ? `번호 ${editingId}` : undefined}
         error={error}
         formError={formError}
         saving={saving || loading || uploadingCover}
         onBack={goList}
         onSubmit={submit}
-        submitLabel={isEditing ? "수정 저장" : "등록"}
+        submitLabel={isEditing ? "저장" : "등록"}
       >
-        {/* 썸네일 */}
         <div className="space-y-2">
           <p className={fieldLabelClass}>썸네일</p>
           <input
@@ -347,7 +356,7 @@ export function EventsSection() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="bg-white/90"
+                  className="bg-background/90"
                   disabled={uploadingCover || saving}
                   onClick={() => setForm((f) => ({ ...f, coverImageUrl: null }))}
                   aria-label="썸네일 제거"
@@ -361,7 +370,7 @@ export function EventsSection() {
               type="button"
               disabled={uploadingCover || saving}
               onClick={() => coverInputRef.current?.click()}
-              className="border-hairline hover:bg-surface-soft text-steel flex h-48 w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-white transition-colors sm:h-56"
+              className="border-hairline hover:bg-surface-soft bg-background text-steel flex h-48 w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed transition-colors sm:h-56"
             >
               <ImagePlus className="h-8 w-8" />
               <span className="text-sm font-medium">
@@ -374,7 +383,7 @@ export function EventsSection() {
 
         {/* 제목 */}
         <label className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-          <span className={fieldLabelClass}>제목</span>
+          <span className={sideLabelClass}>제목</span>
           <input
             value={form.title}
             onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
@@ -385,7 +394,7 @@ export function EventsSection() {
 
         {/* 요약 */}
         <label className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3">
-          <span className={`${fieldLabelClass} sm:pt-2.5`}>요약</span>
+          <span className={`${sideLabelClass} sm:pt-2.5`}>요약</span>
           <textarea
             value={form.summary}
             onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))}
@@ -397,7 +406,7 @@ export function EventsSection() {
 
         {/* 기간 */}
         <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-          <span className={fieldLabelClass}>기간</span>
+          <span className={sideLabelClass}>기간</span>
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <input
               type="date"
@@ -439,7 +448,7 @@ export function EventsSection() {
 
         {/* 배지 */}
         <label className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-          <span className={fieldLabelClass}>배지 문구</span>
+          <span className={sideLabelClass}>배지 문구</span>
           <input
             value={form.badgeLabel}
             onChange={(e) => setForm((f) => ({ ...f, badgeLabel: e.target.value }))}
@@ -449,7 +458,7 @@ export function EventsSection() {
         </label>
 
         <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-          <span className={fieldLabelClass}>배지 색상</span>
+          <span className={sideLabelClass}>배지 색상</span>
           <div className="flex flex-wrap gap-2">
             {EVENT_BADGE_COLOR_PRESETS.map((preset) => {
               const selected = form.badgeColor === preset.className;
@@ -535,7 +544,7 @@ export function EventsSection() {
           <select
             value={visibleFilter}
             onChange={(e) => setFilter("visible", e.target.value === "all" ? null : e.target.value)}
-            className="border-hairline rounded-lg border px-3 py-2.5 text-sm"
+            className={fieldSelectClass}
           >
             <option value="all">전체 노출</option>
             <option value="visible">노출</option>
@@ -544,21 +553,21 @@ export function EventsSection() {
         </>
       }
     >
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className={tableWrapClass}>
+        <table className={tableClass}>
           <thead>
-            <tr className="border-hairline-soft bg-surface-soft border-b">
-              {["ID", "제목", "배지", "기간", "노출", "액션"].map((h) => (
-                <th
-                  key={h}
-                  className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
+            <tr className={tableHeadRowClass}>
+              <th className={tableThClass}>ID</th>
+              <th className={`${tableThLeftClass} min-w-[14rem]`}>제목</th>
+              <th className={tableThClass}>배지</th>
+              <th className={tableThClass}>기간</th>
+              <th className={tableThClass}>노출</th>
+              <th className={tableThClass}>
+                <span className="sr-only">작업</span>
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={tableBodyClass}>
             {loading && (
               <tr>
                 <td colSpan={6} className="text-stone px-4 py-8 text-center">
@@ -575,9 +584,11 @@ export function EventsSection() {
             )}
             {!loading &&
               items.map((event) => (
-                <tr key={event.id} className="border-hairline-soft hover:bg-surface-soft border-b">
-                  <td className="text-stone px-4 py-3">#{event.id}</td>
-                  <td className="text-ink px-4 py-3">
+                <tr key={event.id} className={tableRowClass}>
+                  <td className={`${tableTdCenterClass} text-stone whitespace-nowrap`}>
+                    #{event.id}
+                  </td>
+                  <td className="text-ink max-w-[20rem] min-w-[14rem] px-4 py-3.5 text-left">
                     <div className="flex items-center gap-2">
                       {event.cover_image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -587,10 +598,10 @@ export function EventsSection() {
                           className="h-8 w-12 shrink-0 rounded object-cover"
                         />
                       ) : null}
-                      <span className="font-semibold">{event.title}</span>
+                      <span className="line-clamp-2 font-semibold break-keep">{event.title}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className={`${tableTdCenterClass} whitespace-nowrap`}>
                     {event.badge_label ? (
                       <Badge tone="custom" className={resolveEventBadgeColor(event.badge_color)}>
                         {event.badge_label}
@@ -599,26 +610,49 @@ export function EventsSection() {
                       "—"
                     )}
                   </td>
-                  <td className="text-stone px-4 py-3 text-xs">{event.period_label || "—"}</td>
-                  <td className="px-4 py-3">
+                  <td className={`${tableTdCenterClass} text-stone text-xs`}>
+                    {event.period_label || "—"}
+                  </td>
+                  <td className={`${tableTdCenterClass} whitespace-nowrap`}>
                     {event.is_visible ? (
                       <Badge tone="brand">노출</Badge>
                     ) : (
                       <Badge tone="neutral">숨김</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => goEdit(event.id)}>
-                        수정
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => toggleVisible(event)}>
-                        {event.is_visible ? "숨기기" : "노출"}
-                      </Button>
+                  <td className={tableTdCenterClass}>
+                    <div className="flex flex-wrap justify-center gap-1.5">
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="text-red-600"
+                        variant="outline"
+                        disabled={saving}
+                        onClick={() => goEdit(event.id)}
+                      >
+                        수정
+                      </Button>
+                      {event.is_visible ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={saving}
+                          onClick={() => toggleVisible(event)}
+                        >
+                          숨기기
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="accent"
+                          disabled={saving}
+                          onClick={() => toggleVisible(event)}
+                        >
+                          노출
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={saving}
                         onClick={() => deleteEvent(event.id)}
                       >
                         삭제
