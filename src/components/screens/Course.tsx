@@ -44,6 +44,7 @@ import {
   type CoursePlace
 } from "@/context/CourseContext";
 import { PLACE_COLORS } from "@/data/placesData";
+import { shareToKakaoTalk } from "@/lib/kakao/loadKakaoShare";
 
 // 장소 검색으로 새로 추가된 장소(좌표 직접 보유)의 마커 색상 — 순서대로 순환 배정.
 const MARKER_COLORS = Object.values(PLACE_COLORS).map((c) => c.color);
@@ -1346,6 +1347,30 @@ function CourseDetail({ id }: { id: string }) {
     }
   };
 
+  // 카카오톡 공유 — 현재 코스 상세 화면 링크를 카카오톡 피드로 공유한다.
+  const [sharing, setSharing] = useState(false);
+  const handleShareKakao = async () => {
+    if (isNew || Number.isNaN(numId) || sharing) return;
+    setSharing(true);
+    try {
+      const url = `${window.location.origin}/course/${numId}`;
+      await shareToKakaoTalk({
+        title: courseData.title,
+        description:
+          courseBadges.length > 0
+            ? courseBadges.map((b) => `#${b.label}`).join(" ")
+            : "다대유에서 만든 무장애 여행 코스",
+        imageUrl: `${window.location.origin}/daiyu-profile.png`,
+        url
+      });
+    } catch (e) {
+      setFavoriteNotice(e instanceof Error ? e.message : String(e));
+      setTimeout(() => setFavoriteNotice(""), 2500);
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const [showErrors, setShowErrors] = useState(false); // 저장 시 필수값 검증 표시
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -2331,7 +2356,11 @@ function CourseDetail({ id }: { id: string }) {
                       className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-700"}`}
                     />
                   </button>
-                  <button className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50">
+                  <button
+                    onClick={handleShareKakao}
+                    disabled={sharing}
+                    className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 disabled:opacity-60"
+                  >
                     <Share2 className="h-4 w-4 text-gray-700" />
                   </button>
                   {isOwned && (

@@ -53,6 +53,7 @@ export default function PlaceSearchSidebar({
   keyword,
   setKeyword,
   onSearch,
+  isSearching = false,
   filters,
   set,
   toggleList,
@@ -149,7 +150,14 @@ export default function PlaceSearchSidebar({
             {searchCount > 0 ? `검색 결과 ${searchCount}개` : `핫플레이스${places.length}개`}
           </span>
         </div>
-        <SearchResultList places={places} onSelect={onSelectPlace} />
+        {isSearching ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-xs text-gray-400">
+            <span className="border-brand-500 h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-200 border-t-transparent" />
+            검색 중...
+          </div>
+        ) : (
+          <SearchResultList places={places} onSelect={onSelectPlace} />
+        )}
       </div>
     </>
   );
