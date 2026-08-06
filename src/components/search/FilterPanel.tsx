@@ -71,10 +71,7 @@ export function FilterToggleSection({
         )}
       </div>
       {open && (
-        <div
-          className="overflow-y-auto border-t border-gray-100 px-3 pt-2 pb-3"
-          style={{ maxHeight: "45vh" }}
-        >
+        <div className="max-h-[190px] overflow-y-auto border-t border-gray-100 px-3 pt-2 pb-3 md:max-h-[270px]">
           <FilterFields
             filters={filters}
             set={set}
@@ -100,7 +97,7 @@ export function FilterOverlayPanel({
   onClose
 }: Omit<FilterPanelProps, "activeCount"> & { onClose: () => void }) {
   return (
-    <div className="absolute top-16 right-3 left-3 z-30 max-h-[60vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl md:hidden">
+    <div className="absolute top-16 right-3 left-3 z-30 max-h-[320px] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl md:hidden">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm font-bold text-gray-800">필터</p>
         <div className="flex items-center gap-2">
