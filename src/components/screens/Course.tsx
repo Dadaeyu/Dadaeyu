@@ -2011,9 +2011,16 @@ function CourseDetail({ id }: { id: string }) {
 
               {/* Place list (editable) */}
               <div className="space-y-1.5 px-3 py-3">
-                <p className="mb-2 px-1 text-xs font-semibold text-gray-500">
-                  Day {activeDay} 장소
-                </p>
+                <div className="mb-2 flex items-center justify-between px-1">
+                  <p className="text-xs font-semibold text-gray-500">Day {activeDay} 장소</p>
+                  <button
+                    onClick={() => setPlaceSearchOpen(true)}
+                    className="border-brand-300 text-brand-600 hover:bg-brand-50 flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold transition-colors"
+                  >
+                    <Plus className="h-3 w-3" />
+                    장소 추가
+                  </button>
+                </div>
                 {(editDays.find((d) => d.day === activeDay)?.places ?? []).map(
                   (place, idx, arr) => (
                     <div
@@ -2130,15 +2137,6 @@ function CourseDetail({ id }: { id: string }) {
                     </div>
                   )
                 )}
-
-                {/* Add place button */}
-                <button
-                  onClick={() => setPlaceSearchOpen(true)}
-                  className="border-brand-300 text-brand-600 hover:bg-brand-50 mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed py-2 text-xs font-semibold transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  장소 추가
-                </button>
               </div>
             </div>
           </>
@@ -2158,222 +2156,234 @@ function CourseDetail({ id }: { id: string }) {
               </h2>
             </div>
 
-            {/* 등록자 */}
-            {!isNew && courseAuthor && (
-              <div className="border-b border-gray-100 px-4 py-3">
-                <p className="mb-1.5 text-xs font-semibold text-gray-700">등록자</p>
-                <CourseAuthorRow
-                  authorType={courseAuthor.role}
-                  author={courseAuthor.nickname}
-                  badgeAfter
-                />
-              </div>
-            )}
-
-            {/* 등록일 / 수정일 — 한 줄을 반으로 나눠 값 있는 것만 표시 */}
-            {!isNew && courseAuthor && (
-              <div className="flex border-b border-gray-100 px-4 py-3">
-                <div className="flex-1">
-                  <p className="mb-1.5 text-xs font-semibold text-gray-700">등록일</p>
-                  <p className="text-sm text-gray-600">{courseAuthor.registDate}</p>
+            {/* 보기 패널 본문 — 전체를 하나의 스크롤 영역으로 묶어서, 위쪽 정보란이 많아도
+                항상 아래로 스크롤해서 Actions 버튼까지 도달할 수 있게 한다. */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+              {/* 등록자 */}
+              {!isNew && courseAuthor && (
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <p className="mb-1.5 text-xs font-semibold text-gray-700">등록자</p>
+                  <CourseAuthorRow
+                    authorType={courseAuthor.role}
+                    author={courseAuthor.nickname}
+                    badgeAfter
+                  />
                 </div>
-                {courseAuthor.updateDate && (
+              )}
+
+              {/* 등록일 / 수정일 — 한 줄을 반으로 나눠 값 있는 것만 표시 */}
+              {!isNew && courseAuthor && (
+                <div className="flex border-b border-gray-100 px-4 py-3">
                   <div className="flex-1">
-                    <p className="mb-1.5 text-xs font-semibold text-gray-700">수정일</p>
-                    <p className="text-sm text-gray-600">{courseAuthor.updateDate}</p>
+                    <p className="mb-1.5 text-xs font-semibold text-gray-700">등록일</p>
+                    <p className="text-sm text-gray-600">{courseAuthor.registDate}</p>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* 해시태그 — 포함된 장소들의 대분류+접근성 종합 상위 3개 */}
-            {courseBadges.length > 0 && (
-              <div className="border-b border-gray-100 px-4 py-3">
-                <p className="mb-1.5 text-xs font-semibold text-gray-700">해시태그</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {courseBadges.map((b) => (
-                    <Badge key={b.label} tone="brand" shape="pill">
-                      #{b.label}
-                    </Badge>
-                  ))}
+                  {courseAuthor.updateDate && (
+                    <div className="flex-1">
+                      <p className="mb-1.5 text-xs font-semibold text-gray-700">수정일</p>
+                      <p className="text-sm text-gray-600">{courseAuthor.updateDate}</p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* 별점 · 즐겨찾기(별점은 0점 고정 — 추후 실제 집계, 즐겨찾기는 tb_course_like 실집계) */}
-            {!isNew && (
-              <div className="border-b border-gray-100 px-4 py-3">
-                <p className="mb-1.5 text-xs font-semibold text-gray-700">별점 · 즐겨찾기</p>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1" title="별점">
-                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className="text-sm font-semibold text-gray-800">0</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-sm text-gray-600" title="즐겨찾기">
-                    <Heart className="h-4 w-4 fill-red-400 text-red-400" />
-                    <span>{likeCount}</span>
+              {/* 해시태그 — 포함된 장소들의 대분류+접근성 종합 상위 3개 */}
+              {courseBadges.length > 0 && (
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <p className="mb-1.5 text-xs font-semibold text-gray-700">해시태그</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {courseBadges.map((b) => (
+                      <Badge key={b.label} tone="brand" shape="pill">
+                        #{b.label}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {!isNew && dbCourseLoading && !effectiveContextCourse ? (
-              <div className="flex flex-1 items-center justify-center py-12 text-sm text-gray-400">
-                불러오는 중...
-              </div>
-            ) : !isNew && !dbCourse && !effectiveContextCourse ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-1 py-12 text-sm text-gray-400">
-                <p>코스를 찾을 수 없어요</p>
-                {dbCourseError && <p className="text-xs text-gray-300">{dbCourseError}</p>}
-              </div>
-            ) : (
-              <>
-                {/* 공유 여부 (readonly) */}
-                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-700">공유 여부</p>
-                    <p className="mt-0.5 text-xs text-gray-400">
-                      {courseData.isPrivate ? "나만 볼 수 있어요" : "모두에게 공개돼요"}
-                    </p>
+              {/* 별점 · 즐겨찾기(별점은 0점 고정 — 추후 실제 집계, 즐겨찾기는 tb_course_like 실집계) */}
+              {!isNew && (
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <p className="mb-1.5 text-xs font-semibold text-gray-700">별점 · 즐겨찾기</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1" title="별점">
+                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                      <span className="text-sm font-semibold text-gray-800">0</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-sm text-gray-600" title="즐겨찾기">
+                      <Heart className="h-4 w-4 fill-red-400 text-red-400" />
+                      <span>{likeCount}</span>
+                    </div>
                   </div>
-                  <span
-                    className={`relative h-6 w-10 shrink-0 rounded-full ${courseData.isPrivate ? "bg-gray-200" : "bg-brand-500"}`}
-                  >
+                </div>
+              )}
+
+              {!isNew && dbCourseLoading && !effectiveContextCourse ? (
+                <div className="flex flex-1 items-center justify-center py-12 text-sm text-gray-400">
+                  불러오는 중...
+                </div>
+              ) : !isNew && !dbCourse && !effectiveContextCourse ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-1 py-12 text-sm text-gray-400">
+                  <p>코스를 찾을 수 없어요</p>
+                  {dbCourseError && <p className="text-xs text-gray-300">{dbCourseError}</p>}
+                </div>
+              ) : (
+                <>
+                  {/* 공유 여부 (readonly) */}
+                  <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700">공유 여부</p>
+                      <p className="mt-0.5 text-xs text-gray-400">
+                        {courseData.isPrivate ? "나만 볼 수 있어요" : "모두에게 공개돼요"}
+                      </p>
+                    </div>
                     <span
-                      className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow ${courseData.isPrivate ? "left-1" : "left-5"}`}
-                    />
-                  </span>
-                </div>
-
-                {/* 기간 (readonly) */}
-                {(courseData.startDate || courseData.endDate) && (
-                  <div className="border-b border-gray-100 px-4 py-3">
-                    <p className="mb-1.5 text-xs font-semibold text-gray-700">기간</p>
-                    <div className="flex items-center gap-1.5 text-sm text-gray-600">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      <span>{formatDateOnly(courseData.startDate)}</span>
-                      <span className="text-gray-300">~</span>
-                      <span>{formatDateOnly(courseData.endDate)}</span>
-                    </div>
+                      className={`relative h-6 w-10 shrink-0 rounded-full ${courseData.isPrivate ? "bg-gray-200" : "bg-brand-500"}`}
+                    >
+                      <span
+                        className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow ${courseData.isPrivate ? "left-1" : "left-5"}`}
+                      />
+                    </span>
                   </div>
-                )}
 
-                {/* Meta */}
-                {!isOwned && (
-                  <div className="shrink-0 border-b border-gray-100 px-4 py-3">
-                    <div className="mb-2 flex items-center gap-3 text-sm text-gray-600">
-                      <div className="flex items-center gap-1">
-                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                        <span className="font-semibold text-gray-800">{courseData.rating}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Heart className="h-3.5 w-3.5" />
-                        <span>{courseData.likes}</span>
+                  {/* 기간 (readonly) */}
+                  {(courseData.startDate || courseData.endDate) && (
+                    <div className="border-b border-gray-100 px-4 py-3">
+                      <p className="mb-1.5 text-xs font-semibold text-gray-700">기간</p>
+                      <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <span>{formatDateOnly(courseData.startDate)}</span>
+                        <span className="text-gray-300">~</span>
+                        <span>{formatDateOnly(courseData.endDate)}</span>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-1">
-                      {courseData.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="bg-brand-100 text-brand-700 rounded-full px-2 py-0.5 text-xs"
-                        >
-                          {tag}
-                        </span>
-                      ))}
+                  )}
+
+                  {/* Meta */}
+                  {!isOwned && (
+                    <div className="shrink-0 border-b border-gray-100 px-4 py-3">
+                      <div className="mb-2 flex items-center gap-3 text-sm text-gray-600">
+                        <div className="flex items-center gap-1">
+                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                          <span className="font-semibold text-gray-800">{courseData.rating}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Heart className="h-3.5 w-3.5" />
+                          <span>{courseData.likes}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {courseData.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="bg-brand-100 text-brand-700 rounded-full px-2 py-0.5 text-xs"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Day tabs */}
-                <div className="flex shrink-0 flex-wrap gap-2 border-b border-gray-100 px-4 py-3">
-                  {courseData.days.map((day) => (
-                    <button
-                      key={day.day}
-                      onClick={() => setActiveDay(day.day)}
-                      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
-                        activeDay === day.day
-                          ? "bg-brand-600 text-white"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      }`}
-                    >
-                      Day {day.day}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Place list */}
-                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
-                  {currentPlaces.map((place, index) => (
-                    <div
-                      key={place.id}
-                      className="flex cursor-pointer items-start gap-3 rounded-xl bg-gray-50 p-3 transition-colors hover:bg-gray-100"
-                      onClick={() => {
-                        if (place.lat != null && place.lng != null) setSelectedSearchPlace(place);
-                      }}
-                    >
-                      <div
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                        style={{ background: PLACE_COORDS[place.name]?.color ?? "#16a34a" }}
+                  {/* Day tabs */}
+                  <div className="flex shrink-0 flex-wrap gap-2 border-b border-gray-100 px-4 py-3">
+                    {courseData.days.map((day) => (
+                      <button
+                        key={day.day}
+                        onClick={() => setActiveDay(day.day)}
+                        className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                          activeDay === day.day
+                            ? "bg-brand-600 text-white"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
                       >
-                        {index + 1}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-gray-800">{place.name}</p>
-                        <p className="mt-0.5 text-xs text-gray-500">
-                          {place.startHour}시 ~ {place.endHour}시
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {currentPlaces.length === 0 && (
-                    <p className="py-8 text-center text-sm text-gray-400">
-                      이 Day엔 등록된 장소가 없어요
-                    </p>
-                  )}
-                </div>
+                        Day {day.day}
+                      </button>
+                    ))}
+                  </div>
 
-                {/* Actions — 모바일에서 하단 탭 네비게이션에 가려지지 않게 여백 확보 */}
-                <div className="mb-16 flex shrink-0 gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
-                  {isOwned ? (
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
-                    >
-                      <Pencil className="h-4 w-4" />
-                      코스 편집
-                    </button>
-                  ) : (
-                    <button className="bg-brand-600 hover:bg-brand-700 flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-colors">
-                      내 코스에 추가
-                    </button>
-                  )}
+                  {/* Place list */}
+                  <div className="space-y-2 px-4 py-3">
+                    {currentPlaces.map((place, index) => (
+                      <div
+                        key={place.id}
+                        className="flex cursor-pointer items-start gap-3 rounded-xl bg-gray-50 p-3 transition-colors hover:bg-gray-100"
+                        onClick={() => {
+                          if (place.lat != null && place.lng != null) setSelectedSearchPlace(place);
+                        }}
+                      >
+                        <div
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                          style={{ background: PLACE_COORDS[place.name]?.color ?? "#16a34a" }}
+                        >
+                          {index + 1}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-gray-800">
+                            {place.name}
+                          </p>
+                          <p className="mt-0.5 text-xs text-gray-500">
+                            {place.startHour}시 ~ {place.endHour}시
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {currentPlaces.length === 0 && (
+                      <p className="py-8 text-center text-sm text-gray-400">
+                        이 Day엔 등록된 장소가 없어요
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Actions — 제목/버튼 사이만 스크롤되게, 이 줄은 하단에 고정.
+                모바일에서 하단 탭 네비게이션에 가려지지 않게 여백 확보 */}
+            {!(
+              (!isNew && dbCourseLoading && !effectiveContextCourse) ||
+              (!isNew && !dbCourse && !effectiveContextCourse)
+            ) && (
+              <div className="mb-16 flex shrink-0 gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
+                {isOwned ? (
                   <button
-                    onClick={handleToggleFavorite}
-                    disabled={favoriteBusy}
-                    className={`rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-60 ${favorited ? "border-red-300 bg-red-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                    onClick={() => setIsEditing(true)}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
                   >
-                    <Heart
-                      className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-700"}`}
-                    />
+                    <Pencil className="h-4 w-4" />
+                    코스 편집
                   </button>
+                ) : (
+                  <button className="bg-brand-600 hover:bg-brand-700 flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-colors">
+                    내 코스에 추가
+                  </button>
+                )}
+                <button
+                  onClick={handleToggleFavorite}
+                  disabled={favoriteBusy}
+                  className={`rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-60 ${favorited ? "border-red-300 bg-red-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                >
+                  <Heart
+                    className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-700"}`}
+                  />
+                </button>
+                <button
+                  onClick={handleShareKakao}
+                  disabled={sharing}
+                  className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 disabled:opacity-60"
+                >
+                  <Share2 className="h-4 w-4 text-gray-700" />
+                </button>
+                {isOwned && (
                   <button
-                    onClick={handleShareKakao}
-                    disabled={sharing}
-                    className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 disabled:opacity-60"
+                    onClick={handleDeleteCourse}
+                    disabled={deleting}
+                    className="rounded-xl border border-red-200 bg-white px-3 py-2.5 text-red-500 transition-colors hover:bg-red-50 disabled:opacity-60"
                   >
-                    <Share2 className="h-4 w-4 text-gray-700" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
-                  {isOwned && (
-                    <button
-                      onClick={handleDeleteCourse}
-                      disabled={deleting}
-                      className="rounded-xl border border-red-200 bg-white px-3 py-2.5 text-red-500 transition-colors hover:bg-red-50 disabled:opacity-60"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              </>
+                )}
+              </div>
             )}
           </>
         )}
