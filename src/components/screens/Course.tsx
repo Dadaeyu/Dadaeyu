@@ -30,7 +30,10 @@ import {
   ShieldCheck,
   User,
   RotateCcw,
-  Calendar
+  Calendar,
+  Navigation,
+  Footprints,
+  Car
 } from "lucide-react";
 import { Filters, DEFAULT_FILTERS, FilterFields, useFilters } from "@/components/PlaceFilters";
 import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
@@ -44,6 +47,13 @@ import {
   type CoursePlace
 } from "@/context/CourseContext";
 import { PLACE_COLORS } from "@/data/placesData";
+import {
+  fetchDirectionsForStops,
+  formatRouteDistance,
+  formatRouteDuration,
+  openKakaoMapRoute,
+  type RouteMode
+} from "@/lib/kakao/directions";
 
 // 장소 검색으로 새로 추가된 장소(좌표 직접 보유)의 마커 색상 — 순서대로 순환 배정.
 const MARKER_COLORS = Object.values(PLACE_COLORS).map((c) => c.color);
@@ -1230,6 +1240,14 @@ function CourseDetail({ id }: { id: string }) {
   const [selectedSearchDetail, setSelectedSearchDetail] = useState<TourismDetail | null>(null);
   const [selectedSearchDetailLoading, setSelectedSearchDetailLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(isNew);
+  const [dayGuidePickerOpen, setDayGuidePickerOpen] = useState(false);
+  const [dayGuideMode, setDayGuideMode] = useState<RouteMode | null>(null);
+  const [dayGuideLoading, setDayGuideLoading] = useState(false);
+  const [dayGuideError, setDayGuideError] = useState<string | null>(null);
+  const [dayGuideDistanceM, setDayGuideDistanceM] = useState<number | null>(null);
+  const [dayGuideDurationSec, setDayGuideDurationSec] = useState<number | null>(null);
+  const [dayGuidePath, setDayGuidePath] = useState<MapPathSegment[] | null>(null);
+  const dayGuideRequestIdRef = useRef(0);
 
   // 모바일 편집 바텀시트 높이(%) — 핸들을 드래그해서 조절.
   // 하단 탭 네비게이션에 가려지는 부분은 시트를 위로 끌어올려서 볼 수 있게 한다(기본 65%, 최대 92%).
@@ -1407,6 +1425,86 @@ function CourseDetail({ id }: { id: string }) {
     : baseCourseData;
 
   const currentPlaces = courseData.days[activeDay - 1]?.places ?? [];
+
+  const dayGuideStops = currentPlaces
+    .filter(
+      (p) => p.lat != null && p.lng != null && Number.isFinite(p.lat) && Number.isFinite(p.lng)
+    )
+    .map((p) => ({ lat: p.lat as number, lng: p.lng as number, name: p.name }));
+
+  const clearDayGuide = () => {
+    dayGuideRequestIdRef.current += 1;
+    setDayGuideMode(null);
+    setDayGuideLoading(false);
+    setDayGuideError(null);
+    setDayGuideDistanceM(null);
+    setDayGuideDurationSec(null);
+    setDayGuidePath(null);
+    setDayGuidePickerOpen(false);
+  };
+
+  const startDayGuide = async (mode: RouteMode) => {
+    setDayGuidePickerOpen(false);
+    setDayGuideMode(mode);
+    setDayGuideLoading(true);
+    setDayGuideError(null);
+    setDayGuideDistanceM(null);
+    setDayGuideDurationSec(null);
+    const requestId = ++dayGuideRequestIdRef.current;
+
+    if (dayGuideStops.length < 2) {
+      setDayGuideLoading(false);
+      setDayGuidePath(null);
+      setDayGuideError("이 Day에 좌표가 있는 장소가 2곳 이상 있어야 안내할 수 있어요.");
+      return;
+    }
+
+    try {
+      const result = await fetchDirectionsForStops(dayGuideStops, mode);
+      if (requestId !== dayGuideRequestIdRef.current) return;
+      setDayGuidePath([
+        {
+          points: result.points,
+          color: DAY_LINE_COLORS[(activeDay - 1) % DAY_LINE_COLORS.length],
+          dashed: Boolean(result.fallback)
+        }
+      ]);
+      setDayGuideDistanceM(result.distanceM);
+      setDayGuideDurationSec(result.durationSec);
+      setDayGuideError(
+        result.fallback ? "대략 경로예요. 정확한 안내는 카카오맵에서 시작하세요." : null
+      );
+    } catch (e) {
+      if (requestId !== dayGuideRequestIdRef.current) return;
+      setDayGuidePath([
+        {
+          points: dayGuideStops,
+          color: DAY_LINE_COLORS[(activeDay - 1) % DAY_LINE_COLORS.length],
+          dashed: true
+        }
+      ]);
+      setDayGuideError(
+        e instanceof Error
+          ? `${e.message} 카카오맵으로 안내할 수 있어요.`
+          : "경로 미리보기에 실패했어요. 카카오맵으로 안내할 수 있어요."
+      );
+    } finally {
+      if (requestId === dayGuideRequestIdRef.current) {
+        setDayGuideLoading(false);
+      }
+    }
+  };
+
+  // Day 탭이 바뀌면 안내 중일 때 해당 Day로 다시 계산
+  useEffect(() => {
+    if (!dayGuideMode || isEditing) return;
+    const mode = dayGuideMode;
+    const timer = window.setTimeout(() => {
+      void startDayGuide(mode);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDay]);
 
   // KakaoMap 마커·경로선 — 특정 Day 만이 아니라 "모든 일정"을 Day 순서 → 각 Day 내 장소 순서로
   // 이어서 한 번에 보여준다(Day1 마지막 장소 → Day2 첫 장소 순으로 연결).
@@ -2308,41 +2406,132 @@ function CourseDetail({ id }: { id: string }) {
                 </div>
 
                 {/* Actions — 모바일에서 하단 탭 네비게이션에 가려지지 않게 여백 확보 */}
-                <div className="mb-16 flex shrink-0 gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
-                  {isOwned ? (
+                <div className="mb-16 flex shrink-0 flex-col gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
+                  {dayGuidePickerOpen ? (
+                    <div className="border-hairline bg-surface-soft space-y-2 rounded-xl border p-3">
+                      <p className="text-ink text-xs font-semibold">
+                        DAY {activeDay} 안내 · 이동 수단
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void startDayGuide("walk")}
+                          className="border-hairline flex items-center justify-center gap-1.5 rounded-lg border bg-white py-2.5 text-xs font-semibold"
+                        >
+                          <Footprints className="h-3.5 w-3.5" />
+                          도보
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void startDayGuide("car")}
+                          className="border-hairline flex items-center justify-center gap-1.5 rounded-lg border bg-white py-2.5 text-xs font-semibold"
+                        >
+                          <Car className="h-3.5 w-3.5" />
+                          자동차
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDayGuidePickerOpen(false)}
+                        className="text-stone w-full text-xs"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {dayGuideMode ? (
+                    <div className="border-brand-200 bg-brand-50/70 space-y-2 rounded-xl border p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-ink text-xs font-semibold">
+                            DAY {activeDay} · {dayGuideMode === "walk" ? "도보" : "자동차"}
+                            {dayGuideLoading ? " 경로 찾는 중…" : ""}
+                          </p>
+                          {!dayGuideLoading &&
+                          dayGuideDistanceM != null &&
+                          dayGuideDurationSec != null ? (
+                            <p className="text-stone mt-0.5 text-xs">
+                              {dayGuideStops.length}곳 · {formatRouteDistance(dayGuideDistanceM)} ·{" "}
+                              {formatRouteDuration(dayGuideDurationSec)}
+                            </p>
+                          ) : null}
+                          {dayGuideError ? (
+                            <p className="text-error mt-1 text-xs">{dayGuideError}</p>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={clearDayGuide}
+                          className="text-stone rounded-full p-1"
+                          aria-label="코스 안내 닫기"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={dayGuideStops.length < 2}
+                        onClick={() =>
+                          dayGuideMode && openKakaoMapRoute(dayGuideStops, dayGuideMode)
+                        }
+                        className="bg-brand-700 hover:bg-brand-800 w-full rounded-lg py-2.5 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        카카오맵에서 안내 시작
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="flex gap-2">
+                    {isOwned ? (
+                      <button
+                        onClick={() => {
+                          clearDayGuide();
+                          setIsEditing(true);
+                        }}
+                        className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-2 py-2.5 text-sm font-semibold whitespace-nowrap text-white transition-colors hover:bg-amber-600"
+                      >
+                        <Pencil className="h-4 w-4 shrink-0" />
+                        코스 편집
+                      </button>
+                    ) : (
+                      <button className="bg-brand-600 hover:bg-brand-700 min-w-0 flex-1 rounded-xl px-2 py-2.5 text-sm font-semibold whitespace-nowrap text-white transition-colors">
+                        내 코스에 추가
+                      </button>
+                    )}
                     <button
-                      onClick={() => setIsEditing(true)}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
+                      onClick={handleToggleFavorite}
+                      disabled={favoriteBusy}
+                      className={`shrink-0 rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-60 ${favorited ? "border-red-300 bg-red-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
                     >
-                      <Pencil className="h-4 w-4" />
-                      코스 편집
+                      <Heart
+                        className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-700"}`}
+                      />
                     </button>
-                  ) : (
-                    <button className="bg-brand-600 hover:bg-brand-700 flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-colors">
-                      내 코스에 추가
+                    <button className="shrink-0 rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50">
+                      <Share2 className="h-4 w-4 text-gray-700" />
                     </button>
-                  )}
+                    {isOwned && (
+                      <button
+                        onClick={handleDeleteCourse}
+                        disabled={deleting}
+                        className="shrink-0 rounded-xl border border-red-200 bg-white px-3 py-2.5 text-red-500 transition-colors hover:bg-red-50 disabled:opacity-60"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                   <button
-                    onClick={handleToggleFavorite}
-                    disabled={favoriteBusy}
-                    className={`rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-60 ${favorited ? "border-red-300 bg-red-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                    type="button"
+                    onClick={() => {
+                      setDayGuidePickerOpen((v) => !v);
+                    }}
+                    className="border-brand-200 text-brand-800 hover:bg-brand-50 flex w-full items-center justify-center gap-1.5 rounded-xl border bg-white py-2.5 text-sm font-semibold transition-colors"
+                    aria-label="코스 안내"
                   >
-                    <Heart
-                      className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-700"}`}
-                    />
+                    <Navigation className="h-4 w-4 shrink-0" />
+                    안내
                   </button>
-                  <button className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50">
-                    <Share2 className="h-4 w-4 text-gray-700" />
-                  </button>
-                  {isOwned && (
-                    <button
-                      onClick={handleDeleteCourse}
-                      disabled={deleting}
-                      className="rounded-xl border border-red-200 bg-white px-3 py-2.5 text-red-500 transition-colors hover:bg-red-50 disabled:opacity-60"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
                 </div>
               </>
             )}
@@ -2363,7 +2552,12 @@ function CourseDetail({ id }: { id: string }) {
           onDeselect={() => {
             setSelectedSearchPlace(null);
           }}
-          path={coursePath}
+          path={dayGuidePath ?? coursePath}
+          fitPathKey={
+            dayGuideMode && dayGuidePath && !dayGuideLoading
+              ? `${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}`
+              : null
+          }
         />
       </div>
 

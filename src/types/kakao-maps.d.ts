@@ -3,10 +3,23 @@ declare namespace kakao.maps {
     constructor(lat: number, lng: number);
   }
 
+  class LatLngBounds {
+    constructor();
+    extend(latlng: LatLng): void;
+    isEmpty(): boolean;
+  }
+
   class Map {
     constructor(container: HTMLElement, options: { center: LatLng; level: number });
     setCenter(latlng: LatLng): void;
-    panTo(latlng: LatLng): void;
+    panTo(latlngOrBounds: LatLng | LatLngBounds, padding?: number): void;
+    setBounds(
+      bounds: LatLngBounds,
+      paddingTop?: number,
+      paddingRight?: number,
+      paddingBottom?: number,
+      paddingLeft?: number
+    ): void;
     setLevel(level: number, options?: { animate?: boolean }): void;
     getLevel(): number;
     relayout(): void;

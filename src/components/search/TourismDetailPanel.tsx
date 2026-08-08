@@ -14,7 +14,11 @@ import {
   PenLine,
   Plus,
   ExternalLink,
-  Phone
+  Phone,
+  Footprints,
+  Car,
+  X,
+  Loader2
 } from "lucide-react";
 import { PLACE_DETAILS } from "@/data/placesData";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
@@ -22,6 +26,8 @@ import type { TourismDetail } from "@/hooks/usePlaceSearch";
 import AccessibilitySection from "./AccessibilitySection";
 import { useAuth } from "@/context/AuthContext";
 import { isPlaceLiked } from "@/lib/supabase/placeLikes";
+import type { RouteMode } from "@/lib/kakao/directions";
+import { formatRouteDistance, formatRouteDuration } from "@/lib/kakao/directions";
 
 // 카카오 검색 결과(source="kakao")는 DB 상세가 없어 리뷰 대신 이 플레이스홀더를 보여준다.
 const PLACEHOLDER_DETAIL = PLACE_DETAILS[1];
@@ -68,13 +74,25 @@ function renderWithLineBreaks(text: string) {
 // DB 출처: usePlaceSearch()의 tourismDetail 을 받아 실제 리뷰·접근성·상세내용을 보여준다.
 // 카카오 출처(sp.source==="kakao"): DB 상세가 없으므로 좋아요 영속화·리뷰 작성 없이
 // 간소화된 정보(주소/전화)와 플레이스홀더 리뷰, 카카오맵 외부 링크만 보여준다.
+export type PlaceRouteGuideState = {
+  mode: RouteMode;
+  loading: boolean;
+  error: string | null;
+  distanceM: number | null;
+  durationSec: number | null;
+  onOpenKakao: () => void;
+  onClear: () => void;
+};
+
 export default function TourismDetailPanel({
   sp,
   detail,
   isLoading,
   onBack,
   onLikeChange,
-  onAddToCourse
+  onAddToCourse,
+  onStartRoute,
+  routeGuide
 }: {
   sp: SearchPlace;
   detail: TourismDetail | null;
@@ -82,6 +100,8 @@ export default function TourismDetailPanel({
   onBack: () => void;
   onLikeChange?: () => void;
   onAddToCourse?: () => void; // 넘기면 헤더에 "내 코스에 추가" 버튼 표시 (코스 편집 화면 전용)
+  onStartRoute?: (mode: RouteMode) => void;
+  routeGuide?: PlaceRouteGuideState | null;
 }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -94,6 +114,7 @@ export default function TourismDetailPanel({
   const [averageRating, setAverageRating] = useState<number | null>(null);
   const [reviews, setReviews] = useState<PlaceReviewItem[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [routeModeOpen, setRouteModeOpen] = useState(false);
 
   // 카카오 출처는 contentid 가 없어(예: "kakao_123") 좋아요/리뷰 API 대상이 될 수 없다.
   const placeId = isKakao ? null : Number(sp.id);
@@ -286,6 +307,7 @@ export default function TourismDetailPanel({
           {/* 액션 버튼 — "내 코스"는 지도 브라우징 중엔 대상 코스/Day 가 애매해 일단 숨김 */}
           <div className="grid grid-cols-2 gap-2">
             <button
+              type="button"
               onClick={handleToggleFavorite}
               className={`flex flex-col items-center gap-1 rounded-xl border py-2.5 text-xs font-medium transition-colors ${
                 favorited
@@ -296,11 +318,92 @@ export default function TourismDetailPanel({
               <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : ""}`} />
               즐겨찾기
             </button>
-            <button className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600">
+            <button
+              type="button"
+              onClick={() => {
+                if (!onStartRoute) return;
+                setRouteModeOpen((v) => !v);
+              }}
+              disabled={!onStartRoute}
+              className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
               <Navigation className="h-4 w-4 text-blue-500" />
               경로안내
             </button>
           </div>
+
+          {routeModeOpen && onStartRoute ? (
+            <div className="border-hairline bg-surface-soft space-y-2 rounded-xl border p-3">
+              <p className="text-ink text-xs font-semibold">이동 수단을 선택하세요</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRouteModeOpen(false);
+                    onStartRoute("walk");
+                  }}
+                  className="border-hairline hover:bg-background flex items-center justify-center gap-1.5 rounded-lg border bg-white px-3 py-2.5 text-xs font-semibold text-gray-700"
+                >
+                  <Footprints className="h-3.5 w-3.5" />
+                  도보
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRouteModeOpen(false);
+                    onStartRoute("car");
+                  }}
+                  className="border-hairline hover:bg-background flex items-center justify-center gap-1.5 rounded-lg border bg-white px-3 py-2.5 text-xs font-semibold text-gray-700"
+                >
+                  <Car className="h-3.5 w-3.5" />
+                  자동차
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {routeGuide ? (
+            <div className="border-brand-200 bg-brand-50/60 space-y-2 rounded-xl border p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-ink flex items-center gap-1.5 text-xs font-semibold">
+                    {routeGuide.loading ? (
+                      <Loader2 className="text-brand-700 h-3.5 w-3.5 shrink-0 animate-spin" />
+                    ) : null}
+                    {routeGuide.mode === "walk" ? "도보" : "자동차"} 경로
+                    {routeGuide.loading ? " 불러오는 중…" : ""}
+                  </p>
+                  {!routeGuide.loading &&
+                  routeGuide.distanceM != null &&
+                  routeGuide.durationSec != null ? (
+                    <p className="text-stone mt-0.5 text-xs">
+                      {formatRouteDistance(routeGuide.distanceM)} ·{" "}
+                      {formatRouteDuration(routeGuide.durationSec)}
+                    </p>
+                  ) : null}
+                  {routeGuide.error ? (
+                    <p className="text-error mt-1 text-xs">{routeGuide.error}</p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={routeGuide.onClear}
+                  className="text-stone hover:text-ink rounded-full p-1"
+                  aria-label="경로 안내 닫기"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <button
+                type="button"
+                disabled={routeGuide.loading}
+                onClick={routeGuide.onOpenKakao}
+                className="bg-brand-700 hover:bg-brand-800 w-full rounded-lg py-2.5 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                카카오맵에서 안내 시작
+              </button>
+            </div>
+          ) : null}
 
           {/* 로그인 안내 토스트 */}
           {loginNotice && (

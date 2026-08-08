@@ -8,10 +8,13 @@ import { useCallback, useRef, useState } from "react";
 import { Search, ChevronLeft } from "lucide-react";
 import { FilterToggleSection } from "@/components/search/FilterPanel";
 import SearchResultList from "@/components/search/SearchResultList";
-import TourismDetailPanel from "@/components/search/TourismDetailPanel";
+import TourismDetailPanel, {
+  type PlaceRouteGuideState
+} from "@/components/search/TourismDetailPanel";
 import type { Filters } from "@/components/PlaceFilters";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import type { TourismDetail } from "@/hooks/usePlaceSearch";
+import type { RouteMode } from "@/lib/kakao/directions";
 
 interface Props {
   // 검색 입력
@@ -45,6 +48,10 @@ interface Props {
   // 상세의 "내 코스에 추가" 액션 (넘기면 상세 헤더에 버튼 표시). 현재 상세 장소 대상.
   detailAction?: () => void;
 
+  // 경로안내 (지도 탭)
+  onStartRoute?: (mode: RouteMode) => void;
+  routeGuide?: PlaceRouteGuideState | null;
+
   // 사이드바 레벨 뒤로가기 (코스 편집 전용). 있으면 목록 상단에 뒤로 버튼.
   onBack?: () => void;
 }
@@ -70,6 +77,8 @@ export default function PlaceSearchSidebar({
   onBackFromDetail,
   onLikeChange,
   detailAction,
+  onStartRoute,
+  routeGuide,
   onBack
 }: Props) {
   // 필터 열림 상태 · 목록 스크롤 위치를 이 컴포넌트가 보존 (상세로 전환돼도 인스턴스는 유지됨).
@@ -89,6 +98,8 @@ export default function PlaceSearchSidebar({
         onBack={onBackFromDetail}
         onLikeChange={onLikeChange}
         onAddToCourse={detailAction}
+        onStartRoute={onStartRoute}
+        routeGuide={routeGuide}
       />
     );
   }
