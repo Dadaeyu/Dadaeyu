@@ -104,17 +104,18 @@ export function openKakaoMapRoute(points: RoutePoint[], mode: RouteMode): boolea
   const web = buildKakaoMapRouteWebUrl(points, mode);
   if (!app && !web) return false;
   // 모바일: 앱 스킴 시도 후 웹 폴백
+  // setTimeout 안의 window.open은 iOS 등에서 팝업 차단되어 무반응처럼 보임 → location.assign 사용
+  // 앱이 실제로 열리면 페이지가 hidden이 되므로, 그때는 웹으로 덮어쓰지 않음
   if (app && typeof window !== "undefined") {
     const ua = window.navigator.userAgent;
     const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
     if (isMobile) {
-      const started = Date.now();
       window.location.href = app;
       window.setTimeout(() => {
-        if (Date.now() - started < 1800 && web) {
-          window.open(web, "_blank", "noopener,noreferrer");
+        if (document.visibilityState === "visible" && !document.hidden && web) {
+          window.location.assign(web);
         }
-      }, 900);
+      }, 1200);
       return true;
     }
   }

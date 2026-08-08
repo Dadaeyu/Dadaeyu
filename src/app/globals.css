@@ -441,18 +441,27 @@
   text-underline-offset: 3px;
 }
 
+/* 진한 브랜드/컬러 버튼 위 text-white — 다크에서 --color-white가 어두워져도 순백 유지 */
 .dark
   :where(
     [class*="bg-gradient-to-"],
     .bg-brand-500,
     .bg-brand-600,
     .bg-brand-700,
+    .bg-brand-800,
+    .bg-brand-900,
     .bg-navy-600,
     .bg-navy-700,
+    .bg-navy-800,
+    .bg-navy-900,
     .bg-indigo-600,
     .bg-indigo-700,
     .bg-amber-500,
-    .bg-amber-600
+    .bg-amber-600,
+    .bg-blue-600,
+    .bg-blue-700,
+    .bg-red-500,
+    .bg-red-600
   ),
 .dark.high-contrast
   :where(
@@ -460,12 +469,20 @@
     .bg-brand-500,
     .bg-brand-600,
     .bg-brand-700,
+    .bg-brand-800,
+    .bg-brand-900,
     .bg-navy-600,
     .bg-navy-700,
+    .bg-navy-800,
+    .bg-navy-900,
     .bg-indigo-600,
     .bg-indigo-700,
     .bg-amber-500,
-    .bg-amber-600
+    .bg-amber-600,
+    .bg-blue-600,
+    .bg-blue-700,
+    .bg-red-500,
+    .bg-red-600
   ) {
   --color-white: #ffffff;
 }

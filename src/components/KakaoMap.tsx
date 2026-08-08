@@ -61,6 +61,8 @@ interface Props {
   path?: MapPathSegment[];
   /** 값이 바뀌면 path 전체가 화면에 들어오도록 panTo(bounds). 안내 경로 전용 */
   fitPathKey?: string | number | null;
+  /** 하단 시트 등 UI가 가리는 높이(px). 경로 맞춤 시 bottom padding으로 사용 */
+  bottomOverlayPx?: number;
 }
 
 // ── 핀 렌더러 ──────────────────────────────────────────────
@@ -174,7 +176,8 @@ export default function KakaoMap({
   myLocation = null,
   focusMyLocationTrigger = 0,
   path = [],
-  fitPathKey = null
+  fitPathKey = null,
+  bottomOverlayPx = 0
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
@@ -217,6 +220,33 @@ export default function KakaoMap({
       cancelled = true;
     };
   }, [center.lat, center.lng, level]);
+
+  // 컨테이너 크기 변경 시(상단 50% 분할 등) 지도 재배치 후 선택 마커를 보이는 영역 중앙에 맞춤
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let timer = 0;
+    const ro = new ResizeObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const map = mapRef.current;
+        if (!map || !window.kakao?.maps) return;
+        map.relayout();
+        if (fitPathKey != null && fitPathKey !== "") return;
+        if (!selectedId) return;
+        const marker = markers.find((m) => m.id === selectedId);
+        if (!marker) return;
+        const K = window.kakao.maps;
+        map.setCenter(new K.LatLng(marker.lat, marker.lng));
+      }, 50);
+    });
+    ro.observe(el);
+    return () => {
+      window.clearTimeout(timer);
+      ro.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapInitCount, selectedId, fitPathKey]);
 
   // 마커 동기화
   useEffect(() => {
@@ -374,10 +404,15 @@ export default function KakaoMap({
     }
     if (count < 2) return;
 
+    mapRef.current.relayout();
     // 화면보다 멀리 이동하면 카카오가 애니메이션 없이 점프할 수 있음
-    mapRef.current.panTo(bounds, 72);
+    if (bottomOverlayPx > 0) {
+      mapRef.current.setBounds(bounds, 56, 28, bottomOverlayPx + 16, 28);
+    } else {
+      mapRef.current.panTo(bounds, 72);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitPathKey, mapInitCount, JSON.stringify(path)]);
+  }, [fitPathKey, mapInitCount, bottomOverlayPx, JSON.stringify(path)]);
 
   // 내 위치 마커 — myLocation이 바뀔 때마다 다시 그리고, null이면 제거
   useEffect(() => {
