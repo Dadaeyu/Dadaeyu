@@ -110,6 +110,16 @@ export interface TourismMyCourse {
   place_count: number;
 }
 
+/** 공유 코스 목록(tb_course.open_yn = 'Y') — 작성자 전체 대상, 작성자 정보 포함 */
+export interface TourismSharedCourse extends TourismMyCourse {
+  updatetime: string | null;
+  like_count: number;
+  themes: string[]; // 테마 라벨(필터 매칭용, 중복 제거)
+  hashtags: string[]; // 테마+접근성 종합 상위 3개(표시용, "내 코스" 카드와 동일 로직)
+  author_nickname: string;
+  author_role: string | null;
+}
+
 /** @deprecated 원격에는 tb_courses 없음 — TourismMyCourse 사용 */
 export interface DbCourse {
   id: number;

@@ -37,14 +37,11 @@ import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
 import TourismDetailPanel from "@/components/search/TourismDetailPanel";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import { usePlaceSearch, type TourismDetail } from "@/hooks/usePlaceSearch";
-import {
-  useCourseContext,
-  type MyCourse,
-  type CourseDay,
-  type CoursePlace
-} from "@/context/CourseContext";
 import { PLACE_COLORS } from "@/data/placesData";
 import { shareToKakaoTalk } from "@/lib/kakao/loadKakaoShare";
+import { fetchSharedCourses } from "@/lib/supabase/courses";
+import type { TourismSharedCourse } from "@/lib/supabase/types";
+import { requireLoginOrRedirect } from "@/lib/auth/require-login-redirect";
 
 // 장소 검색으로 새로 추가된 장소(좌표 직접 보유)의 마커 색상 — 순서대로 순환 배정.
 const MARKER_COLORS = Object.values(PLACE_COLORS).map((c) => c.color);
@@ -64,6 +61,36 @@ function addOneHour(hour: number): number {
   return (((hour + 1) % 24) + 24) % 24;
 }
 
+// 코스 편집 중 화면에 들고 있는 편집용 상태 타입 (실제 저장은 tb_course/tb_course_detail 직접 CRUD).
+interface CoursePlace {
+  id: number; // 코스 내 행 식별용 로컬 id
+  name: string;
+  startHour: number; // 0~23 (분 없음)
+  endHour: number; // 0~23 (분 없음)
+  placeId?: number; // tb_course_detail.place_id 로 저장되는 원본 장소 id
+  lat?: number; // 장소 검색으로 추가된 경우의 좌표 (지도 마커·경로선 표시용)
+  lng?: number;
+  contentId?: number; // tb_place.contentid (TourAPI id) — /api/tourism/detail 조회용. placeId(내부 PK)와는 다른 값.
+}
+
+interface CourseDay {
+  day: number;
+  places: CoursePlace[];
+}
+
+interface MyCourse {
+  id: number;
+  title: string;
+  duration: string;
+  isPrivate: boolean;
+  rating: number;
+  likes: number;
+  tags: string[];
+  days: CourseDay[];
+  startDate?: string; // 시작일 (DB: startdate)
+  endDate?: string; // 종료일 (DB: enddate)
+}
+
 // <select> 시각 옵션(0~23시)
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 
@@ -76,19 +103,58 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 
-type AuthorType = "admin" | "user";
-interface SharedCourse {
-  id: number;
-  title: string;
-  duration: string;
-  places: number;
-  rating: number;
-  likes: number;
-  themes: string[];
-  author: string;
-  authorType: AuthorType;
-  date: string;
+// 코스 상세 → 뒤로가기 시 "어느 탭의, 어느 코스를 보다가 들어왔는지" 복원하기 위한 저장소.
+// sessionStorage 사용 (탭 닫으면 사라져도 무방, 새로고침엔 살아있어야 하므로 localStorage 는 부적합).
+const COURSE_LIST_RETURN_KEY = "dadaeyu:courseListReturn";
+type CourseListReturn = {
+  tab: "shared" | "recommend" | "my";
+  courseId: number;
+  scrollY: number;
+  filters?: Filters; // 카드 클릭 당시의 필터 값 — 뒤로가기 시 그대로 복원
+  showFilters?: boolean; // 필터 패널 펼침/접힘 상태
+};
+
+function saveCourseListReturn(
+  tab: CourseListReturn["tab"],
+  courseId: number,
+  filters?: Filters,
+  showFilters?: boolean
+) {
+  if (typeof window === "undefined") return;
+  try {
+    const payload: CourseListReturn = {
+      tab,
+      courseId,
+      scrollY: window.scrollY,
+      filters,
+      showFilters
+    };
+    sessionStorage.setItem(COURSE_LIST_RETURN_KEY, JSON.stringify(payload));
+  } catch {
+    // 저장 실패는 무시 — 스크롤/탭 복원이 안 될 뿐, 기능 자체엔 영향 없음.
+  }
 }
+
+function readCourseListReturn(): CourseListReturn | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(COURSE_LIST_RETURN_KEY);
+    return raw ? (JSON.parse(raw) as CourseListReturn) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearCourseListReturn() {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(COURSE_LIST_RETURN_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+type AuthorType = "admin" | "user";
 
 // 코스 카드 상단의 "등록자 · 등록일" 행 — 공유/추천/내 코스 목록에서 공통으로 사용.
 function CourseAuthorRow({
@@ -123,93 +189,6 @@ function CourseAuthorRow({
     </div>
   );
 }
-
-const sharedCourses: SharedCourse[] = [
-  {
-    id: 101,
-    title: "대전 무장애 가족 나들이",
-    duration: "1일",
-    places: 5,
-    rating: 4.8,
-    likes: 312,
-    themes: ["자연힐링", "먹거리"],
-    author: "대전관광공사",
-    authorType: "admin",
-    date: "2025.04.10"
-  },
-  {
-    id: 102,
-    title: "휠체어로 즐기는 성심당 & 수목원",
-    duration: "반일",
-    places: 3,
-    rating: 4.9,
-    likes: 275,
-    themes: ["빵지순례", "자연힐링"],
-    author: "대전관광공사",
-    authorType: "admin",
-    date: "2025.03.28"
-  },
-  {
-    id: 103,
-    title: "유성온천 힐링 코스",
-    duration: "1일",
-    places: 4,
-    rating: 4.6,
-    likes: 198,
-    themes: ["문화예술", "자연힐링"],
-    author: "대전시청 관광과",
-    authorType: "admin",
-    date: "2025.02.15"
-  },
-  {
-    id: 104,
-    title: "엄마랑 아이랑 과학 탐험",
-    duration: "반일",
-    places: 2,
-    rating: 4.7,
-    likes: 142,
-    themes: ["과학"],
-    author: "travel_daejeon",
-    authorType: "user",
-    date: "2025.05.02"
-  },
-  {
-    id: 105,
-    title: "대청호 데크로드 산책",
-    duration: "반일",
-    places: 3,
-    rating: 4.5,
-    likes: 87,
-    themes: ["자연힐링"],
-    author: "힐링여행자",
-    authorType: "user",
-    date: "2025.04.22"
-  },
-  {
-    id: 106,
-    title: "역사 도심 골목 투어",
-    duration: "1일",
-    places: 6,
-    rating: 4.4,
-    likes: 63,
-    themes: ["역사근대", "문화예술"],
-    author: "대전토박이",
-    authorType: "user",
-    date: "2025.04.18"
-  },
-  {
-    id: 107,
-    title: "대전 빵지순례 완전판",
-    duration: "반일",
-    places: 4,
-    rating: 4.8,
-    likes: 221,
-    themes: ["빵지순례", "먹거리"],
-    author: "빵순이여행기",
-    authorType: "user",
-    date: "2025.03.30"
-  }
-];
 
 const recommendedCourses = [
   {
@@ -309,8 +288,9 @@ export default function Course() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, member } = useAuth();
-  // 코스 추가/취소 후 /course?tab=my 로 돌아왔을 때 "내 코스" 탭이 유지되도록 쿼리로 초기 탭을 정한다.
-  const initialTab = searchParams.get("tab") === "my" ? "my" : "shared";
+  // 코스 추가/취소 후, 혹은 코스 상세에서 뒤로가기 시 원래 보던 탭이 유지되도록 쿼리로 초기 탭을 정한다.
+  const tabParam = searchParams.get("tab");
+  const initialTab = tabParam === "my" || tabParam === "recommend" ? tabParam : "shared";
   const [activeTab, setActiveTab] = useState<"shared" | "recommend" | "my">(initialTab);
   const [loginNotice, setLoginNotice] = useState(false);
   const showLoginNotice = () => {
@@ -325,9 +305,12 @@ export default function Course() {
     router.push("/course/new");
   };
 
-  // 내 코스 — tb_course 중 register=로그인 사용자 id 인 행만 조회 (삭제 제외)
+  // 내 코스 — tb_course 중 register=로그인 사용자 id 인 행만 조회 (삭제 제외), 페이지 단위로 로드
+  const MY_COURSES_PAGE_SIZE = 20;
   const [myDbCourses, setMyDbCourses] = useState<DbCourse[]>([]);
   const [myCoursesError, setMyCoursesError] = useState("");
+  const [myCoursesLoadingMore, setMyCoursesLoadingMore] = useState(false);
+  const [myHasMore, setMyHasMore] = useState(false);
   // course_id -> tb_course_like 행 개수 (즐겨찾기 수)
   const [courseLikeCounts, setCourseLikeCounts] = useState<Record<number, number>>({});
   // course_id -> 일정 요약(며칠 일정인지, 장소 몇 곳인지) — tb_course_detail 집계
@@ -337,153 +320,173 @@ export default function Course() {
   // course_id -> 해시태그(포함된 장소들의 대분류+접근성 종합 상위 3개)
   const [courseHashtags, setCourseHashtags] = useState<Record<number, string[]>>({});
 
+  // (offset, limit) 구간의 내 코스 + 좋아요수/일정요약/해시태그를 조회한다. 초기 로드/더보기 양쪽에서 재사용.
+  const loadMyCoursesPage = useCallback(
+    async (userId: string, offset: number, limit: number) => {
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      // count: "exact" 는 Content-Range 응답 헤더에 담겨 오는데, 브라우저(RLS 경유) 요청에선
+      // CORS 로 그 헤더가 노출 안 돼 항상 null 로 잡혀 hasMore 가 절대 true 가 안 되는 문제가 있었다.
+      // (서버 API 로 호출하는 공유 코스 쪽은 Node 환경이라 CORS 제약이 없어 정상 동작함.)
+      // 그래서 count 대신 "받아온 개수가 요청한 limit 와 같으면 다음 페이지가 더 있다"로 판단한다.
+      const { data, error } = await supabase
+        .from("tb_course")
+        .select("course_id, course_nm, open_yn, startdate, enddate, registtime, updatetime")
+        .eq("register", userId)
+        .neq("delete_yn", "Y")
+        .order("registtime", { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw error;
+      const courses = (data ?? []) as DbCourse[];
+      const hasMore = courses.length === limit;
+
+      const courseIds = courses.map((c) => c.course_id);
+      if (courseIds.length === 0) {
+        return { courses, hasMore, likeCounts: {}, meta: {}, hashtags: {} } as const;
+      }
+
+      const { data: likeRows, error: likeErr } = await supabase
+        .from("tb_course_like")
+        .select("course_id")
+        .in("course_id", courseIds);
+      if (likeErr) throw likeErr;
+      const likeCounts: Record<number, number> = {};
+      for (const row of likeRows ?? []) {
+        likeCounts[row.course_id] = (likeCounts[row.course_id] ?? 0) + 1;
+      }
+
+      const { data: detailRows, error: detailErr } = await supabase
+        .from("tb_course_detail")
+        .select("course_id, day, place_id")
+        .in("course_id", courseIds);
+      if (detailErr) throw detailErr;
+      const daysByCourse = new Map<number, Set<number>>();
+      const placesByCourse = new Map<number, number>();
+      const placeIdsByCourse = new Map<number, Set<number>>();
+      for (const row of detailRows ?? []) {
+        const days = daysByCourse.get(row.course_id) ?? new Set<number>();
+        days.add(row.day);
+        daysByCourse.set(row.course_id, days);
+        placesByCourse.set(row.course_id, (placesByCourse.get(row.course_id) ?? 0) + 1);
+        const placeIds = placeIdsByCourse.get(row.course_id) ?? new Set<number>();
+        placeIds.add(row.place_id);
+        placeIdsByCourse.set(row.course_id, placeIds);
+      }
+      const meta: Record<number, { duration: string; places: number }> = {};
+      for (const cid of courseIds) {
+        const dayCount = daysByCourse.get(cid)?.size ?? 0;
+        meta[cid] = {
+          duration: dayCount > 1 ? `${dayCount}일` : "반일",
+          places: placesByCourse.get(cid) ?? 0
+        };
+      }
+
+      // 해시태그 — 코스별 포함 장소들의 대분류(lclssystm1)+접근성 요약플래그를 종합해 상위 3개.
+      const allPlaceIds = [...new Set((detailRows ?? []).map((r) => r.place_id))];
+      const placesById = new Map<
+        number,
+        { contentid: string | number | null; lclssystm1: string | null }
+      >();
+      if (allPlaceIds.length > 0) {
+        const { data: placeRows, error: placeErr } = await supabase
+          .from("tb_place")
+          .select("place_id, contentid, lclssystm1")
+          .in("place_id", allPlaceIds);
+        if (placeErr) throw placeErr;
+        for (const p of placeRows ?? []) placesById.set(p.place_id, p);
+      }
+
+      const themeCodes = [...new Set([...placesById.values()].map((p) => p.lclssystm1))].filter(
+        (v): v is string => v != null
+      );
+      const themeLabelByCode = new Map<string, string>();
+      if (themeCodes.length > 0) {
+        const { data: codeRows, error: codeErr } = await supabase
+          .from("tb_code")
+          .select("code_id, code_nm")
+          .eq("code_group", "LCLSSYSTM1")
+          .in("code_id", themeCodes);
+        if (codeErr) throw codeErr;
+        for (const c of codeRows ?? []) themeLabelByCode.set(c.code_id, c.code_nm);
+      }
+
+      const allContentIds = [
+        ...new Set(
+          [...placesById.values()]
+            .map((p) => (p.contentid != null && p.contentid !== "" ? Number(p.contentid) : null))
+            .filter((v): v is number => v != null)
+        )
+      ];
+      const bfFlagsByContentId = new Map<
+        number,
+        { has_blind: boolean; has_deaf: boolean; has_gait: boolean; has_infant: boolean }
+      >();
+      if (allContentIds.length > 0) {
+        const { data: bfRows, error: bfErr } = await supabase
+          .from("tb_place_barrierfree")
+          .select("contentid, has_blind, has_deaf, has_gait, has_infant")
+          .in("contentid", allContentIds);
+        if (bfErr) throw bfErr;
+        for (const b of bfRows ?? []) bfFlagsByContentId.set(Number(b.contentid), b);
+      }
+
+      const hashtags: Record<number, string[]> = {};
+      for (const cid of courseIds) {
+        const badgeCounts = new Map<string, number>();
+        const bump = (label: string | null | undefined) => {
+          if (!label) return;
+          badgeCounts.set(label, (badgeCounts.get(label) ?? 0) + 1);
+        };
+        for (const pid of placeIdsByCourse.get(cid) ?? []) {
+          const place = placesById.get(pid);
+          if (!place) continue;
+          if (place.lclssystm1) bump(themeLabelByCode.get(place.lclssystm1));
+          const contentId =
+            place.contentid != null && place.contentid !== "" ? Number(place.contentid) : null;
+          const flags = contentId != null ? bfFlagsByContentId.get(contentId) : undefined;
+          if (flags?.has_blind) bump("시각장애");
+          if (flags?.has_deaf) bump("청각장애");
+          if (flags?.has_gait) bump("보행장애");
+          if (flags?.has_infant) bump("영유아");
+        }
+        hashtags[cid] = [...badgeCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([label]) => label);
+      }
+
+      return { courses, hasMore, likeCounts, meta, hashtags } as const;
+    },
+    []
+  );
+
+  // user 는 Supabase 의 onAuthStateChange(토큰 자동 리프레시, 탭 포커스 복귀 시 세션 재검증 등)가
+  // 일어날 때마다 "내용은 같아도 매번 새 객체 참조"로 갱신된다. 이 effect의 deps 에 user 객체
+  // 자체를 넣으면 그 재발급마다 재실행되어 무한 스크롤로 불러온 목록을 처음 20개로 계속 덮어써버린다
+  // (그래서 "스크롤해도 안 늘어나는 것처럼" 보임) — 실제로 로그인 사용자가 바뀔 때만 반응하도록
+  // user?.id (문자열 값)만 deps 로 쓴다.
+  const userId = user?.id;
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       // 비로그인 상태에선 "내 코스" 목록을 비운다.
       setMyDbCourses([]);
       setMyCoursesError("");
       setCourseLikeCounts({});
       setCourseMeta({});
       setCourseHashtags({});
+      setMyHasMore(false);
       return;
     }
     let active = true;
     (async () => {
       try {
-        const { createClient } = await import("@/utils/supabase/client");
-        const supabase = createClient();
-        const { data, error } = await supabase
-          .from("tb_course")
-          .select("course_id, course_nm, open_yn, startdate, enddate, registtime, updatetime")
-          .eq("register", user.id)
-          .neq("delete_yn", "Y")
-          .order("registtime", { ascending: false });
-        if (error) throw error;
+        const page = await loadMyCoursesPage(userId, 0, MY_COURSES_PAGE_SIZE);
         if (!active) return;
-        const courses = (data ?? []) as DbCourse[];
-        setMyDbCourses(courses);
-
-        const courseIds = courses.map((c) => c.course_id);
-        if (courseIds.length === 0) {
-          setCourseLikeCounts({});
-          setCourseMeta({});
-          setCourseHashtags({});
-          return;
-        }
-        const { data: likeRows, error: likeErr } = await supabase
-          .from("tb_course_like")
-          .select("course_id")
-          .in("course_id", courseIds);
-        if (likeErr) throw likeErr;
-        if (!active) return;
-        const counts: Record<number, number> = {};
-        for (const row of likeRows ?? []) {
-          counts[row.course_id] = (counts[row.course_id] ?? 0) + 1;
-        }
-        setCourseLikeCounts(counts);
-
-        const { data: detailRows, error: detailErr } = await supabase
-          .from("tb_course_detail")
-          .select("course_id, day, place_id")
-          .in("course_id", courseIds);
-        if (detailErr) throw detailErr;
-        if (!active) return;
-        const daysByCourse = new Map<number, Set<number>>();
-        const placesByCourse = new Map<number, number>();
-        const placeIdsByCourse = new Map<number, Set<number>>();
-        for (const row of detailRows ?? []) {
-          const days = daysByCourse.get(row.course_id) ?? new Set<number>();
-          days.add(row.day);
-          daysByCourse.set(row.course_id, days);
-          placesByCourse.set(row.course_id, (placesByCourse.get(row.course_id) ?? 0) + 1);
-          const placeIds = placeIdsByCourse.get(row.course_id) ?? new Set<number>();
-          placeIds.add(row.place_id);
-          placeIdsByCourse.set(row.course_id, placeIds);
-        }
-        const meta: Record<number, { duration: string; places: number }> = {};
-        for (const cid of courseIds) {
-          const dayCount = daysByCourse.get(cid)?.size ?? 0;
-          meta[cid] = {
-            duration: dayCount > 1 ? `${dayCount}일` : "반일",
-            places: placesByCourse.get(cid) ?? 0
-          };
-        }
-        setCourseMeta(meta);
-
-        // 해시태그 — 코스별 포함 장소들의 대분류(lclssystm1)+접근성 요약플래그를 종합해 상위 3개.
-        const allPlaceIds = [...new Set((detailRows ?? []).map((r) => r.place_id))];
-        const placesById = new Map<
-          number,
-          { contentid: string | number | null; lclssystm1: string | null }
-        >();
-        if (allPlaceIds.length > 0) {
-          const { data: placeRows, error: placeErr } = await supabase
-            .from("tb_place")
-            .select("place_id, contentid, lclssystm1")
-            .in("place_id", allPlaceIds);
-          if (placeErr) throw placeErr;
-          for (const p of placeRows ?? []) placesById.set(p.place_id, p);
-        }
-
-        const themeCodes = [...new Set([...placesById.values()].map((p) => p.lclssystm1))].filter(
-          (v): v is string => v != null
-        );
-        const themeLabelByCode = new Map<string, string>();
-        if (themeCodes.length > 0) {
-          const { data: codeRows, error: codeErr } = await supabase
-            .from("tb_code")
-            .select("code_id, code_nm")
-            .eq("code_group", "LCLSSYSTM1")
-            .in("code_id", themeCodes);
-          if (codeErr) throw codeErr;
-          for (const c of codeRows ?? []) themeLabelByCode.set(c.code_id, c.code_nm);
-        }
-
-        const allContentIds = [
-          ...new Set(
-            [...placesById.values()]
-              .map((p) => (p.contentid != null && p.contentid !== "" ? Number(p.contentid) : null))
-              .filter((v): v is number => v != null)
-          )
-        ];
-        const bfFlagsByContentId = new Map<
-          number,
-          { has_blind: boolean; has_deaf: boolean; has_gait: boolean; has_infant: boolean }
-        >();
-        if (allContentIds.length > 0) {
-          const { data: bfRows, error: bfErr } = await supabase
-            .from("tb_place_barrierfree")
-            .select("contentid, has_blind, has_deaf, has_gait, has_infant")
-            .in("contentid", allContentIds);
-          if (bfErr) throw bfErr;
-          for (const b of bfRows ?? []) bfFlagsByContentId.set(Number(b.contentid), b);
-        }
-
-        const hashtags: Record<number, string[]> = {};
-        for (const cid of courseIds) {
-          const badgeCounts = new Map<string, number>();
-          const bump = (label: string | null | undefined) => {
-            if (!label) return;
-            badgeCounts.set(label, (badgeCounts.get(label) ?? 0) + 1);
-          };
-          for (const pid of placeIdsByCourse.get(cid) ?? []) {
-            const place = placesById.get(pid);
-            if (!place) continue;
-            if (place.lclssystm1) bump(themeLabelByCode.get(place.lclssystm1));
-            const contentId =
-              place.contentid != null && place.contentid !== "" ? Number(place.contentid) : null;
-            const flags = contentId != null ? bfFlagsByContentId.get(contentId) : undefined;
-            if (flags?.has_blind) bump("시각장애");
-            if (flags?.has_deaf) bump("청각장애");
-            if (flags?.has_gait) bump("보행장애");
-            if (flags?.has_infant) bump("영유아");
-          }
-          hashtags[cid] = [...badgeCounts.entries()]
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 3)
-            .map(([label]) => label);
-        }
-        if (active) setCourseHashtags(hashtags);
+        setMyDbCourses(page.courses);
+        setCourseLikeCounts(page.likeCounts);
+        setCourseMeta(page.meta);
+        setCourseHashtags(page.hashtags);
+        setMyHasMore(page.hasMore);
       } catch (e) {
         if (active) setMyCoursesError(e instanceof Error ? e.message : String(e));
       }
@@ -491,7 +494,51 @@ export default function Course() {
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [userId, loadMyCoursesPage]);
+
+  const loadMoreMyCourses = useCallback(async () => {
+    if (!userId || myCoursesLoadingMore || !myHasMore) return;
+    setMyCoursesLoadingMore(true);
+    try {
+      const page = await loadMyCoursesPage(userId, myDbCourses.length, MY_COURSES_PAGE_SIZE);
+      setMyDbCourses((prev) => [...prev, ...page.courses]);
+      setCourseLikeCounts((prev) => ({ ...prev, ...page.likeCounts }));
+      setCourseMeta((prev) => ({ ...prev, ...page.meta }));
+      setCourseHashtags((prev) => ({ ...prev, ...page.hashtags }));
+      setMyHasMore(page.hasMore);
+    } catch (e) {
+      setMyCoursesError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMyCoursesLoadingMore(false);
+    }
+  }, [userId, myCoursesLoadingMore, myHasMore, myDbCourses.length, loadMyCoursesPage]);
+
+  // 무한 스크롤 — 목록 하단 sentinel 이 보이면 자동으로 다음 페이지 로드.
+  // sentinel 은 탭 전환(activeTab)·hasMore 변화에 따라 DOM 에 붙었다 떨어졌다 하므로,
+  // useEffect + deps 로 옵저버를 붙이면 "노드는 새로 생겼는데 deps 는 그대로"인 순간
+  // (예: 다른 탭에 있는 동안 hasMore 가 true 로 바뀜 → 나중에 탭을 열어도 재실행 안 됨)
+  // 옵저버가 영영 안 붙거나, 이미 제거된 옛 노드를 계속 관찰하게 된다.
+  // callback ref 는 노드가 붙고 떨어질 때마다 정확히 호출되므로 그 문제가 원천 차단된다.
+  // loadMore 는 페이지를 불러올 때마다 정체성이 바뀌니 ref 로 최신 것만 참조한다
+  // (옵저버를 매번 재생성하면 이미 보이는 sentinel 재관찰 → 즉시 재발화로 전부 로드돼버림).
+  const loadMoreMyCoursesRef = useRef(loadMoreMyCourses);
+  useEffect(() => {
+    loadMoreMyCoursesRef.current = loadMoreMyCourses;
+  }, [loadMoreMyCourses]);
+  const myObserverRef = useRef<IntersectionObserver | null>(null);
+  const setMySentinel = useCallback((el: HTMLDivElement | null) => {
+    myObserverRef.current?.disconnect();
+    myObserverRef.current = null;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMoreMyCoursesRef.current();
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    myObserverRef.current = observer;
+  }, []);
 
   // 코스 삭제(소프트 삭제) — 목록에서 바로 삭제, 성공하면 목록에서도 즉시 제거.
   const [deletingCourseId, setDeletingCourseId] = useState<number | null>(null);
@@ -523,29 +570,249 @@ export default function Course() {
     }
   };
 
-  // 공유 코스 필터
-  const [showSharedFilters, setShowSharedFilters] = useState(false);
-  const [sharedFilters, setSharedFilters] = useState<Filters>(DEFAULT_FILTERS);
+  // 공유 코스 필터 (먼저 선언 — 아래 조회 로직에서 이 값을 참조한다)
+  // 코스 상세 → 뒤로가기로 돌아왔을 때 카드 클릭 당시의 필터를 그대로 복원한다.
+  const [showSharedFilters, setShowSharedFilters] = useState(() => {
+    const saved = !id ? readCourseListReturn() : null;
+    return saved?.tab === "shared" ? !!saved.showFilters : false;
+  });
+  const [sharedFilters, setSharedFilters] = useState<Filters>(() => {
+    const saved = !id ? readCourseListReturn() : null;
+    return saved?.tab === "shared" && saved.filters ? saved.filters : DEFAULT_FILTERS;
+  });
+  // 필터 패널에서 만지는 건 "초안(draft)" — 검색 버튼을 눌러야 실제 조회에 쓰이는 sharedFilters
+  // 로 반영된다(선택할 때마다 바로 검색되지 않도록).
+  const [sharedFilterDraft, setSharedFilterDraft] = useState<Filters>(sharedFilters);
+  // 공유 코스 필터의 위치(구/동) 선택지 — tb_place.ldongsigngucd 는 이름이 아니라 코드로
+  // 저장돼 있어서, 필터 UI(이름 기준)와 서버 조회(코드 기준) 사이를 변환해줘야 한다.
+  const [sharedAreaCodes, setSharedAreaCodes] = useState<{ code: string; name: string }[]>([]);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/area-code")
+      .then((r) => r.json())
+      .then((data) => {
+        if (active) setSharedAreaCodes(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+  // 조회에 실제로 쓰이는 건 "적용된" 필터(sharedFilters) 기준 코드.
+  const sharedGuCode = sharedAreaCodes.find((a) => a.name === sharedFilters.gu)?.code ?? "";
+  // 반면 동 선택지는 필터 패널에서 "구"를 고르는 즉시(검색 누르기 전이라도) 바뀌어야 하므로
+  // draft 기준으로 따로 계산한다.
+  const sharedDraftGuCode = sharedAreaCodes.find((a) => a.name === sharedFilterDraft.gu)?.code ?? "";
+  const [sharedDongOptions, setSharedDongOptions] = useState<string[]>([]);
+  useEffect(() => {
+    if (!sharedDraftGuCode) {
+      setSharedDongOptions([]);
+      return;
+    }
+    let active = true;
+    fetch(`/api/area-code/dong?gu=${encodeURIComponent(sharedDraftGuCode)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (active) setSharedDongOptions(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [sharedDraftGuCode]);
 
-  // 추천 코스 필터
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  // 접근성/테마/위치/즐겨찾기는 서버(쿼리 파라미터)에서 필터링한다 — 무한스크롤 페이지네이션과
+  // 맞물려야 해서 클라이언트에서 로드된 페이지만 걸러내면 hasMore 판정이 어긋난다.
+  // 배열은 순서와 무관하게 같은 조합이면 같은 요청으로 취급하려고 정렬 후 문자열 키로 비교한다.
+  // gu 는 이름이 아니라 변환된 코드(sharedGuCode)를 키에 넣어야, area-code 로딩이 늦게 끝나
+  // sharedGuCode 가 나중에 채워지는 경우에도 재조회가 정확히 트리거된다.
+  const sharedFilterKey = JSON.stringify({
+    accessibility: [...sharedFilters.accessibility].sort(),
+    themes: [...sharedFilters.themes].sort(),
+    favoritesOnly: sharedFilters.favoritesOnly,
+    gu: sharedGuCode,
+    dong: sharedFilters.dong,
+    headcount: sharedFilters.headcount,
+    dateFrom: sharedFilters.dateFrom,
+    dateTo: sharedFilters.dateTo
+  });
+
+  // 공유 코스 — tb_course.open_yn='Y' 를 필터 조건에 맞춰 DB에서 페이지 단위로 조회
+  const SHARED_PAGE_SIZE = 20;
+  const [sharedDbCourses, setSharedDbCourses] = useState<TourismSharedCourse[]>([]);
+  const [sharedCoursesLoading, setSharedCoursesLoading] = useState(true);
+  const [sharedCoursesLoadingMore, setSharedCoursesLoadingMore] = useState(false);
+  const [sharedCoursesError, setSharedCoursesError] = useState("");
+  const [sharedHasMore, setSharedHasMore] = useState(false);
+
+  // 필터 "세대" — 필터가 바뀔 때(=처음부터 다시 조회할 때)만 증가한다.
+  // "더보기"는 새 세대를 만들지 않고 현재 세대에 속한다: 더보기가 세대를 올려버리면 진행 중이던
+  // 초기 조회가 stale 로 판정돼 응답이 통째로 버려지고 로딩 플래그도 못 내려 스피너가 고착된다.
+  // 응답 도착 시 자기 세대가 아직 유효한지 확인한 뒤에만 상태를 반영한다.
+  const sharedGenerationRef = useRef(0);
+
+  useEffect(() => {
+    const generation = ++sharedGenerationRef.current;
+    setSharedCoursesLoading(true);
+    // 진행 중이던 "더보기"는 이 세대에서 무효 — 응답이 와도 stale 가드에 걸려 finally 가
+    // 스킵되므로 여기서 미리 꺼두지 않으면 더보기 스피너가 켜진 채 남는다.
+    setSharedCoursesLoadingMore(false);
+    (async () => {
+      try {
+        const { items, hasMore } = await fetchSharedCourses(0, SHARED_PAGE_SIZE, {
+          accessibility: sharedFilters.accessibility,
+          themes: sharedFilters.themes,
+          favoritesOnly: sharedFilters.favoritesOnly,
+          gu: sharedGuCode,
+          dong: sharedFilters.dong,
+          headcount: sharedFilters.headcount,
+          dateFrom: sharedFilters.dateFrom,
+          dateTo: sharedFilters.dateTo
+        });
+        if (sharedGenerationRef.current !== generation) return;
+        setSharedDbCourses(items);
+        setSharedHasMore(hasMore);
+      } catch (e) {
+        if (sharedGenerationRef.current !== generation) return;
+        setSharedCoursesError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (sharedGenerationRef.current === generation) setSharedCoursesLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedFilterKey]);
+
+  const loadMoreSharedCourses = useCallback(async () => {
+    // 초기 조회(필터 변경 등)가 진행 중이면 더보기는 건너뛴다 — 목록이 스피너로 바뀌며 페이지가
+    // 짧아진 순간 sentinel 이 뷰포트에 들어와 발화하는 것을 막는다.
+    if (sharedCoursesLoading || sharedCoursesLoadingMore || !sharedHasMore) return;
+    const generation = sharedGenerationRef.current; // 세대를 올리지 않고 현재 세대에 속한다
+    setSharedCoursesLoadingMore(true);
+    try {
+      const { items, hasMore } = await fetchSharedCourses(sharedDbCourses.length, SHARED_PAGE_SIZE, {
+        accessibility: sharedFilters.accessibility,
+        themes: sharedFilters.themes,
+        favoritesOnly: sharedFilters.favoritesOnly,
+        gu: sharedGuCode,
+        dong: sharedFilters.dong,
+        headcount: sharedFilters.headcount,
+        dateFrom: sharedFilters.dateFrom,
+        dateTo: sharedFilters.dateTo
+      });
+      if (sharedGenerationRef.current !== generation) return;
+      setSharedDbCourses((prev) => [...prev, ...items]);
+      setSharedHasMore(hasMore);
+    } catch (e) {
+      if (sharedGenerationRef.current !== generation) return;
+      setSharedCoursesError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (sharedGenerationRef.current === generation) setSharedCoursesLoadingMore(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sharedCoursesLoading,
+    sharedCoursesLoadingMore,
+    sharedHasMore,
+    sharedDbCourses.length,
+    sharedFilterKey,
+    sharedGuCode
+  ]);
+
+  // 무한 스크롤 — 내 코스 쪽과 동일하게 callback ref 로 sentinel 노드에 옵저버를 붙인다.
+  const loadMoreSharedCoursesRef = useRef(loadMoreSharedCourses);
+  useEffect(() => {
+    loadMoreSharedCoursesRef.current = loadMoreSharedCourses;
+  }, [loadMoreSharedCourses]);
+  const sharedObserverRef = useRef<IntersectionObserver | null>(null);
+  const setSharedSentinel = useCallback((el: HTMLDivElement | null) => {
+    sharedObserverRef.current?.disconnect();
+    sharedObserverRef.current = null;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMoreSharedCoursesRef.current();
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    sharedObserverRef.current = observer;
+  }, []);
+
+  // 추천 코스 필터 — 공유 코스와 동일하게 뒤로가기 시 필터 복원.
+  const [showFilters, setShowFilters] = useState(() => {
+    const saved = !id ? readCourseListReturn() : null;
+    return saved?.tab === "recommend" ? !!saved.showFilters : false;
+  });
+  const [filters, setFilters] = useState<Filters>(() => {
+    const saved = !id ? readCourseListReturn() : null;
+    return saved?.tab === "recommend" && saved.filters ? saved.filters : DEFAULT_FILTERS;
+  });
   const [showResults, setShowResults] = useState(false);
+
+  // 코스 상세 → 뒤로가기로 돌아왔을 때, 클릭했던 코스 카드가 보이는 위치로 스크롤 복원.
+  // 무한 스크롤이라 그 카드가 아직 로드 안 됐을 수 있어, 못 찾으면 다음 페이지를 더 불러와 재시도한다.
+  // sessionStorage 는 "이 컴포넌트가 처음 마운트될 때" 딱 한 번만 읽어 고정한다 — 매 렌더/effect 마다
+  // 다시 읽으면, 카드를 클릭해 상세로 "들어가는" 순간(아직 이 컴포넌트가 언마운트되기 전) 방금 자신이
+  // 저장한 값을 곧바로 다시 읽어 스스로 소비해버리는 경쟁 상태가 생긴다(진짜 "뒤로가기"가 아닌데도).
+  // 이 Course() 함수는 /course(목록)와 /course/[id](상세) 양쪽에서 재사용되므로, id 가 있을 때
+  // (=상세 페이지로 새로 마운트됐을 때)는 애초에 읽지도, 복원 로직을 돌리지도 않는다.
+  const [pendingRestore] = useState(() => (id ? null : readCourseListReturn()));
+  useEffect(() => {
+    if (id) return;
+    if (!pendingRestore || pendingRestore.tab !== activeTab) return;
+    if (pendingRestore.tab === "shared" && sharedCoursesLoading) return;
+
+    const el = document.querySelector(`[data-course-id="${pendingRestore.courseId}"]`);
+    if (el) {
+      el.scrollIntoView({ block: "center" });
+      clearCourseListReturn();
+      return;
+    }
+    if (pendingRestore.tab === "shared" && sharedHasMore) {
+      loadMoreSharedCourses();
+      return;
+    }
+    if (pendingRestore.tab === "my" && myHasMore) {
+      loadMoreMyCourses();
+      return;
+    }
+    // 더 불러올 게 없는데도 못 찾았다면(삭제됐거나 필터에 걸림) 저장했던 좌표로라도 복원.
+    window.scrollTo(0, pendingRestore.scrollY);
+    clearCourseListReturn();
+  }, [
+    id,
+    pendingRestore,
+    activeTab,
+    sharedCoursesLoading,
+    sharedDbCourses,
+    myDbCourses,
+    sharedHasMore,
+    myHasMore,
+    loadMoreSharedCourses,
+    loadMoreMyCourses
+  ]);
 
   if (id) return <CourseDetail id={id} />;
 
-  // 공유 코스 helpers
+  // 공유 코스 helpers — 필터 패널 조작은 전부 draft 에만 반영한다.
   const setShared = <K extends keyof Filters>(key: K, val: Filters[K]) =>
-    setSharedFilters((prev) => ({ ...prev, [key]: val }));
+    setSharedFilterDraft((prev) => ({ ...prev, [key]: val }));
   const toggleSharedList = (key: "themes" | "accessibility", item: string) =>
-    setSharedFilters((prev) => {
+    setSharedFilterDraft((prev) => {
       const list = prev[key] as string[];
       return {
         ...prev,
         [key]: list.includes(item) ? list.filter((x) => x !== item) : [...list, item]
       };
     });
-  const resetShared = () => setSharedFilters(DEFAULT_FILTERS);
+  // "검색" 버튼을 눌러야 draft 가 실제 조회에 쓰이는 sharedFilters 로 반영된다.
+  const applySharedFilters = () => {
+    setSharedFilters(sharedFilterDraft);
+  };
+  const resetShared = () => {
+    setSharedFilterDraft(DEFAULT_FILTERS);
+    setSharedFilters(DEFAULT_FILTERS);
+  };
   const sharedFilterCount = [
     sharedFilters.accessibility.length > 0,
     sharedFilters.gu,
@@ -555,15 +822,9 @@ export default function Course() {
     sharedFilters.minRating > 0,
     sharedFilters.favoritesOnly
   ].filter(Boolean).length;
-  const filteredShared = sharedCourses.filter((course) => {
-    if (
-      sharedFilters.themes.length > 0 &&
-      !course.themes.some((t) => sharedFilters.themes.includes(t))
-    )
-      return false;
-    if (sharedFilters.minRating > 0 && course.rating < sharedFilters.minRating) return false;
-    return true;
-  });
+  // 접근성/테마/즐겨찾기는 서버에서 이미 필터링해 내려온다 — 여기선 아직 서버 반영 전인
+  // 별점만 클라이언트에서 처리한다. 코스 단위 별점 데이터가 아직 없어 켜지면 결과 없음으로 처리.
+  const filteredShared = sharedFilters.minRating > 0 ? [] : sharedDbCourses;
 
   // 추천 코스 helpers
   const set = <K extends keyof Filters>(key: K, val: Filters[K]) =>
@@ -598,8 +859,8 @@ export default function Course() {
 
   return (
     <div className="space-y-6">
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200">
+      {/* Tabs — 헤더(h-16) 바로 아래에 고정, 위쪽 여백은 살짝 줄임 */}
+      <div className="bg-background sticky top-16 z-30 -mt-3 flex border-b border-gray-200">
         {(["shared", "recommend", "my"] as const).map((tab) => {
           const labels = { shared: "공유 코스", recommend: "추천 코스", my: "내 코스" };
           return (
@@ -624,7 +885,12 @@ export default function Course() {
           {/* 필터 토글 헤더 */}
           <div className="flex items-center overflow-hidden rounded-xl border border-gray-200 bg-white">
             <button
-              onClick={() => setShowSharedFilters(!showSharedFilters)}
+              onClick={() => {
+                // 열 때는 draft 를 현재 적용된 값으로 다시 맞춰서, 이전에 검색 없이 만지다 만
+                // 값이 남아있지 않게 한다.
+                if (!showSharedFilters) setSharedFilterDraft(sharedFilters);
+                setShowSharedFilters(!showSharedFilters);
+              }}
               className="flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
             >
               <div className="flex items-center gap-2">
@@ -653,9 +919,15 @@ export default function Course() {
           {/* 필터 패널 */}
           {showSharedFilters && (
             <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
-              <FilterFields filters={sharedFilters} set={setShared} toggleList={toggleSharedList} />
+              <FilterFields
+                filters={sharedFilterDraft}
+                set={setShared}
+                toggleList={toggleSharedList}
+                guOptions={sharedAreaCodes.map((a) => a.name)}
+                dongOptions={sharedDongOptions}
+              />
               <button
-                onClick={() => setShowSharedFilters(false)}
+                onClick={applySharedFilters}
                 className="bg-brand-600 hover:bg-brand-700 w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-colors"
               >
                 검색
@@ -664,57 +936,85 @@ export default function Course() {
           )}
 
           {/* 결과 수 */}
-          <p className="text-sm text-gray-500">
-            <span className="font-semibold text-gray-800">{filteredShared.length}개</span>의 코스
-            {sharedFilterCount > 0 && "를 찾았어요"}
-          </p>
+          {sharedCoursesError ? (
+            <p className="text-sm text-red-500">{sharedCoursesError}</p>
+          ) : (
+            <p className="text-sm text-gray-500">
+              <span className="font-semibold text-gray-800">{filteredShared.length}개</span>의 코스
+              {sharedFilterCount > 0 && "를 찾았어요"}
+            </p>
+          )}
 
           {/* 코스 목록 */}
-          {filteredShared.length > 0 ? (
-            filteredShared.map((course) => (
-              <Link
-                key={course.id}
-                href={`/course/${course.id}`}
-                className="block rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
-              >
-                <CourseAuthorRow
-                  authorType={course.authorType}
-                  author={course.author}
-                  date={course.date}
-                />
-                {/* Title + rating */}
-                <div className="mb-2 flex items-start justify-between">
-                  <h3 className="leading-snug font-semibold text-gray-800">{course.title}</h3>
-                  <div className="ml-2 flex shrink-0 items-center gap-1 text-sm">
-                    <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                    <span className="text-gray-700">{course.rating}</span>
-                  </div>
-                </div>
-                {/* Meta */}
-                <div className="mb-3 flex gap-3 text-sm text-gray-500">
-                  <span>{course.duration}</span>
-                  <span>•</span>
-                  <span>{course.places}곳</span>
-                </div>
-                {/* Themes + likes */}
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-wrap gap-1">
-                    {course.themes.map((t) => (
-                      <span
-                        key={t}
-                        className="bg-brand-50 text-brand-700 rounded-full px-2 py-0.5 text-xs"
-                      >
-                        {t}
+          {sharedCoursesLoading ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-400">
+              <span className="border-brand-500 h-4 w-4 animate-spin rounded-full border-2 border-gray-200 border-t-transparent" />
+              불러오는 중...
+            </div>
+          ) : filteredShared.length > 0 ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {filteredShared.map((course) => (
+                <Card key={course.course_id} asChild variant="interactive">
+                  <Link
+                    href={`/course/${course.course_id}`}
+                    data-course-id={course.course_id}
+                    onClick={() =>
+                      saveCourseListReturn("shared", course.course_id, sharedFilters, showSharedFilters)
+                    }
+                    className="block"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <h3 className="text-ink truncate font-semibold">{course.course_nm}</h3>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <div className="flex items-center gap-1 text-sm">
+                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                          <span className="text-gray-700">0</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-sm text-gray-400">
+                          <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" />
+                          <span>{course.like_count}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <CourseAuthorRow
+                      authorType={course.author_role === "admin" ? "admin" : "user"}
+                      author={course.author_nickname}
+                      badgeAfter
+                    />
+                    {course.hashtags.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {course.hashtags.map((label) => (
+                          <Badge key={label} tone="brand" shape="pill">
+                            #{label}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm text-gray-500">
+                      <div className="flex shrink-0 gap-2 whitespace-nowrap">
+                        {(course.startdate || course.enddate) && (
+                          <>
+                            <span className="text-steel">
+                              {course.startdate?.slice(0, 10) ?? ""}
+                              {" ~ "}
+                              {course.enddate?.slice(0, 10) ?? ""}
+                            </span>
+                            <span>•</span>
+                          </>
+                        )}
+                        <span>{course.place_count}곳</span>
+                      </div>
+                      <span className="text-steel shrink-0 text-xs whitespace-nowrap">
+                        등록 {formatDotDate(course.registtime)}
+                        {course.updatetime && ` · 수정 ${formatDotDate(course.updatetime)}`}
                       </span>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-1 text-sm text-gray-400">
-                    <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" />
-                    <span>{course.likes}</span>
-                  </div>
-                </div>
-              </Link>
-            ))
+                    </div>
+                  </Link>
+                </Card>
+              ))}
+            </div>
           ) : (
             <div className="py-12 text-center text-gray-400">
               <X className="mx-auto mb-2 h-10 w-10 opacity-30" />
@@ -725,6 +1025,20 @@ export default function Course() {
               >
                 필터 초기화
               </button>
+            </div>
+          )}
+
+          {/* 무한 스크롤 sentinel — 화면에 보이면 자동으로 다음 페이지 로드.
+              초기 조회 중에는 목록이 스피너로 바뀌어 페이지가 짧아지므로, sentinel 을 아예
+              렌더하지 않아 그 순간 뷰포트에 들어와 발화하는 일이 없게 한다. */}
+          {sharedHasMore && !sharedCoursesLoading && (
+            <div ref={setSharedSentinel} className="flex items-center justify-center gap-2 py-6">
+              {sharedCoursesLoadingMore && (
+                <>
+                  <span className="border-brand-500 h-6 w-6 animate-spin rounded-full border-[3px] border-gray-200 border-t-transparent" />
+                  <span className="text-sm font-medium text-gray-500">불러오는 중...</span>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -801,6 +1115,10 @@ export default function Course() {
                     <Link
                       key={course.id}
                       href={`/course/${course.id}`}
+                      data-course-id={course.id}
+                      onClick={() =>
+                        saveCourseListReturn("recommend", course.id, filters, showFilters)
+                      }
                       className="block rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
                     >
                       <CourseAuthorRow
@@ -879,13 +1197,23 @@ export default function Course() {
           {user && myCoursesError && (
             <p className="text-sm text-red-500">목록 조회 실패: {myCoursesError}</p>
           )}
+          {user && !myCoursesError && myDbCourses.length > 0 && (
+            <p className="text-sm text-gray-500">
+              <span className="font-semibold text-gray-800">{myDbCourses.length}개</span>의 코스
+            </p>
+          )}
           {user && !myCoursesError && myDbCourses.length === 0 && (
             <p className="text-stone py-8 text-center text-sm">아직 만든 코스가 없어요</p>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {myDbCourses.map((course) => (
               <Card key={course.course_id} asChild variant="interactive">
-                <Link href={`/course/${course.course_id}`} className="block">
+                <Link
+                  href={`/course/${course.course_id}`}
+                  data-course-id={course.course_id}
+                  onClick={() => saveCourseListReturn("my", course.course_id)}
+                  className="block"
+                >
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1.5">
                       <h3 className="text-ink truncate font-semibold">{course.course_nm}</h3>
@@ -949,6 +1277,18 @@ export default function Course() {
               </Card>
             ))}
           </div>
+
+          {/* 무한 스크롤 sentinel — 화면에 보이면 자동으로 다음 페이지 로드 */}
+          {myHasMore && (
+            <div ref={setMySentinel} className="flex items-center justify-center gap-2 py-6">
+              {myCoursesLoadingMore && (
+                <>
+                  <span className="border-brand-500 h-6 w-6 animate-spin rounded-full border-[3px] border-gray-200 border-t-transparent" />
+                  <span className="text-sm font-medium text-gray-500">불러오는 중...</span>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -979,19 +1319,14 @@ function CourseDetail({ id }: { id: string }) {
   const numId = Number(id);
   const router = useRouter();
   const { user } = useAuth();
-  const { myCourses, updateCourse, addCourse } = useCourseContext();
-
-  const contextCourse = myCourses.find((c) => c.id === numId);
 
   // 기존 코스 조회 — tb_course + tb_course_detail(+tb_place 조인)로 실제 데이터를 가져온다.
-  // (myCourses 는 메모리 세션 상태라 새로고침/다른 코스 클릭 시엔 이 fetch 가 진짜 데이터 소스다.)
   const [dbCourse, setDbCourse] = useState<MyCourse | null>(null);
-  // (아래에서 정의) DB 조회가 끝나기 전엔 contextCourse(다른 코스의 잔여/목업 데이터일 수 있음)를
-  // 화면에 노출하지 않는다 — 안 그러면 코스를 바꿔 선택할 때 잠깐 엉뚱한 데이터가 깜빡인다.
-  const [dbCourseOwned, setDbCourseOwned] = useState(false);
+  // 소유 여부는 register(등록자 id)만 저장해두고 user 와 매번 비교해서 판단한다.
+  // (로그인 상태값과 별개의 boolean 으로 한 번만 계산해두면 로그아웃해도 갱신되지 않는다.)
+  const [courseRegister, setCourseRegister] = useState<string | null>(null);
   const [dbCourseLoading, setDbCourseLoading] = useState(!isNew);
   const [dbCourseError, setDbCourseError] = useState("");
-  const effectiveContextCourse = !dbCourseLoading ? contextCourse : undefined;
   // tb_course_like 행 개수(즐겨찾기 수) — 상세화면에서 실시간 조회.
   const [likeCount, setLikeCount] = useState(0);
   // 코스 배지 — 포함된 장소들의 대분류+접근성 종합 상위 3개(개수 내림차순, 동률은 먼저 집계된 순서).
@@ -1171,7 +1506,7 @@ function CourseDetail({ id }: { id: string }) {
           startDate: courseRow.startdate ? String(courseRow.startdate).slice(0, 10) : undefined,
           endDate: courseRow.enddate ? String(courseRow.enddate).slice(0, 10) : undefined
         });
-        setDbCourseOwned(!!user && courseRow.register === user.id);
+        setCourseRegister(courseRow.register);
       } catch (e) {
         // Supabase/Postgrest 에러는 Error 인스턴스가 아니라 {message,...} 객체라
         // String(e) 는 "[object Object]"가 된다. message 필드를 우선 꺼낸다.
@@ -1186,7 +1521,7 @@ function CourseDetail({ id }: { id: string }) {
         if (active()) setDbCourseLoading(false);
       }
     },
-    [numId, user]
+    [numId]
   );
 
   useEffect(() => {
@@ -1199,7 +1534,7 @@ function CourseDetail({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, numId]);
 
-  const isOwned = isNew || dbCourseOwned || !!effectiveContextCourse;
+  const isOwned = isNew || (!!user && courseRegister === user.id);
 
   const baseCourseData: MyCourse = isNew
     ? {
@@ -1212,8 +1547,7 @@ function CourseDetail({ id }: { id: string }) {
         tags: [],
         days: [{ day: 1, places: [] }]
       }
-    : (dbCourse ??
-      effectiveContextCourse ?? {
+    : (dbCourse ?? {
         id: numId,
         title: dbCourseLoading ? "불러오는 중..." : "코스를 찾을 수 없어요",
         duration: "1일",
@@ -1368,6 +1702,60 @@ function CourseDetail({ id }: { id: string }) {
       setTimeout(() => setFavoriteNotice(""), 2500);
     } finally {
       setSharing(false);
+    }
+  };
+
+  // "내 코스에 추가" — 이 코스(장소·일정 그대로)를 내 소유의 새 코스로 복사한다.
+  const [addingCourse, setAddingCourse] = useState(false);
+  const handleAddToMyCourse = async () => {
+    if (!requireLoginOrRedirect(user, router, `/course/${id}`)) return;
+    if (!user || !dbCourse || addingCourse) return;
+    setAddingCourse(true);
+    try {
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+
+      const { data: course, error: courseErr } = await supabase
+        .from("tb_course")
+        .insert({
+          course_nm: dbCourse.title,
+          open_yn: "N", // 복사본은 기본적으로 비공개(내 코스)로 시작
+          startdate: dbCourse.startDate || null,
+          enddate: dbCourse.endDate || null,
+          register: user.id
+        })
+        .select("course_id")
+        .single();
+      if (courseErr) throw courseErr;
+
+      const detailRows = dbCourse.days.flatMap((d) =>
+        d.places
+          .filter((p) => p.placeId != null)
+          .map((p) => ({
+            course_id: course.course_id,
+            day: d.day,
+            place_id: p.placeId as number,
+            starthour: p.startHour,
+            endhour: p.endHour
+          }))
+      );
+      if (detailRows.length > 0) {
+        const { error: detailErr } = await supabase.from("tb_course_detail").insert(detailRows);
+        if (detailErr) throw detailErr;
+      }
+
+      router.push("/course?tab=my");
+    } catch (e) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : typeof e === "object" && e !== null && "message" in e
+            ? String((e as { message: unknown }).message)
+            : String(e);
+      setFavoriteNotice(message);
+      setTimeout(() => setFavoriteNotice(""), 2500);
+    } finally {
+      setAddingCourse(false);
     }
   };
 
@@ -1585,15 +1973,7 @@ function CourseDetail({ id }: { id: string }) {
           if (detailErr) throw detailErr;
         }
 
-        // 메모리 상의 내 코스 목록도 같이 맞추고, DB 에서 다시 읽어와 detail_id 등 최신 상태로 갱신.
-        updateCourse({
-          ...baseCourseData,
-          title: editTitle.trim(),
-          isPrivate: editIsPrivate,
-          days: editDays,
-          startDate: editStartDate || undefined,
-          endDate: editEndDate || undefined
-        });
+        // DB 에서 다시 읽어와 detail_id 등 최신 상태로 갱신.
         let alive = true;
         await loadCourseFromDb(() => alive);
         alive = false;
@@ -1651,19 +2031,6 @@ function CourseDetail({ id }: { id: string }) {
         if (detailErr) throw detailErr;
       }
 
-      // 내 코스 목록(현재 메모리 기반)에도 반영 — 방금 insert 한 실제 DB course_id 사용
-      addCourse({
-        id: course.course_id,
-        title: editTitle.trim(),
-        duration: editDays.length > 1 ? `${editDays.length}일` : "반일",
-        isPrivate: editIsPrivate,
-        rating: 0,
-        likes: 0,
-        tags: [],
-        days: editDays,
-        startDate: editStartDate || undefined,
-        endDate: editEndDate || undefined
-      });
       router.push("/course?tab=my"); // 새로 만든 코스가 있는 "내 코스" 탭으로
     } catch (e) {
       // Supabase/Postgrest 에러는 Error 인스턴스가 아니라 {message,...} 객체라
@@ -2146,7 +2513,10 @@ function CourseDetail({ id }: { id: string }) {
             {/* Header */}
             <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2.5">
               <button
-                onClick={() => router.push("/course?tab=my")}
+                onClick={() => {
+                  const saved = readCourseListReturn();
+                  router.push(saved ? `/course?tab=${saved.tab}` : "/course");
+                }}
                 className="rounded-lg p-1.5 text-gray-600 transition-colors hover:bg-gray-100"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -2218,11 +2588,11 @@ function CourseDetail({ id }: { id: string }) {
                 </div>
               )}
 
-              {!isNew && dbCourseLoading && !effectiveContextCourse ? (
+              {!isNew && dbCourseLoading ? (
                 <div className="flex flex-1 items-center justify-center py-12 text-sm text-gray-400">
                   불러오는 중...
                 </div>
-              ) : !isNew && !dbCourse && !effectiveContextCourse ? (
+              ) : !isNew && !dbCourse ? (
                 <div className="flex flex-1 flex-col items-center justify-center gap-1 py-12 text-sm text-gray-400">
                   <p>코스를 찾을 수 없어요</p>
                   {dbCourseError && <p className="text-xs text-gray-300">{dbCourseError}</p>}
@@ -2340,10 +2710,7 @@ function CourseDetail({ id }: { id: string }) {
 
             {/* Actions — 제목/버튼 사이만 스크롤되게, 이 줄은 하단에 고정.
                 모바일에서 하단 탭 네비게이션에 가려지지 않게 여백 확보 */}
-            {!(
-              (!isNew && dbCourseLoading && !effectiveContextCourse) ||
-              (!isNew && !dbCourse && !effectiveContextCourse)
-            ) && (
+            {!((!isNew && dbCourseLoading) || (!isNew && !dbCourse)) && (
               <div className="mb-16 flex shrink-0 gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
                 {isOwned ? (
                   <button
@@ -2354,8 +2721,12 @@ function CourseDetail({ id }: { id: string }) {
                     코스 편집
                   </button>
                 ) : (
-                  <button className="bg-brand-600 hover:bg-brand-700 flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-colors">
-                    내 코스에 추가
+                  <button
+                    onClick={handleAddToMyCourse}
+                    disabled={addingCourse}
+                    className="bg-brand-600 hover:bg-brand-700 flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+                  >
+                    {addingCourse ? "추가하는 중..." : "내 코스에 추가"}
                   </button>
                 )}
                 <button

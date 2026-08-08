@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { MobileNav } from "./layout/Navigation";
 import Header from "./layout/Header";
-import { CourseProvider } from "@/context/CourseContext";
 import { PlacesProvider } from "@/context/PlacesContext";
 import { AccessibilityProvider } from "@/context/AccessibilityContext";
 import { AuthProvider } from "@/context/AuthContext";
@@ -79,7 +78,7 @@ export default function RootShell({
     <AuthProvider>
       <AccessibilityProvider>
         <PlacesProvider initialPlaces={places} initialDetails={placeDetails} fromDb={fromDb}>
-          <CourseProvider>
+          <>
             <div className="bg-background min-h-screen">
               <NavigationProgress />
               <a
@@ -114,7 +113,7 @@ export default function RootShell({
                 }}
               />
             )}
-          </CourseProvider>
+          </>
         </PlacesProvider>
       </AccessibilityProvider>
     </AuthProvider>

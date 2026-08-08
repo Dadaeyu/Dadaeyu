@@ -382,7 +382,7 @@ async function fetchCombinedPlaces(
   if (dong) params.set("dong", dong);
   if (themes.length > 0) params.set("themes", themes.join(","));
   if (minRating > 0) params.set("minRating", String(minRating));
-  if (headcount > 1) params.set("headcount", String(headcount));
+  if (headcount >= 1) params.set("headcount", String(headcount));
   if (dateFrom) params.set("dateFrom", dateFrom);
   if (dateTo) params.set("dateTo", dateTo);
 

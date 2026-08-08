@@ -56,9 +56,9 @@ async function getRatedContentIds(minRating: number): Promise<number[]> {
 // 요청 인원(headcount)을 확실히 수용 못 하는 곳만 제외한다. (null = 정보 없음 → 제외 안 함)
 //  - accommax < headcount : 최대 수용이 요청보다 적음 (수용 초과)
 //  - accommin > headcount : 최소 인원이 요청보다 많음 (단체 전용 등, 인원 미달)
-//  ※ lt/gt 는 null 을 매칭하지 않으므로 "정보 없음"은 자동으로 통과된다. head=1 이면 필터 안 함.
+//  ※ lt/gt 는 null 을 매칭하지 않으므로 "정보 없음"은 자동으로 통과된다. 1명도 실제 값으로 취급해 필터한다.
 async function getHeadcountExcludeIds(headcount: number): Promise<number[]> {
-  if (headcount <= 1) return [];
+  if (headcount < 1) return [];
   const { data } = await supabase
     .from("tb_place_detail_normalized")
     .select("contentid")
