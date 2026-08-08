@@ -59,6 +59,10 @@ interface Props {
   focusMyLocationTrigger?: number;
   // 여러 구간의 경로선(코스 일정용). 구간별로 색상·점선 여부를 다르게 줄 수 있다.
   path?: MapPathSegment[];
+  /** 값이 바뀌면 path 전체가 화면에 들어오도록 panTo(bounds). 안내 경로 전용 */
+  fitPathKey?: string | number | null;
+  /** 하단 시트 등 UI가 가리는 높이(px). 경로 맞춤 시 bottom padding으로 사용 */
+  bottomOverlayPx?: number;
 }
 
 // ── 핀 렌더러 ──────────────────────────────────────────────
@@ -171,7 +175,9 @@ export default function KakaoMap({
   onCloseTooltip,
   myLocation = null,
   focusMyLocationTrigger = 0,
-  path = []
+  path = [],
+  fitPathKey = null,
+  bottomOverlayPx = 0
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
@@ -214,6 +220,33 @@ export default function KakaoMap({
       cancelled = true;
     };
   }, [center.lat, center.lng, level]);
+
+  // 컨테이너 크기 변경 시(상단 50% 분할 등) 지도 재배치 후 선택 마커를 보이는 영역 중앙에 맞춤
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let timer = 0;
+    const ro = new ResizeObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const map = mapRef.current;
+        if (!map || !window.kakao?.maps) return;
+        map.relayout();
+        if (fitPathKey != null && fitPathKey !== "") return;
+        if (!selectedId) return;
+        const marker = markers.find((m) => m.id === selectedId);
+        if (!marker) return;
+        const K = window.kakao.maps;
+        map.setCenter(new K.LatLng(marker.lat, marker.lng));
+      }, 50);
+    });
+    ro.observe(el);
+    return () => {
+      window.clearTimeout(timer);
+      ro.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapInitCount, selectedId, fitPathKey]);
 
   // 마커 동기화
   useEffect(() => {
@@ -284,8 +317,10 @@ export default function KakaoMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tooltip, mapInitCount]);
 
-  // [줌-투-마커] selectedId 변경 시 해당 마커로 줌인 — 필요 없으면 이 useEffect 삭제
+  // [줌-투-마커] selectedId 변경 시 해당 마커로 줌인 — 경로 맞춤 중이면 스킵
+  // fitPathKey는 deps에 넣지 않음: 안내 종료 시 마커로 다시 점프하지 않게
   useEffect(() => {
+    if (fitPathKey != null && fitPathKey !== "") return;
     if (!selectedId || !mapRef.current || !window.kakao?.maps) return;
     const marker = markers.find((m) => m.id === selectedId);
     if (!marker) return;
@@ -343,6 +378,42 @@ export default function KakaoMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(path), mapInitCount]);
 
+  // 경로 안내 시 전체 경로가 보이도록 영역 맞춤 (panTo = 부드러운 이동·줌)
+  useEffect(() => {
+    if (fitPathKey == null || fitPathKey === "") return;
+    if (!mapRef.current || !window.kakao?.maps) return;
+    const K = window.kakao.maps;
+
+    const bounds = new K.LatLngBounds();
+    let count = 0;
+    for (const segment of path) {
+      const pts = segment.points;
+      if (pts.length === 0) continue;
+      const step = pts.length > 200 ? Math.ceil(pts.length / 200) : 1;
+      for (let i = 0; i < pts.length; i += step) {
+        const p = pts[i];
+        if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue;
+        bounds.extend(new K.LatLng(p.lat, p.lng));
+        count += 1;
+      }
+      const last = pts[pts.length - 1];
+      if (Number.isFinite(last.lat) && Number.isFinite(last.lng)) {
+        bounds.extend(new K.LatLng(last.lat, last.lng));
+        count += 1;
+      }
+    }
+    if (count < 2) return;
+
+    mapRef.current.relayout();
+    // 화면보다 멀리 이동하면 카카오가 애니메이션 없이 점프할 수 있음
+    if (bottomOverlayPx > 0) {
+      mapRef.current.setBounds(bounds, 56, 28, bottomOverlayPx + 16, 28);
+    } else {
+      mapRef.current.panTo(bounds, 72);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitPathKey, mapInitCount, bottomOverlayPx, JSON.stringify(path)]);
+
   // 내 위치 마커 — myLocation이 바뀔 때마다 다시 그리고, null이면 제거
   useEffect(() => {
     if (!mapRef.current || !window.kakao?.maps) return;
@@ -364,13 +435,16 @@ export default function KakaoMap({
     myLocationOverlayRef.current = overlay;
   }, [myLocation, mapInitCount]);
 
-  // [내 위치로 이동] focusMyLocationTrigger가 바뀔 때(버튼 클릭 후 첫 위치 확인) 1회만 이동
+  // [내 위치로 이동] focusMyLocationTrigger가 바뀔 때 1회만 이동
+  // myLocation / fitPathKey를 deps에 넣지 않음 — GPS 갱신·안내 종료 시 카메라 재점프 방지
   useEffect(() => {
+    if (fitPathKey != null && fitPathKey !== "") return;
     if (!focusMyLocationTrigger || !myLocation || !mapRef.current || !window.kakao?.maps) return;
     const K = window.kakao.maps;
     mapRef.current.panTo(new K.LatLng(myLocation.lat, myLocation.lng));
     mapRef.current.setLevel(4, { animate: true });
-  }, [focusMyLocationTrigger, mapInitCount, myLocation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMyLocationTrigger, mapInitCount]);
 
   return (
     <>

@@ -102,6 +102,8 @@ export interface HomePlace {
   fee: string | null;
   phone: string | null;
   parking: string | null;
+  officialUrl: string | null;
+  reservationUrl: string | null;
   accessibility: HomeAccessibilityEvidence[];
 }
 

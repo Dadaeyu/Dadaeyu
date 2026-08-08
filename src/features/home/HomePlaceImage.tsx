@@ -2,7 +2,9 @@
 
 /* eslint-disable @next/next/no-img-element */
 
+import { MapPin } from "lucide-react";
 import { useState } from "react";
+import { shouldShowHomePlaceImage } from "@/features/home/homePresentation";
 
 export function HomePlaceImage({
   src,
@@ -13,36 +15,43 @@ export function HomePlaceImage({
   alt: string;
   className?: string;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const showImage = shouldShowHomePlaceImage(src, failedSource);
 
-  if (!src || failed) {
+  if (!src || !showImage) {
     return (
-      <div
-        className={`text-brand-900 relative isolate overflow-hidden bg-[linear-gradient(145deg,#d8f4e9_0%,#7cd5bd_48%,#1f8f7e_100%)] ${className}`}
+      <span
+        className={`text-brand-900 relative isolate block min-h-full overflow-hidden bg-[#e5f2ed] ${className}`}
         role="img"
-        aria-label={`${alt} 대표 이미지 준비 중`}
+        aria-label={`${alt}의 등록된 대표 사진이 없습니다.`}
+        data-image-state="fallback"
       >
         <span
-          className="absolute -top-[12%] -right-[12%] h-[58%] w-[58%] rounded-full border border-white/35"
+          className="absolute inset-0 [background-image:linear-gradient(rgba(31,143,126,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(31,143,126,0.12)_1px,transparent_1px)] [background-size:2rem_2rem] opacity-60"
           aria-hidden="true"
         />
         <span
-          className="absolute -top-[3%] -right-[3%] h-[36%] w-[36%] rounded-full border border-white/30"
+          className="border-brand-300/45 absolute top-[18%] -left-[12%] h-[72%] w-[78%] -rotate-6 rounded-[50%] border-[0.7rem]"
           aria-hidden="true"
         />
         <span
-          className="bg-brand-900/[0.12] absolute -bottom-[18%] -left-[15%] h-[68%] w-[68%] rounded-full blur-2xl"
+          className="bg-brand-700 absolute top-[29%] left-[19%] h-2.5 w-2.5 rounded-full ring-4 ring-white/75"
           aria-hidden="true"
         />
-        <span className="absolute inset-x-0 bottom-0 z-10 p-5 sm:p-6">
-          <span className="text-brand-900/60 block text-[0.65rem] font-bold tracking-[0.24em]">
-            DAEJEON
-          </span>
-          <span className="mt-1 block max-w-[16ch] text-xl leading-tight font-semibold sm:text-2xl">
-            {alt}
+        <span className="absolute inset-0 z-10 flex items-center justify-center p-4 text-center sm:p-5">
+          <span className="flex max-w-[15rem] flex-col items-center">
+            <span className="border-brand-200/80 text-brand-800 grid size-11 place-items-center rounded-2xl border bg-white/90 shadow-sm backdrop-blur-sm">
+              <MapPin className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <span className="text-ink mt-3 block text-sm font-semibold sm:text-base">
+              대표 사진이 없어요
+            </span>
+            <span className="text-brand-900/65 mt-1 hidden text-xs leading-5 min-[360px]:block">
+              주소와 방문 정보는 그대로 확인할 수 있어요
+            </span>
           </span>
         </span>
-      </div>
+      </span>
     );
   }
 
@@ -53,7 +62,8 @@ export function HomePlaceImage({
       className={className}
       loading="lazy"
       decoding="async"
-      onError={() => setFailed(true)}
+      data-image-state="loaded"
+      onError={() => setFailedSource(src)}
     />
   );
 }

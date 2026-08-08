@@ -14,7 +14,6 @@ import {
   Map,
   MessageCircle,
   Route,
-  Search,
   SlidersHorizontal
 } from "lucide-react";
 import { HomePlaceImage } from "@/features/home/HomePlaceImage";
@@ -27,7 +26,7 @@ import {
   summarizeVisitInfo,
   type HomeNeedId
 } from "@/features/home/homeData";
-import { getHomeSearchStatusLabel } from "@/features/home/homePresentation";
+import { getHomeRefinementStatusLabel } from "@/features/home/homePresentation";
 import type { HomeExperience } from "@/features/home/useHomeExperience";
 
 const NEED_ICONS = {
@@ -39,9 +38,9 @@ const NEED_ICONS = {
 } satisfies Record<HomeNeedId, typeof Accessibility>;
 
 const QUICK_SEARCHES = [
-  { label: "비 오는 날", query: "실내" },
-  { label: "아이와 함께", query: "어린이" },
-  { label: "가벼운 산책", query: "공원" }
+  { label: "비 오는 날", compactLabel: "비 오는 날", query: "실내" },
+  { label: "아이와 함께", compactLabel: "아이와", query: "어린이" },
+  { label: "가벼운 산책", compactLabel: "산책", query: "공원" }
 ] as const;
 
 export function HomeHero({
@@ -55,10 +54,12 @@ export function HomeHero({
   const displayName = auth.member?.nickname?.trim();
   const locationLabel = getLocationLabel(location.status, location.errorReason);
   const locationHelp = getLocationHelp(location.status, location.errorReason);
-  const searchStatusLabel = getHomeSearchStatusLabel(
+  const refinementStatusLabel = getHomeRefinementStatusLabel(
     experience.committedQuery,
     experience.loadState
   );
+  const mapQuery = experience.query.trim() || experience.committedQuery;
+  const mapHref = mapQuery ? `/map?query=${encodeURIComponent(mapQuery)}` : "/map";
 
   return (
     <section
@@ -68,7 +69,7 @@ export function HomeHero({
       <div className="p-4 sm:p-7 lg:p-8">
         <div className="home-heading-row flex items-start justify-between gap-3">
           <p className="text-brand-800 home-profile-label pt-2 text-sm font-semibold">
-            대전 여행 브리핑
+            대전 브리핑
           </p>
           <Link
             href={auth.user ? "/mypage" : "/login?next=%2F"}
@@ -94,71 +95,99 @@ export function HomeHero({
             </p>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <form
-              role="search"
+              className="min-w-0"
+              aria-labelledby="home-refine-title"
               onSubmit={(event) => {
                 event.preventDefault();
                 experience.submitSearch();
               }}
             >
-              <label htmlFor="home-search" className="sr-only">
-                장소, 활동, 필요한 편의시설 검색
-              </label>
-              <div className="home-search-row border-hairline bg-surface flex min-h-14 min-w-0 items-center gap-2 rounded-2xl border p-1.5 pl-3 shadow-[0_16px_40px_-34px_rgba(15,75,67,0.45)] sm:min-h-16 sm:p-2 sm:pl-4">
-                <Search className="text-steel h-5 w-5 shrink-0" aria-hidden="true" />
-                <input
-                  id="home-search"
-                  type="search"
-                  value={experience.query}
-                  onChange={(event) => experience.setQuery(event.target.value)}
-                  placeholder="장소·활동·편의시설 검색"
-                  className="home-search-input text-ink placeholder:text-steel min-h-11 min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none sm:min-h-12 sm:text-base"
-                />
-                <button
-                  type="submit"
-                  className="home-search-submit bg-brand-800 hover:bg-brand-900 grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white transition-colors sm:h-12 sm:w-12"
-                  aria-label="관광지 검색"
-                >
-                  <ArrowRight className="h-5 w-5" aria-hidden="true" />
-                </button>
+              <div className="border-hairline bg-surface min-w-0 rounded-2xl border p-2 shadow-[0_16px_40px_-34px_rgba(15,75,67,0.45)]">
+                <div className="px-2 pt-1">
+                  <label
+                    id="home-refine-title"
+                    htmlFor="home-search"
+                    className="text-brand-800 text-sm font-semibold"
+                  >
+                    추천 장소 좁히기
+                  </label>
+                  <p id="home-refine-help" className="text-steel mt-0.5 text-xs leading-5">
+                    홈에 모은 대전 여행지의 장소·활동·공개 편의 정보를 기준으로 봐요.
+                  </p>
+                </div>
+                <div className="home-search-row border-hairline focus-within:border-brand-400 focus-within:ring-brand-100 mt-2 flex min-h-12 min-w-0 items-center gap-2 rounded-xl border bg-white p-1.5 pl-3 transition-shadow focus-within:ring-2 sm:min-h-14">
+                  <SlidersHorizontal
+                    className="text-brand-700 h-5 w-5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="home-search"
+                    type="text"
+                    value={experience.query}
+                    onChange={(event) => experience.setQuery(event.target.value)}
+                    placeholder="예: 실내, 공원"
+                    maxLength={80}
+                    autoComplete="off"
+                    aria-describedby="home-refine-help"
+                    className="home-search-input text-ink placeholder:text-steel min-h-11 min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none sm:min-h-12 sm:text-base"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-brand-800 hover:bg-brand-900 inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg px-3 text-sm font-semibold text-white transition-colors min-[360px]:px-4 sm:min-h-12 sm:px-5"
+                    aria-label="입력한 조건으로 홈 추천 보기"
+                  >
+                    <span className="min-[360px]:hidden">추천</span>
+                    <span className="hidden min-[360px]:inline">추천 보기</span>
+                  </button>
+                </div>
               </div>
-              {searchStatusLabel ? (
+              {refinementStatusLabel ? (
                 <div className="border-brand-100 mt-2 flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2">
-                  <p className="text-slate line-clamp-1 text-sm" aria-live="polite">
-                    {searchStatusLabel}
+                  <p className="text-slate min-w-0 text-sm leading-5" aria-live="polite">
+                    {refinementStatusLabel}
                   </p>
                   <button
                     type="button"
                     onClick={experience.clearSearch}
                     className="text-brand-800 min-h-11 shrink-0 px-2 text-sm font-semibold"
                   >
-                    전체 보기
+                    조건 지우기
                   </button>
                 </div>
               ) : null}
             </form>
 
-            {!experience.committedQuery ? (
-              <div className="mt-3 grid grid-cols-3 gap-2" aria-label="상황별 빠른 검색">
-                <span className="sr-only">이럴 때</span>
-                {QUICK_SEARCHES.map((item) => (
+            <div className="mt-3 grid grid-cols-3 gap-2" aria-label="추천 빠른 조건">
+              {QUICK_SEARCHES.map((item) => {
+                const isActive = experience.committedQuery === item.query;
+                return (
                   <button
                     key={item.query}
                     type="button"
-                    onClick={() => experience.searchFor(item.query)}
-                    className="border-hairline text-slate hover:border-brand-300 hover:bg-brand-50 min-h-10 min-w-0 rounded-xl border bg-white px-1.5 text-xs leading-4 font-semibold transition-colors sm:px-3"
+                    onClick={() =>
+                      isActive ? experience.clearSearch() : experience.searchFor(item.query)
+                    }
+                    aria-pressed={isActive}
+                    aria-label={item.label}
+                    className={`border-hairline min-h-10 min-w-0 rounded-xl border px-1.5 text-xs leading-4 font-semibold transition-colors sm:px-3 ${
+                      isActive
+                        ? "border-brand-800 bg-brand-800 text-white"
+                        : "text-slate hover:border-brand-300 hover:bg-brand-50 bg-white"
+                    }`}
                   >
-                    {item.label}
+                    <span className="min-[360px]:hidden">{item.compactLabel}</span>
+                    <span className="hidden min-[360px]:inline">{item.label}</span>
                   </button>
-                ))}
-              </div>
-            ) : null}
+                );
+              })}
+            </div>
           </div>
         </div>
 
         <div
-          className="home-action-grid border-hairline mt-5 grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)_minmax(0,0.85fr)] gap-2 border-t pt-4 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,0.875fr)_minmax(0,0.875fr)]"
+          className="home-action-grid border-hairline mt-5 grid grid-cols-3 gap-2 border-t pt-4 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,0.875fr)_minmax(0,0.875fr)]"
           aria-label="여행 바로가기"
         >
           <button
@@ -169,14 +198,16 @@ export function HomeHero({
             aria-label="다유에게 물어보기"
           >
             <MessageCircle className="h-4 w-4" aria-hidden="true" />
-            <span className="truncate">다유에게</span>
+            <span className="min-[360px]:hidden">다유</span>
+            <span className="hidden min-[360px]:inline">다유에게</span>
           </button>
           <Link
-            href="/map"
-            className="border-hairline text-ink bg-surface hover:bg-brand-50 inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors"
+            href={mapHref}
+            className="border-hairline text-ink bg-surface hover:bg-brand-50 inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl border px-2 text-sm font-semibold transition-colors sm:px-3"
+            aria-label={mapQuery ? `지도에서 ${mapQuery} 장소 찾기` : "지도에서 전체 장소 찾기"}
           >
             <Map className="hidden h-4 w-4 sm:block" aria-hidden="true" />
-            <span className="truncate">지도</span>
+            <span className="truncate">장소 찾기</span>
           </Link>
           <button
             type="button"
@@ -217,24 +248,29 @@ export function HomeFeaturedPlace({ experience }: { experience: HomeExperience }
           >
             오늘 가볼 만한 곳
           </h2>
-          <div className="border-hairline bg-surface mt-3 rounded-[1.75rem] border px-5 py-8 text-center sm:px-8">
-            <p className="text-ink font-semibold">
-              {experience.loadState === "error"
-                ? "추천 장소를 불러오지 못했어요."
-                : "조건에 맞는 추천 장소가 아직 없어요."}
-            </p>
-            <p className="text-slate mt-2 text-sm leading-6">
-              {experience.loadError ?? "검색어나 도움 조건을 바꿔서 다시 찾아보세요."}
-            </p>
-            {experience.loadState === "error" ? (
-              <button
-                type="button"
-                onClick={experience.retry}
-                className="bg-brand-800 hover:bg-brand-900 mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold text-white transition-colors"
-              >
-                다시 불러오기
-              </button>
-            ) : null}
+          <div className="border-hairline bg-surface mt-3 flex min-h-[14rem] items-center justify-center rounded-[1.75rem] border px-5 py-8 text-center sm:min-h-[16rem] sm:px-8">
+            <div className="max-w-md">
+              <span className="border-brand-100 text-brand-800 mx-auto grid size-12 place-items-center rounded-2xl border bg-white shadow-sm">
+                <Map className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <p className="text-ink mt-4 font-semibold">
+                {experience.loadState === "error"
+                  ? "추천 장소를 불러오지 못했어요."
+                  : "조건에 맞는 추천 장소가 아직 없어요."}
+              </p>
+              <p className="text-slate mt-2 text-sm leading-6">
+                {experience.loadError ?? "입력 조건이나 도움 조건을 바꿔서 다시 살펴보세요."}
+              </p>
+              {experience.loadState === "error" ? (
+                <button
+                  type="button"
+                  onClick={experience.retry}
+                  className="bg-brand-800 hover:bg-brand-900 mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold text-white transition-colors"
+                >
+                  다시 불러오기
+                </button>
+              ) : null}
+            </div>
           </div>
         </section>
       );
@@ -298,7 +334,7 @@ export function HomeFeaturedPlace({ experience }: { experience: HomeExperience }
           <HomePlaceImage
             src={place.imageUrl}
             alt={place.title}
-            className="h-full w-full object-cover"
+            className="block h-full w-full object-cover"
           />
         </div>
         <div className="flex flex-col justify-between p-5 sm:p-6">

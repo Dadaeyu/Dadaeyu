@@ -173,11 +173,11 @@ export function HomePlaceDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <section className="border-hairline border-b md:grid md:min-h-[25rem] md:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-            <div className="bg-surface relative min-h-0 overflow-hidden">
+            <div className="bg-surface relative aspect-[16/9] min-h-0 overflow-hidden sm:aspect-[16/10] md:aspect-auto md:min-h-[25rem]">
               <HomePlaceImage
                 src={place.imageUrl}
                 alt={place.title}
-                className="aspect-[16/9] h-full w-full object-cover sm:aspect-[16/10] md:aspect-auto md:min-h-[25rem]"
+                className="block h-full w-full object-cover"
               />
               <span className="text-brand-900 absolute bottom-4 left-4 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold shadow-sm ring-1 ring-black/10 backdrop-blur-sm">
                 {place.category ?? "대전 관광"}
@@ -338,6 +338,27 @@ export function HomePlaceDialog({
                 ) : null}
               </dl>
 
+              {place.officialUrl || place.reservationUrl ? (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {place.officialUrl ? (
+                    <VisitResourceLink
+                      href={place.officialUrl}
+                      label="공식 홈페이지"
+                      description="운영·시설의 최신 정보 확인"
+                      placeTitle={place.title}
+                    />
+                  ) : null}
+                  {place.reservationUrl ? (
+                    <VisitResourceLink
+                      href={place.reservationUrl}
+                      label="예약 페이지"
+                      description="예약 가능 여부 확인"
+                      placeTitle={place.title}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="mt-7">
                 <h3 className="text-ink text-lg font-semibold">장소 소개</h3>
                 {place.overview ? (
@@ -411,7 +432,7 @@ export function HomePlaceDialog({
               </summary>
               <div className="border-hairline border-t bg-white px-4 pb-5">
                 <dl className="divide-hairline divide-y">
-                  <SourceRow label="정보 출처" value="한국관광공사 관광·무장애 여행정보" />
+                  <SourceRow label="정보 출처" value="한국관광공사 관광정보·무장애 여행정보" />
                   <SourceRow label="관광정보 갱신" value={sourceDate ?? "확인할 수 없음"} />
                   <SourceRow label="현장 접근성 확인일" value="제공되지 않음" />
                   <SourceRow label="실시간 운영·시설 상태" value="제공되지 않음" />
@@ -522,6 +543,37 @@ function VisitInfoRow({
         </dd>
       </div>
     </div>
+  );
+}
+
+function VisitResourceLink({
+  href,
+  label,
+  description,
+  placeTitle
+}: {
+  href: string;
+  label: string;
+  description: string;
+  placeTitle: string;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      aria-label={`${placeTitle} ${label} 새 창에서 열기`}
+      className="border-hairline hover:bg-surface group flex min-h-16 items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors"
+    >
+      <span className="min-w-0">
+        <span className="text-ink block font-semibold">{label}</span>
+        <span className="text-steel mt-0.5 block text-sm leading-5">{description}</span>
+      </span>
+      <ExternalLink
+        className="text-brand-700 h-5 w-5 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+        aria-hidden="true"
+      />
+    </a>
   );
 }
 

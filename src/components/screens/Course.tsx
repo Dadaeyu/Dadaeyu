@@ -30,7 +30,10 @@ import {
   ShieldCheck,
   User,
   RotateCcw,
-  Calendar
+  Calendar,
+  Navigation,
+  Footprints,
+  Car
 } from "lucide-react";
 import { Filters, DEFAULT_FILTERS, FilterFields, useFilters } from "@/components/PlaceFilters";
 import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
@@ -42,6 +45,13 @@ import { shareToKakaoTalk } from "@/lib/kakao/loadKakaoShare";
 import { fetchSharedCourses } from "@/lib/supabase/courses";
 import type { TourismSharedCourse } from "@/lib/supabase/types";
 import { requireLoginOrRedirect } from "@/lib/auth/require-login-redirect";
+import {
+  fetchDirectionsForStops,
+  formatRouteDistance,
+  formatRouteDuration,
+  openKakaoMapRoute,
+  type RouteMode
+} from "@/lib/kakao/directions";
 
 // 장소 검색으로 새로 추가된 장소(좌표 직접 보유)의 마커 색상 — 순서대로 순환 배정.
 const MARKER_COLORS = Object.values(PLACE_COLORS).map((c) => c.color);
@@ -321,144 +331,141 @@ export default function Course() {
   const [courseHashtags, setCourseHashtags] = useState<Record<number, string[]>>({});
 
   // (offset, limit) 구간의 내 코스 + 좋아요수/일정요약/해시태그를 조회한다. 초기 로드/더보기 양쪽에서 재사용.
-  const loadMyCoursesPage = useCallback(
-    async (userId: string, offset: number, limit: number) => {
-      const { createClient } = await import("@/utils/supabase/client");
-      const supabase = createClient();
-      // count: "exact" 는 Content-Range 응답 헤더에 담겨 오는데, 브라우저(RLS 경유) 요청에선
-      // CORS 로 그 헤더가 노출 안 돼 항상 null 로 잡혀 hasMore 가 절대 true 가 안 되는 문제가 있었다.
-      // (서버 API 로 호출하는 공유 코스 쪽은 Node 환경이라 CORS 제약이 없어 정상 동작함.)
-      // 그래서 count 대신 "받아온 개수가 요청한 limit 와 같으면 다음 페이지가 더 있다"로 판단한다.
-      const { data, error } = await supabase
-        .from("tb_course")
-        .select("course_id, course_nm, open_yn, startdate, enddate, registtime, updatetime")
-        .eq("register", userId)
-        .neq("delete_yn", "Y")
-        .order("registtime", { ascending: false })
-        .range(offset, offset + limit - 1);
-      if (error) throw error;
-      const courses = (data ?? []) as DbCourse[];
-      const hasMore = courses.length === limit;
+  const loadMyCoursesPage = useCallback(async (userId: string, offset: number, limit: number) => {
+    const { createClient } = await import("@/utils/supabase/client");
+    const supabase = createClient();
+    // count: "exact" 는 Content-Range 응답 헤더에 담겨 오는데, 브라우저(RLS 경유) 요청에선
+    // CORS 로 그 헤더가 노출 안 돼 항상 null 로 잡혀 hasMore 가 절대 true 가 안 되는 문제가 있었다.
+    // (서버 API 로 호출하는 공유 코스 쪽은 Node 환경이라 CORS 제약이 없어 정상 동작함.)
+    // 그래서 count 대신 "받아온 개수가 요청한 limit 와 같으면 다음 페이지가 더 있다"로 판단한다.
+    const { data, error } = await supabase
+      .from("tb_course")
+      .select("course_id, course_nm, open_yn, startdate, enddate, registtime, updatetime")
+      .eq("register", userId)
+      .neq("delete_yn", "Y")
+      .order("registtime", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    const courses = (data ?? []) as DbCourse[];
+    const hasMore = courses.length === limit;
 
-      const courseIds = courses.map((c) => c.course_id);
-      if (courseIds.length === 0) {
-        return { courses, hasMore, likeCounts: {}, meta: {}, hashtags: {} } as const;
-      }
+    const courseIds = courses.map((c) => c.course_id);
+    if (courseIds.length === 0) {
+      return { courses, hasMore, likeCounts: {}, meta: {}, hashtags: {} } as const;
+    }
 
-      const { data: likeRows, error: likeErr } = await supabase
-        .from("tb_course_like")
-        .select("course_id")
-        .in("course_id", courseIds);
-      if (likeErr) throw likeErr;
-      const likeCounts: Record<number, number> = {};
-      for (const row of likeRows ?? []) {
-        likeCounts[row.course_id] = (likeCounts[row.course_id] ?? 0) + 1;
-      }
+    const { data: likeRows, error: likeErr } = await supabase
+      .from("tb_course_like")
+      .select("course_id")
+      .in("course_id", courseIds);
+    if (likeErr) throw likeErr;
+    const likeCounts: Record<number, number> = {};
+    for (const row of likeRows ?? []) {
+      likeCounts[row.course_id] = (likeCounts[row.course_id] ?? 0) + 1;
+    }
 
-      const { data: detailRows, error: detailErr } = await supabase
-        .from("tb_course_detail")
-        .select("course_id, day, place_id")
-        .in("course_id", courseIds);
-      if (detailErr) throw detailErr;
-      const daysByCourse = new Map<number, Set<number>>();
-      const placesByCourse = new Map<number, number>();
-      const placeIdsByCourse = new Map<number, Set<number>>();
-      for (const row of detailRows ?? []) {
-        const days = daysByCourse.get(row.course_id) ?? new Set<number>();
-        days.add(row.day);
-        daysByCourse.set(row.course_id, days);
-        placesByCourse.set(row.course_id, (placesByCourse.get(row.course_id) ?? 0) + 1);
-        const placeIds = placeIdsByCourse.get(row.course_id) ?? new Set<number>();
-        placeIds.add(row.place_id);
-        placeIdsByCourse.set(row.course_id, placeIds);
-      }
-      const meta: Record<number, { duration: string; places: number }> = {};
-      for (const cid of courseIds) {
-        const dayCount = daysByCourse.get(cid)?.size ?? 0;
-        meta[cid] = {
-          duration: dayCount > 1 ? `${dayCount}일` : "반일",
-          places: placesByCourse.get(cid) ?? 0
-        };
-      }
+    const { data: detailRows, error: detailErr } = await supabase
+      .from("tb_course_detail")
+      .select("course_id, day, place_id")
+      .in("course_id", courseIds);
+    if (detailErr) throw detailErr;
+    const daysByCourse = new Map<number, Set<number>>();
+    const placesByCourse = new Map<number, number>();
+    const placeIdsByCourse = new Map<number, Set<number>>();
+    for (const row of detailRows ?? []) {
+      const days = daysByCourse.get(row.course_id) ?? new Set<number>();
+      days.add(row.day);
+      daysByCourse.set(row.course_id, days);
+      placesByCourse.set(row.course_id, (placesByCourse.get(row.course_id) ?? 0) + 1);
+      const placeIds = placeIdsByCourse.get(row.course_id) ?? new Set<number>();
+      placeIds.add(row.place_id);
+      placeIdsByCourse.set(row.course_id, placeIds);
+    }
+    const meta: Record<number, { duration: string; places: number }> = {};
+    for (const cid of courseIds) {
+      const dayCount = daysByCourse.get(cid)?.size ?? 0;
+      meta[cid] = {
+        duration: dayCount > 1 ? `${dayCount}일` : "반일",
+        places: placesByCourse.get(cid) ?? 0
+      };
+    }
 
-      // 해시태그 — 코스별 포함 장소들의 대분류(lclssystm1)+접근성 요약플래그를 종합해 상위 3개.
-      const allPlaceIds = [...new Set((detailRows ?? []).map((r) => r.place_id))];
-      const placesById = new Map<
-        number,
-        { contentid: string | number | null; lclssystm1: string | null }
-      >();
-      if (allPlaceIds.length > 0) {
-        const { data: placeRows, error: placeErr } = await supabase
-          .from("tb_place")
-          .select("place_id, contentid, lclssystm1")
-          .in("place_id", allPlaceIds);
-        if (placeErr) throw placeErr;
-        for (const p of placeRows ?? []) placesById.set(p.place_id, p);
-      }
+    // 해시태그 — 코스별 포함 장소들의 대분류(lclssystm1)+접근성 요약플래그를 종합해 상위 3개.
+    const allPlaceIds = [...new Set((detailRows ?? []).map((r) => r.place_id))];
+    const placesById = new Map<
+      number,
+      { contentid: string | number | null; lclssystm1: string | null }
+    >();
+    if (allPlaceIds.length > 0) {
+      const { data: placeRows, error: placeErr } = await supabase
+        .from("tb_place")
+        .select("place_id, contentid, lclssystm1")
+        .in("place_id", allPlaceIds);
+      if (placeErr) throw placeErr;
+      for (const p of placeRows ?? []) placesById.set(p.place_id, p);
+    }
 
-      const themeCodes = [...new Set([...placesById.values()].map((p) => p.lclssystm1))].filter(
-        (v): v is string => v != null
-      );
-      const themeLabelByCode = new Map<string, string>();
-      if (themeCodes.length > 0) {
-        const { data: codeRows, error: codeErr } = await supabase
-          .from("tb_code")
-          .select("code_id, code_nm")
-          .eq("code_group", "LCLSSYSTM1")
-          .in("code_id", themeCodes);
-        if (codeErr) throw codeErr;
-        for (const c of codeRows ?? []) themeLabelByCode.set(c.code_id, c.code_nm);
-      }
+    const themeCodes = [...new Set([...placesById.values()].map((p) => p.lclssystm1))].filter(
+      (v): v is string => v != null
+    );
+    const themeLabelByCode = new Map<string, string>();
+    if (themeCodes.length > 0) {
+      const { data: codeRows, error: codeErr } = await supabase
+        .from("tb_code")
+        .select("code_id, code_nm")
+        .eq("code_group", "LCLSSYSTM1")
+        .in("code_id", themeCodes);
+      if (codeErr) throw codeErr;
+      for (const c of codeRows ?? []) themeLabelByCode.set(c.code_id, c.code_nm);
+    }
 
-      const allContentIds = [
-        ...new Set(
-          [...placesById.values()]
-            .map((p) => (p.contentid != null && p.contentid !== "" ? Number(p.contentid) : null))
-            .filter((v): v is number => v != null)
-        )
-      ];
-      const bfFlagsByContentId = new Map<
-        number,
-        { has_blind: boolean; has_deaf: boolean; has_gait: boolean; has_infant: boolean }
-      >();
-      if (allContentIds.length > 0) {
-        const { data: bfRows, error: bfErr } = await supabase
-          .from("tb_place_barrierfree")
-          .select("contentid, has_blind, has_deaf, has_gait, has_infant")
-          .in("contentid", allContentIds);
-        if (bfErr) throw bfErr;
-        for (const b of bfRows ?? []) bfFlagsByContentId.set(Number(b.contentid), b);
-      }
+    const allContentIds = [
+      ...new Set(
+        [...placesById.values()]
+          .map((p) => (p.contentid != null && p.contentid !== "" ? Number(p.contentid) : null))
+          .filter((v): v is number => v != null)
+      )
+    ];
+    const bfFlagsByContentId = new Map<
+      number,
+      { has_blind: boolean; has_deaf: boolean; has_gait: boolean; has_infant: boolean }
+    >();
+    if (allContentIds.length > 0) {
+      const { data: bfRows, error: bfErr } = await supabase
+        .from("tb_place_barrierfree")
+        .select("contentid, has_blind, has_deaf, has_gait, has_infant")
+        .in("contentid", allContentIds);
+      if (bfErr) throw bfErr;
+      for (const b of bfRows ?? []) bfFlagsByContentId.set(Number(b.contentid), b);
+    }
 
-      const hashtags: Record<number, string[]> = {};
-      for (const cid of courseIds) {
-        const badgeCounts = new Map<string, number>();
-        const bump = (label: string | null | undefined) => {
-          if (!label) return;
-          badgeCounts.set(label, (badgeCounts.get(label) ?? 0) + 1);
-        };
-        for (const pid of placeIdsByCourse.get(cid) ?? []) {
-          const place = placesById.get(pid);
-          if (!place) continue;
-          if (place.lclssystm1) bump(themeLabelByCode.get(place.lclssystm1));
-          const contentId =
-            place.contentid != null && place.contentid !== "" ? Number(place.contentid) : null;
-          const flags = contentId != null ? bfFlagsByContentId.get(contentId) : undefined;
-          if (flags?.has_blind) bump("시각장애");
-          if (flags?.has_deaf) bump("청각장애");
-          if (flags?.has_gait) bump("보행장애");
-          if (flags?.has_infant) bump("영유아");
-        }
-        hashtags[cid] = [...badgeCounts.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 3)
-          .map(([label]) => label);
+    const hashtags: Record<number, string[]> = {};
+    for (const cid of courseIds) {
+      const badgeCounts = new Map<string, number>();
+      const bump = (label: string | null | undefined) => {
+        if (!label) return;
+        badgeCounts.set(label, (badgeCounts.get(label) ?? 0) + 1);
+      };
+      for (const pid of placeIdsByCourse.get(cid) ?? []) {
+        const place = placesById.get(pid);
+        if (!place) continue;
+        if (place.lclssystm1) bump(themeLabelByCode.get(place.lclssystm1));
+        const contentId =
+          place.contentid != null && place.contentid !== "" ? Number(place.contentid) : null;
+        const flags = contentId != null ? bfFlagsByContentId.get(contentId) : undefined;
+        if (flags?.has_blind) bump("시각장애");
+        if (flags?.has_deaf) bump("청각장애");
+        if (flags?.has_gait) bump("보행장애");
+        if (flags?.has_infant) bump("영유아");
       }
+      hashtags[cid] = [...badgeCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([label]) => label);
+    }
 
-      return { courses, hasMore, likeCounts, meta, hashtags } as const;
-    },
-    []
-  );
+    return { courses, hasMore, likeCounts, meta, hashtags } as const;
+  }, []);
 
   // user 는 Supabase 의 onAuthStateChange(토큰 자동 리프레시, 탭 포커스 복귀 시 세션 재검증 등)가
   // 일어날 때마다 "내용은 같아도 매번 새 객체 참조"로 갱신된다. 이 effect의 deps 에 user 객체
@@ -602,7 +609,8 @@ export default function Course() {
   const sharedGuCode = sharedAreaCodes.find((a) => a.name === sharedFilters.gu)?.code ?? "";
   // 반면 동 선택지는 필터 패널에서 "구"를 고르는 즉시(검색 누르기 전이라도) 바뀌어야 하므로
   // draft 기준으로 따로 계산한다.
-  const sharedDraftGuCode = sharedAreaCodes.find((a) => a.name === sharedFilterDraft.gu)?.code ?? "";
+  const sharedDraftGuCode =
+    sharedAreaCodes.find((a) => a.name === sharedFilterDraft.gu)?.code ?? "";
   const [sharedDongOptions, setSharedDongOptions] = useState<string[]>([]);
   useEffect(() => {
     if (!sharedDraftGuCode) {
@@ -689,16 +697,20 @@ export default function Course() {
     const generation = sharedGenerationRef.current; // 세대를 올리지 않고 현재 세대에 속한다
     setSharedCoursesLoadingMore(true);
     try {
-      const { items, hasMore } = await fetchSharedCourses(sharedDbCourses.length, SHARED_PAGE_SIZE, {
-        accessibility: sharedFilters.accessibility,
-        themes: sharedFilters.themes,
-        favoritesOnly: sharedFilters.favoritesOnly,
-        gu: sharedGuCode,
-        dong: sharedFilters.dong,
-        headcount: sharedFilters.headcount,
-        dateFrom: sharedFilters.dateFrom,
-        dateTo: sharedFilters.dateTo
-      });
+      const { items, hasMore } = await fetchSharedCourses(
+        sharedDbCourses.length,
+        SHARED_PAGE_SIZE,
+        {
+          accessibility: sharedFilters.accessibility,
+          themes: sharedFilters.themes,
+          favoritesOnly: sharedFilters.favoritesOnly,
+          gu: sharedGuCode,
+          dong: sharedFilters.dong,
+          headcount: sharedFilters.headcount,
+          dateFrom: sharedFilters.dateFrom,
+          dateTo: sharedFilters.dateTo
+        }
+      );
       if (sharedGenerationRef.current !== generation) return;
       setSharedDbCourses((prev) => [...prev, ...items]);
       setSharedHasMore(hasMore);
@@ -959,7 +971,12 @@ export default function Course() {
                     href={`/course/${course.course_id}`}
                     data-course-id={course.course_id}
                     onClick={() =>
-                      saveCourseListReturn("shared", course.course_id, sharedFilters, showSharedFilters)
+                      saveCourseListReturn(
+                        "shared",
+                        course.course_id,
+                        sharedFilters,
+                        showSharedFilters
+                      )
                     }
                     className="block"
                   >
@@ -1565,6 +1582,14 @@ function CourseDetail({ id }: { id: string }) {
   const [selectedSearchDetail, setSelectedSearchDetail] = useState<TourismDetail | null>(null);
   const [selectedSearchDetailLoading, setSelectedSearchDetailLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(isNew);
+  const [dayGuidePickerOpen, setDayGuidePickerOpen] = useState(false);
+  const [dayGuideMode, setDayGuideMode] = useState<RouteMode | null>(null);
+  const [dayGuideLoading, setDayGuideLoading] = useState(false);
+  const [dayGuideError, setDayGuideError] = useState<string | null>(null);
+  const [dayGuideDistanceM, setDayGuideDistanceM] = useState<number | null>(null);
+  const [dayGuideDurationSec, setDayGuideDurationSec] = useState<number | null>(null);
+  const [dayGuidePath, setDayGuidePath] = useState<MapPathSegment[] | null>(null);
+  const dayGuideRequestIdRef = useRef(0);
 
   // 모바일 편집 바텀시트 높이(%) — 핸들을 드래그해서 조절.
   // 하단 탭 네비게이션에 가려지는 부분은 시트를 위로 끌어올려서 볼 수 있게 한다(기본 65%, 최대 92%).
@@ -1820,6 +1845,86 @@ function CourseDetail({ id }: { id: string }) {
     : baseCourseData;
 
   const currentPlaces = courseData.days[activeDay - 1]?.places ?? [];
+
+  const dayGuideStops = currentPlaces
+    .filter(
+      (p) => p.lat != null && p.lng != null && Number.isFinite(p.lat) && Number.isFinite(p.lng)
+    )
+    .map((p) => ({ lat: p.lat as number, lng: p.lng as number, name: p.name }));
+
+  const clearDayGuide = () => {
+    dayGuideRequestIdRef.current += 1;
+    setDayGuideMode(null);
+    setDayGuideLoading(false);
+    setDayGuideError(null);
+    setDayGuideDistanceM(null);
+    setDayGuideDurationSec(null);
+    setDayGuidePath(null);
+    setDayGuidePickerOpen(false);
+  };
+
+  const startDayGuide = async (mode: RouteMode) => {
+    setDayGuidePickerOpen(false);
+    setDayGuideMode(mode);
+    setDayGuideLoading(true);
+    setDayGuideError(null);
+    setDayGuideDistanceM(null);
+    setDayGuideDurationSec(null);
+    const requestId = ++dayGuideRequestIdRef.current;
+
+    if (dayGuideStops.length < 2) {
+      setDayGuideLoading(false);
+      setDayGuidePath(null);
+      setDayGuideError("이 Day에 좌표가 있는 장소가 2곳 이상 있어야 안내할 수 있어요.");
+      return;
+    }
+
+    try {
+      const result = await fetchDirectionsForStops(dayGuideStops, mode);
+      if (requestId !== dayGuideRequestIdRef.current) return;
+      setDayGuidePath([
+        {
+          points: result.points,
+          color: DAY_LINE_COLORS[(activeDay - 1) % DAY_LINE_COLORS.length],
+          dashed: Boolean(result.fallback)
+        }
+      ]);
+      setDayGuideDistanceM(result.distanceM);
+      setDayGuideDurationSec(result.durationSec);
+      setDayGuideError(
+        result.fallback ? "대략 경로예요. 정확한 안내는 카카오맵에서 시작하세요." : null
+      );
+    } catch (e) {
+      if (requestId !== dayGuideRequestIdRef.current) return;
+      setDayGuidePath([
+        {
+          points: dayGuideStops,
+          color: DAY_LINE_COLORS[(activeDay - 1) % DAY_LINE_COLORS.length],
+          dashed: true
+        }
+      ]);
+      setDayGuideError(
+        e instanceof Error
+          ? `${e.message} 카카오맵으로 안내할 수 있어요.`
+          : "경로 미리보기에 실패했어요. 카카오맵으로 안내할 수 있어요."
+      );
+    } finally {
+      if (requestId === dayGuideRequestIdRef.current) {
+        setDayGuideLoading(false);
+      }
+    }
+  };
+
+  // Day 탭이 바뀌면 안내 중일 때 해당 Day로 다시 계산
+  useEffect(() => {
+    if (!dayGuideMode || isEditing) return;
+    const mode = dayGuideMode;
+    const timer = window.setTimeout(() => {
+      void startDayGuide(mode);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDay]);
 
   // KakaoMap 마커·경로선 — 특정 Day 만이 아니라 "모든 일정"을 Day 순서 → 각 Day 내 장소 순서로
   // 이어서 한 번에 보여준다(Day1 마지막 장소 → Day2 첫 장소 순으로 연결).
@@ -2711,49 +2816,138 @@ function CourseDetail({ id }: { id: string }) {
             {/* Actions — 제목/버튼 사이만 스크롤되게, 이 줄은 하단에 고정.
                 모바일에서 하단 탭 네비게이션에 가려지지 않게 여백 확보 */}
             {!((!isNew && dbCourseLoading) || (!isNew && !dbCourse)) && (
-              <div className="mb-16 flex shrink-0 gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
-                {isOwned ? (
+              <div className="mb-16 flex shrink-0 flex-col gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
+                {dayGuidePickerOpen ? (
+                  <div className="border-hairline bg-surface-soft space-y-2 rounded-xl border p-3">
+                    <p className="text-ink text-xs font-semibold">
+                      DAY {activeDay} 안내 · 이동 수단
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void startDayGuide("walk")}
+                        className="border-hairline flex items-center justify-center gap-1.5 rounded-lg border bg-white py-2.5 text-xs font-semibold"
+                      >
+                        <Footprints className="h-3.5 w-3.5" />
+                        도보
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void startDayGuide("car")}
+                        className="border-hairline flex items-center justify-center gap-1.5 rounded-lg border bg-white py-2.5 text-xs font-semibold"
+                      >
+                        <Car className="h-3.5 w-3.5" />
+                        자동차
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDayGuidePickerOpen(false)}
+                      className="text-stone w-full text-xs"
+                    >
+                      취소
+                    </button>
+                  </div>
+                ) : null}
+
+                {dayGuideMode ? (
+                  <div className="border-brand-200 bg-brand-50/70 space-y-2 rounded-xl border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-ink text-xs font-semibold">
+                          DAY {activeDay} · {dayGuideMode === "walk" ? "도보" : "자동차"}
+                          {dayGuideLoading ? " 경로 찾는 중…" : ""}
+                        </p>
+                        {!dayGuideLoading &&
+                        dayGuideDistanceM != null &&
+                        dayGuideDurationSec != null ? (
+                          <p className="text-stone mt-0.5 text-xs">
+                            {dayGuideStops.length}곳 · {formatRouteDistance(dayGuideDistanceM)} ·{" "}
+                            {formatRouteDuration(dayGuideDurationSec)}
+                          </p>
+                        ) : null}
+                        {dayGuideError ? (
+                          <p className="text-error mt-1 text-xs">{dayGuideError}</p>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={clearDayGuide}
+                        className="text-stone rounded-full p-1"
+                        aria-label="코스 안내 닫기"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={dayGuideStops.length < 2}
+                      onClick={() => dayGuideMode && openKakaoMapRoute(dayGuideStops, dayGuideMode)}
+                      className="bg-brand-700 hover:bg-brand-800 w-full rounded-lg py-2.5 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      카카오맵에서 안내 시작
+                    </button>
+                  </div>
+                ) : null}
+
+                <div className="flex gap-2">
+                  {isOwned ? (
+                    <button
+                      onClick={() => {
+                        clearDayGuide();
+                        setIsEditing(true);
+                      }}
+                      className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-2 py-2.5 text-sm font-semibold whitespace-nowrap text-white transition-colors hover:bg-amber-600"
+                    >
+                      <Pencil className="h-4 w-4 shrink-0" />
+                      코스 편집
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleAddToMyCourse}
+                      disabled={addingCourse}
+                      className="bg-brand-600 hover:bg-brand-700 min-w-0 flex-1 rounded-xl px-2 py-2.5 text-sm font-semibold whitespace-nowrap text-white transition-colors disabled:opacity-60"
+                    >
+                      {addingCourse ? "추가하는 중..." : "내 코스에 추가"}
+                    </button>
+                  )}
                   <button
-                    onClick={() => setIsEditing(true)}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
+                    onClick={handleToggleFavorite}
+                    disabled={favoriteBusy}
+                    className={`shrink-0 rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-60 ${favorited ? "border-red-300 bg-red-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
                   >
-                    <Pencil className="h-4 w-4" />
-                    코스 편집
+                    <Heart
+                      className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-700"}`}
+                    />
                   </button>
-                ) : (
                   <button
-                    onClick={handleAddToMyCourse}
-                    disabled={addingCourse}
-                    className="bg-brand-600 hover:bg-brand-700 flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+                    onClick={handleShareKakao}
+                    disabled={sharing}
+                    className="shrink-0 rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 disabled:opacity-60"
                   >
-                    {addingCourse ? "추가하는 중..." : "내 코스에 추가"}
+                    <Share2 className="h-4 w-4 text-gray-700" />
                   </button>
-                )}
+                  {isOwned && (
+                    <button
+                      onClick={handleDeleteCourse}
+                      disabled={deleting}
+                      className="shrink-0 rounded-xl border border-red-200 bg-white px-3 py-2.5 text-red-500 transition-colors hover:bg-red-50 disabled:opacity-60"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
                 <button
-                  onClick={handleToggleFavorite}
-                  disabled={favoriteBusy}
-                  className={`rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-60 ${favorited ? "border-red-300 bg-red-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                  type="button"
+                  onClick={() => {
+                    setDayGuidePickerOpen((v) => !v);
+                  }}
+                  className="border-brand-200 text-brand-800 hover:bg-brand-50 flex w-full items-center justify-center gap-1.5 rounded-xl border bg-white py-2.5 text-sm font-semibold transition-colors"
+                  aria-label="코스 안내"
                 >
-                  <Heart
-                    className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-700"}`}
-                  />
+                  <Navigation className="h-4 w-4 shrink-0" />
+                  안내
                 </button>
-                <button
-                  onClick={handleShareKakao}
-                  disabled={sharing}
-                  className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 disabled:opacity-60"
-                >
-                  <Share2 className="h-4 w-4 text-gray-700" />
-                </button>
-                {isOwned && (
-                  <button
-                    onClick={handleDeleteCourse}
-                    disabled={deleting}
-                    className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 disabled:opacity-60"
-                  >
-                    <Trash2 className="h-4 w-4 text-gray-700" />
-                  </button>
-                )}
               </div>
             )}
           </>
@@ -2773,7 +2967,12 @@ function CourseDetail({ id }: { id: string }) {
           onDeselect={() => {
             setSelectedSearchPlace(null);
           }}
-          path={coursePath}
+          path={dayGuidePath ?? coursePath}
+          fitPathKey={
+            dayGuideMode && dayGuidePath && !dayGuideLoading
+              ? `${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}`
+              : null
+          }
         />
       </div>
 
