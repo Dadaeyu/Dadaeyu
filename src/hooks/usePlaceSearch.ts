@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchKakaoPlaces, type SearchPlace } from "@/lib/search/kakaoSearch";
 
 export interface TourismDetail {
@@ -69,6 +69,17 @@ export function usePlaceSearch({
   });
   const [searchDetailId, setSearchDetailId] = useState<string | null>(null);
   const [areaCodes, setAreaCodes] = useState<AreaCode[]>([]);
+
+  // 입력창을 지웠는데 Enter를 안 눌러도, 실제 검색에 쓰이는 키워드를 바로 비워서
+  // "예전 검색어 + 새 필터" 조합으로 결과가 좁아지는 걸 막는다.
+  const handleKeywordChange = useCallback((next: string) => {
+    setKeyword(next);
+    if (next.trim() === "") {
+      setSearchRequest((current) =>
+        current.keyword === "" ? current : { ...current, keyword: "" }
+      );
+    }
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -186,7 +197,15 @@ export function usePlaceSearch({
     ]
   );
 
+  // 검색어·필터가 바뀔 때마다(첫 마운트 제외) 검색 결과가 도착한 뒤 지도 줌을
+  // 대전 전체가 보이는 초기 화면으로 되돌린다.
+  const [mapResetTrigger, setMapResetTrigger] = useState(0);
+  const isFirstSearchRun = useRef(true);
+
   useEffect(() => {
+    const skipReset = isFirstSearchRun.current;
+    isFirstSearchRun.current = false;
+
     const controller = new AbortController();
 
     void fetchCombinedPlaces(
@@ -209,11 +228,13 @@ export function usePlaceSearch({
         setSearchResult({ key: searchKey, places });
         setSearchDetailId(null);
         if (liked) setLikedPlaces(liked);
+        if (!skipReset) setMapResetTrigger((count) => count + 1);
       })
       .catch((error: unknown) => {
         if (!isAbortError(error)) {
           setSearchResult({ key: searchKey, places: [] });
           setSearchDetailId(null);
+          if (!skipReset) setMapResetTrigger((count) => count + 1);
         }
       });
 
@@ -292,7 +313,7 @@ export function usePlaceSearch({
 
   return {
     keyword,
-    setKeyword,
+    setKeyword: handleKeywordChange,
     searchPlaces,
     searchDetailId,
     setSearchDetailId,
@@ -306,7 +327,8 @@ export function usePlaceSearch({
     isLoadingDetail,
     handleSearch,
     focusPlaceById,
-    topRatedPlaces
+    topRatedPlaces,
+    mapResetTrigger
   };
 }
 

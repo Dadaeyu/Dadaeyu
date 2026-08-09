@@ -85,9 +85,13 @@ export async function GET(_request: Request, { params }: Params) {
       data: { user }
     } = await supabase.auth.getUser();
     let canEdit = false;
+    let canDelete = false;
     let liked = false;
     if (user) {
-      canEdit = user.id === writer_id || (await isAdminMember(supabase, user.id));
+      const owner = user.id === writer_id;
+      // 수정은 작성자 본인만. 삭제는 작성자 본인 또는 관리자(다른 사람 글도 삭제는 가능).
+      canEdit = owner;
+      canDelete = owner || (await isAdminMember(supabase, user.id));
       const { data: likeRow } = await supabase
         .from("tb_post_likes")
         .select("user_id")
@@ -110,6 +114,7 @@ export async function GET(_request: Request, { params }: Params) {
         images,
         files,
         can_edit: canEdit,
+        can_delete: canDelete,
         liked
       }
     });
@@ -147,8 +152,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!existing)
       return NextResponse.json({ error: "게시글을 찾을 수 없습니다." }, { status: 404 });
 
-    const owner = existing.writer_id === user.id;
-    if (!owner && !(await isAdminMember(supabase, user.id))) {
+    if (existing.writer_id !== user.id) {
       return NextResponse.json({ error: "본인 글만 수정할 수 있습니다." }, { status: 403 });
     }
 

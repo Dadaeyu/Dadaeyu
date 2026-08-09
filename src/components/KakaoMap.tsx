@@ -26,17 +26,25 @@ export interface MapMarker {
   lat: number;
   lng: number;
   color: string;
-  shape?: "pin" | "dot" | "heart";
+  shape?: "pin" | "dot" | "heart" | "teardrop";
+  // pin: 원 테두리/중앙 점 색. teardrop: 중앙 점 색.
+  borderColor?: string;
   /** 마커 안에 표시할 짧은 텍스트(예: 코스 방문 순서 번호). pin/dot에서만 그려진다. */
   label?: string;
 }
 
+// 마커 선택 시 지도 위에 뜨는 정보 카드. 값이 없는 필드(image/rating/barrierFree)는 카드에서 생략된다
+// — 카카오 검색 결과처럼 실제 데이터가 없는 경우 임의의 값을 지어내지 않기 위함.
 export interface TooltipInfo {
   lat: number;
   lng: number;
   name: string;
-  address: string;
-  phone?: string;
+  category?: string;
+  image?: string;
+  rating?: number;
+  barrierFree?: boolean;
+  // 썸네일이 없을 때 대체 아이콘의 배경/아이콘 색(출처별로 다르게 줄 수 있음).
+  accentColor?: string;
 }
 
 // 경로선 한 구간(코스 일정용). points 가 2개 미만이면 그리지 않는다.
@@ -63,6 +71,8 @@ interface Props {
   onCloseTooltip?: () => void;
   myLocation?: { lat: number; lng: number } | null;
   focusMyLocationTrigger?: number;
+  // 값이 바뀔 때마다(0 제외) 지도를 초기 중심·줌(대전 전체가 보이는 화면)으로 되돌린다.
+  resetViewTrigger?: number;
   // 여러 구간의 경로선(코스 일정용). 구간별로 색상·점선 여부를 다르게 줄 수 있다.
   path?: MapPathSegment[];
   /** 경로선 구간(day 있는 것) 클릭 시 그 구간의 day 값을 전달한다. */
@@ -74,7 +84,13 @@ interface Props {
 }
 
 // ── 핀 렌더러 ──────────────────────────────────────────────
-function renderDot(el: HTMLDivElement, color: string, selected: boolean, label?: string) {
+function renderDot(
+  el: HTMLDivElement,
+  color: string,
+  selected: boolean,
+  _borderColor?: string,
+  label?: string
+) {
   const size = selected ? 20 : 14;
   const labelEl = label
     ? `<div style="font-size:${Math.round(size / 1.9)}px;line-height:1;font-weight:700;color:white;">${label}</div>`
@@ -83,7 +99,13 @@ function renderDot(el: HTMLDivElement, color: string, selected: boolean, label?:
     <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.28);${selected ? `outline:3px solid ${color}55;outline-offset:1px;` : ""}cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;">${labelEl}</div>`;
 }
 
-function renderHeart(el: HTMLDivElement, color: string, selected: boolean) {
+function renderHeart(
+  el: HTMLDivElement,
+  color: string,
+  selected: boolean,
+  _borderColor?: string,
+  _label?: string
+) {
   const size = selected ? 26 : 20;
   el.innerHTML = `
     <div style="cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));${selected ? "transform:scale(1.15);" : ""}transition:transform 0.15s;">
@@ -93,28 +115,59 @@ function renderHeart(el: HTMLDivElement, color: string, selected: boolean) {
     </div>`;
 }
 
-function getRenderer(shape?: "pin" | "dot" | "heart") {
+function getRenderer(shape?: "pin" | "dot" | "heart" | "teardrop") {
   if (shape === "dot") return renderDot;
   if (shape === "heart") return renderHeart;
+  if (shape === "teardrop") return renderTeardrop;
   return renderPin;
 }
 
-function renderPin(el: HTMLDivElement, color: string, selected: boolean, label?: string) {
+// 카카오맵 스타일의 눈물방울 핀 — 단색 플랫 디자인, 중앙에 작은 원 하나만.
+function renderTeardrop(
+  el: HTMLDivElement,
+  color: string,
+  selected: boolean,
+  dotColor = "#191919",
+  _label?: string
+) {
+  const w = selected ? 34 : 28;
+  const h = Math.round(w * 1.25);
+  el.innerHTML = `
+    <div style="cursor:pointer;filter:drop-shadow(0 3px 5px rgba(0,0,0,0.25));${selected ? "transform:scale(1.12);" : ""}transition:transform 0.15s;">
+      <svg width="${w}" height="${h}" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2C7.58 2 4 5.58 4 10c0 6 8 12 8 12s8-6 8-12c0-4.42-3.58-8-8-8Z" fill="${color}"/>
+        <circle cx="12" cy="10" r="3.2" fill="${dotColor}"/>
+      </svg>
+    </div>`;
+}
+
+function renderPin(
+  el: HTMLDivElement,
+  color: string,
+  selected: boolean,
+  borderColor = "white",
+  label?: string
+) {
   const size = selected ? 36 : 28;
   const tri = Math.round(size / 3);
+  const sw = 1.5; // 삼각형 테두리 두께
   const dot = Math.round(size / 3.5);
   const ring = selected
     ? `box-shadow:0 0 0 6px ${color}30,0 2px 8px rgba(0,0,0,0.35);`
     : "box-shadow:0 2px 6px rgba(0,0,0,0.28);";
-  const inner = label
-    ? `<div style="font-size:${Math.round(size / 2.4)}px;line-height:1;font-weight:700;color:white;">${label}</div>`
-    : `<div style="width:${dot}px;height:${dot}px;background:white;border-radius:50%;"></div>`;
+  const centerDot = label
+    ? `<div style="width:${dot + 4}px;height:${dot + 4}px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:${Math.round((dot + 4) * 0.65)}px;font-weight:800;color:${borderColor};line-height:1;">${label}</div>`
+    : `<div style="width:${dot}px;height:${dot}px;background:${borderColor};border-radius:50%;"></div>`;
+  const triW = tri * 2;
+  const triH = tri;
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;cursor:pointer;${selected ? "transform:scale(1.15);" : ""}transition:transform 0.15s;">
-      <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid white;${ring}display:flex;align-items:center;justify-content:center;">
-        ${inner}
+      <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid ${borderColor};${ring}display:flex;align-items:center;justify-content:center;">
+        ${centerDot}
       </div>
-      <div style="width:0;height:0;border-left:${tri}px solid transparent;border-right:${tri}px solid transparent;border-top:${tri}px solid ${color};margin-top:-1px;"></div>
+      <svg width="${triW + sw * 2}" height="${triH + sw * 2}" viewBox="-${sw} -${sw} ${triW + sw * 2} ${triH + sw * 2}" style="margin-top:-3px;display:block;">
+        <polygon points="0,0 ${triW},0 ${triW / 2},${triH}" fill="${color}" stroke="${borderColor}" stroke-width="${sw}" stroke-linejoin="round"/>
+      </svg>
     </div>`;
 }
 
@@ -136,41 +189,80 @@ function createTooltipEl(tooltip: TooltipInfo, onClose: (() => void) | undefined
   const container = document.createElement("div");
   const card = document.createElement("div");
   card.style.cssText =
-    "position:relative;background:white;border-radius:12px;padding:10px 32px 10px 14px;box-shadow:0 4px 20px rgba(0,0,0,0.18);border:1px solid #e5e7eb;min-width:180px;max-width:240px;cursor:default;";
+    "position:relative;display:flex;gap:16px;background:white;border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,0.18);width:260px;cursor:default;";
+
+  // ── 썸네일(왼쪽, 80x80) — 이미지가 없으면 출처 색으로 톤을 맞춘 대체 아이콘을 보여준다(가짜 사진 X).
+  const accent = tooltip.accentColor ?? "#FEE500";
+  const thumb = document.createElement("div");
+  thumb.style.cssText =
+    "flex-shrink:0;width:80px;height:80px;border-radius:12px;overflow:hidden;background:" +
+    (tooltip.image ? "#f3f4f6" : `${accent}26`) +
+    ";display:flex;align-items:center;justify-content:center;";
+  if (tooltip.image) {
+    const img = document.createElement("img");
+    img.src = tooltip.image;
+    img.alt = tooltip.name;
+    img.style.cssText = "width:100%;height:100%;object-fit:cover;";
+    thumb.append(img);
+  } else {
+    thumb.innerHTML = `
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="${accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+        <circle cx="12" cy="10" r="3"/>
+      </svg>`;
+  }
+
+  // ── 오른쪽 정보 컬럼 ──────────────────────────────────────
+  const info = document.createElement("div");
+  info.style.cssText = "min-width:0;flex:1;padding-right:20px;";
+
+  const name = document.createElement("p");
+  name.textContent = tooltip.name;
+  name.style.cssText =
+    "font-weight:700;font-size:14px;color:#191919;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+  info.append(name);
+
+  if (tooltip.category) {
+    const category = document.createElement("p");
+    category.textContent = tooltip.category;
+    category.style.cssText =
+      "font-size:12px;color:#8c8c8c;margin:4px 0 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+    info.append(category);
+  }
+
+  if (typeof tooltip.rating === "number") {
+    const rating = document.createElement("div");
+    rating.style.cssText = "display:flex;align-items:center;gap:4px;margin-top:8px;";
+    rating.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="#FBBF24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
+      <span style="font-size:12px;font-weight:600;color:#374151;">${tooltip.rating.toFixed(1)}</span>`;
+    info.append(rating);
+  }
+
+  if (tooltip.barrierFree) {
+    const badge = document.createElement("span");
+    badge.textContent = "Barrier-Free";
+    badge.style.cssText =
+      "display:inline-block;margin-top:8px;padding:2px 8px;border-radius:9999px;background:#ECFDF5;color:#047857;font-size:11px;font-weight:600;";
+    info.append(badge);
+  }
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
-  closeButton.textContent = "✕";
   closeButton.setAttribute("aria-label", `${tooltip.name} 정보 닫기`);
   closeButton.style.cssText =
-    "position:absolute;top:7px;right:9px;background:none;border:none;cursor:pointer;color:#9ca3af;font-size:13px;line-height:1;padding:2px 4px;";
+    "position:absolute;top:8px;right:8px;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;color:#6b7280;font-size:13px;line-height:1;padding:0;";
+  closeButton.textContent = "×";
   closeButton.addEventListener("click", (event) => {
     event.stopPropagation();
     onClose?.();
   });
 
-  const name = document.createElement("p");
-  name.textContent = tooltip.name;
-  name.style.cssText =
-    "font-weight:700;font-size:13px;color:#111827;margin:0 0 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
-
-  const address = document.createElement("p");
-  address.textContent = tooltip.address;
-  address.style.cssText = "font-size:11px;color:#6b7280;margin:0 0 2px 0;line-height:1.4;";
-
-  card.append(closeButton, name, address);
-
-  if (tooltip.phone) {
-    const phone = document.createElement("p");
-    phone.textContent = tooltip.phone;
-    phone.style.cssText = "font-size:11px;color:#0891b2;margin:0;";
-    card.append(phone);
-  }
-
   const pointer = document.createElement("div");
   pointer.style.cssText =
-    "position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid white;";
-  card.append(pointer);
+    "position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid white;filter:drop-shadow(0 4px 3px rgba(0,0,0,0.06));";
+
+  card.append(thumb, info, closeButton, pointer);
   container.append(card);
   container.addEventListener("click", (event) => event.stopPropagation());
   return container;
@@ -189,6 +281,7 @@ export default function KakaoMap({
   onCloseTooltip,
   myLocation = null,
   focusMyLocationTrigger = 0,
+  resetViewTrigger = 0,
   path = [],
   onPathClick,
   fitPathKey = null,
@@ -206,6 +299,7 @@ export default function KakaoMap({
   const pathHoverElRef = useRef<HTMLDivElement | null>(null);
   const tooltipOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const myLocationOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
+  const zoomControlRef = useRef<kakao.maps.ZoomControl | null>(null);
   const [mapInitCount, setMapInitCount] = useState(0);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
 
@@ -226,7 +320,6 @@ export default function KakaoMap({
           level
         });
         mapRef.current = map;
-        map.addControl(new K.ZoomControl(), K.ControlPosition.TOPRIGHT);
         K.event.addListener(map, "click", () => onDeselectRef.current?.());
         setMapInitCount((count) => count + 1);
       })
@@ -266,6 +359,31 @@ export default function KakaoMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapInitCount, selectedId, fitPathKey]);
 
+  // 확대/축소 +/- 컨트롤은 데스크탑에서만. 모바일은 핀치 줌으로 충분해서 화면을 가리지 않게 뺀다.
+  useEffect(() => {
+    if (!mapRef.current || !window.kakao?.maps) return;
+    const K = window.kakao.maps;
+    const map = mapRef.current;
+    const mql = window.matchMedia("(min-width: 768px)");
+
+    const sync = (showControl: boolean) => {
+      if (showControl) {
+        if (!zoomControlRef.current) {
+          zoomControlRef.current = new K.ZoomControl();
+          map.addControl(zoomControlRef.current, K.ControlPosition.TOPRIGHT);
+        }
+      } else if (zoomControlRef.current) {
+        map.removeControl(zoomControlRef.current);
+        zoomControlRef.current = null;
+      }
+    };
+
+    sync(mql.matches);
+    const handleChange = (e: MediaQueryListEvent) => sync(e.matches);
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, [mapInitCount]);
+
   // 마커 동기화
   useEffect(() => {
     if (!mapRef.current || !window.kakao?.maps) return;
@@ -279,7 +397,7 @@ export default function KakaoMap({
       const el = document.createElement("div");
       markerElemsRef.current.set(marker.id, el);
       const render = getRenderer(marker.shape);
-      render(el, marker.color, marker.id === selectedId, marker.label);
+      render(el, marker.color, marker.id === selectedId, marker.borderColor, marker.label);
 
       const overlay = new K.CustomOverlay({
         position: new K.LatLng(marker.lat, marker.lng),
@@ -307,7 +425,7 @@ export default function KakaoMap({
       const el = markerElemsRef.current.get(marker.id);
       if (!el) return;
       const render = getRenderer(marker.shape);
-      render(el, marker.color, marker.id === selectedId, marker.label);
+      render(el, marker.color, marker.id === selectedId, marker.borderColor, marker.label);
     });
   }, [selectedId, markers]);
 
@@ -510,6 +628,14 @@ export default function KakaoMap({
     mapRef.current.setLevel(4, { animate: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusMyLocationTrigger, mapInitCount]);
+
+  // [지도 초기화] resetViewTrigger가 바뀔 때(검색·필터 변경) 대전 전체가 보이는 초기 화면으로 되돌린다.
+  useEffect(() => {
+    if (!resetViewTrigger || !mapRef.current || !window.kakao?.maps) return;
+    const K = window.kakao.maps;
+    mapRef.current.setCenter(new K.LatLng(MAP_CENTER.lat, MAP_CENTER.lng));
+    mapRef.current.setLevel(MAP_LEVEL, { animate: true });
+  }, [resetViewTrigger, mapInitCount]);
 
   return (
     <>

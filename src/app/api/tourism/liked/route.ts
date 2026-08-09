@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { supabase as anonClient } from "@/lib/supabase";
 import { T } from "@/lib/supabase/tables";
+import { getRatingsByContentId, getLikeCountsByContentId } from "@/lib/search/placeAggregates";
 
 // 로그인한 사용자가 tb_place_like에 저장한 장소들을 tb_place와 조인해 반환한다.
 // 필터 패널의 "즐겨찾기" 토글용.
@@ -24,19 +25,34 @@ export async function GET() {
 
   const { data, error } = await anonClient
     .from("tb_place")
-    .select("contentid, title, mapx, mapy, firstimage")
+    .select("contentid, title, addr1, mapx, mapy, firstimage, lclssystm1")
     .or("delete_yn.is.null,delete_yn.eq.N")
     .in("contentid", placeIds);
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
+  const ids = (data ?? []).map((p) => String(p.contentid));
+  const [ratings, likeCounts] = await Promise.all([
+    getRatingsByContentId(anonClient, ids),
+    getLikeCountsByContentId(anonClient, ids)
+  ]);
+
   return Response.json(
-    (data ?? []).map((p) => ({
-      id: String(p.contentid),
-      name: p.title,
-      lat: Number(p.mapy),
-      lng: Number(p.mapx),
-      image: p.firstimage ?? ""
-    }))
+    (data ?? []).map((p) => {
+      const cid = String(p.contentid);
+      const rating = ratings.get(cid);
+      return {
+        id: cid,
+        name: p.title,
+        lat: Number(p.mapy),
+        lng: Number(p.mapx),
+        image: p.firstimage ?? "",
+        address: p.addr1 ?? undefined,
+        categoryCode: p.lclssystm1 ?? undefined,
+        average_rating: rating?.average ?? null,
+        review_count: rating?.count ?? 0,
+        like_count: likeCounts.get(cid) ?? 0
+      };
+    })
   );
 }

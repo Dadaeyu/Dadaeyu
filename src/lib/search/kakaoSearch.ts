@@ -11,9 +11,14 @@ export interface SearchPlace {
   phone?: string;
   category?: string;
   placeUrl?: string;
-  // "후기" 게시판 별점 평균 (상위 평점 장소 목록에서만 채워짐)
+  // tb_place.lclssystm1 (대분류 코드, 예: "FD"/"NA") — DB 출처(source="db")일 때만 채워짐.
+  // 지도 마커를 카테고리별 색으로 칠하는 데 쓴다.
+  categoryCode?: string;
+  // "후기" 게시판 별점 평균 (DB 출처일 때만 채워짐)
   average_rating?: number | null;
   review_count?: number;
+  // tb_place_like에 저장된 즐겨찾기(찜) 수 — DB 출처일 때만 채워짐.
+  like_count?: number;
   // tb_place.place_id (내부 PK) — DB 출처(source="db")일 때만 채워짐.
   // tb_course_detail.place_id 등 place_id 를 FK로 쓰는 곳은 반드시 이 값을 써야 한다(contentid 아님).
   placeId?: number;

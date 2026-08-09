@@ -1248,6 +1248,7 @@ type PostDetail = {
   images: string[];
   files: AttachedFile[];
   can_edit: boolean;
+  can_delete: boolean;
   comment_yn: boolean;
   liked: boolean;
 };
@@ -1532,27 +1533,31 @@ function CommunityDetail({ id }: { id: string }) {
         <Badge tone={post.notice_yn ? "warn" : "tag"} shape="tag">
           {post.notice_yn ? "공지" : post.board_nm}
         </Badge>
-        {post.can_edit && (
+        {(post.can_edit || post.can_delete) && (
           <div className="flex w-full items-center gap-1 sm:ml-auto sm:w-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-h-11 flex-1 sm:flex-none"
-              onClick={() => router.push(`/community/new?edit=${post.id}`)}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              수정
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-error min-h-11 flex-1 sm:flex-none"
-              disabled={deleting}
-              onClick={handleDelete}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              삭제
-            </Button>
+            {post.can_edit && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-h-11 flex-1 sm:flex-none"
+                onClick={() => router.push(`/community/new?edit=${post.id}`)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                수정
+              </Button>
+            )}
+            {post.can_delete && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-error min-h-11 flex-1 sm:flex-none"
+                disabled={deleting}
+                onClick={handleDelete}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                삭제
+              </Button>
+            )}
           </div>
         )}
       </div>

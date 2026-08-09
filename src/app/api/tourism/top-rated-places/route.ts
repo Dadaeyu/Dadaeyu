@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getLikeCountsByContentId } from "@/lib/search/placeAggregates";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,8 @@ export async function GET() {
       lat: number;
       lng: number;
       image: string;
+      address?: string;
+      categoryCode?: string;
       average_rating: number | null;
       review_count: number;
     }[] = [];
@@ -49,7 +52,7 @@ export async function GET() {
     if (ranked.length > 0) {
       const { data: places, error: placesError } = await supabase
         .from("tb_place")
-        .select("place_id, contentid, title, mapx, mapy, firstimage")
+        .select("place_id, contentid, title, addr1, mapx, mapy, firstimage, lclssystm1")
         .in(
           "contentid",
           ranked.map((r) => r.contentId)
@@ -72,6 +75,8 @@ export async function GET() {
             lat: Number(p.mapy),
             lng: Number(p.mapx),
             image: p.firstimage ?? "",
+            address: p.addr1 ?? undefined,
+            categoryCode: p.lclssystm1 ?? undefined,
             average_rating: r.average,
             review_count: r.count
           };
@@ -86,7 +91,7 @@ export async function GET() {
 
       const { data: fillerRows, error: fillerError } = await supabase
         .from("tb_place")
-        .select("place_id, contentid, title, mapx, mapy, firstimage")
+        .select("place_id, contentid, title, addr1, mapx, mapy, firstimage, lclssystm1")
         .or("delete_yn.is.null,delete_yn.eq.N")
         .not("mapx", "is", null)
         .not("mapy", "is", null)
@@ -105,6 +110,8 @@ export async function GET() {
           lat: Number(p.mapy),
           lng: Number(p.mapx),
           image: p.firstimage ?? "",
+          address: p.addr1 ?? undefined,
+          categoryCode: p.lclssystm1 ?? undefined,
           average_rating: null,
           review_count: 0
         }));
@@ -112,7 +119,13 @@ export async function GET() {
       result = [...result, ...filler];
     }
 
-    return NextResponse.json({ places: result });
+    const likeCounts = await getLikeCountsByContentId(
+      supabase,
+      result.map((r) => r.id)
+    );
+    const resultWithLikes = result.map((r) => ({ ...r, like_count: likeCounts.get(r.id) ?? 0 }));
+
+    return NextResponse.json({ places: resultWithLikes });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to fetch top rated places" },

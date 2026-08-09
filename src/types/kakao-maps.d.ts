@@ -24,6 +24,7 @@ declare namespace kakao.maps {
     getLevel(): number;
     relayout(): void;
     addControl(control: object, position: number): void;
+    removeControl(control: object): void;
   }
 
   class CustomOverlay {

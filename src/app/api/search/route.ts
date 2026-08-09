@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { getBakeryPlaceIds, splitThemeSelection } from "@/lib/theme/bakeryTheme";
+import { getRatingsByContentId, getLikeCountsByContentId } from "@/lib/search/placeAggregates";
 
 // 접근성 필터 값(tb_code BARRIERFREE 의 code_id) → tb_place_barrierfree 의 has_* 플래그 매핑.
 // 필터 옵션은 /api/codes/filter-options 에서 오며 임산부(MT)·고령자(SN)는 데이터가 없어 제외된다.
@@ -158,7 +159,7 @@ export async function GET(request: Request) {
   if (contentId.trim()) {
     const { data, error } = await supabase
       .from("tb_place")
-      .select("place_id, contentid, title, mapx, mapy, firstimage")
+      .select("place_id, contentid, title, addr1, mapx, mapy, firstimage, lclssystm1")
       .eq("contentid", contentId.trim())
       .not("mapx", "is", null)
       .not("mapy", "is", null)
@@ -166,15 +167,30 @@ export async function GET(request: Request) {
 
     if (error) return Response.json({ error: error.message }, { status: 500 });
 
+    const ids = (data ?? []).map((p) => String(p.contentid));
+    const [ratings, likeCounts] = await Promise.all([
+      getRatingsByContentId(supabase, ids),
+      getLikeCountsByContentId(supabase, ids)
+    ]);
+
     return Response.json(
-      (data ?? []).map((p) => ({
-        id: String(p.contentid),
-        placeId: p.place_id,
-        name: p.title,
-        lat: Number(p.mapy),
-        lng: Number(p.mapx),
-        image: p.firstimage ?? ""
-      }))
+      (data ?? []).map((p) => {
+        const cid = String(p.contentid);
+        const rating = ratings.get(cid);
+        return {
+          id: cid,
+          placeId: p.place_id,
+          name: p.title,
+          lat: Number(p.mapy),
+          lng: Number(p.mapx),
+          image: p.firstimage ?? "",
+          address: p.addr1 ?? undefined,
+          categoryCode: p.lclssystm1 ?? undefined,
+          average_rating: rating?.average ?? null,
+          review_count: rating?.count ?? 0,
+          like_count: likeCounts.get(cid) ?? 0
+        };
+      })
     );
   }
 
@@ -192,7 +208,7 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from("tb_place")
-    .select("place_id, contentid, title, mapx, mapy, firstimage")
+    .select("place_id, contentid, title, addr1, mapx, mapy, firstimage, lclssystm1")
     .or("delete_yn.is.null,delete_yn.eq.N")
     .eq("use_yn", "Y") // 관리자가 숨기지 않은 장소만
     .not("mapx", "is", null)
@@ -246,14 +262,29 @@ export async function GET(request: Request) {
   const { data, error } = await finalQuery;
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
+  const ids = (data ?? []).map((p) => String(p.contentid));
+  const [ratings, likeCounts] = await Promise.all([
+    getRatingsByContentId(supabase, ids),
+    getLikeCountsByContentId(supabase, ids)
+  ]);
+
   return Response.json(
-    (data ?? []).map((p) => ({
-      id: String(p.contentid),
-      placeId: p.place_id,
-      name: p.title,
-      lat: Number(p.mapy),
-      lng: Number(p.mapx),
-      image: p.firstimage ?? ""
-    }))
+    (data ?? []).map((p) => {
+      const cid = String(p.contentid);
+      const rating = ratings.get(cid);
+      return {
+        id: cid,
+        placeId: p.place_id,
+        name: p.title,
+        lat: Number(p.mapy),
+        lng: Number(p.mapx),
+        image: p.firstimage ?? "",
+        address: p.addr1 ?? undefined,
+        categoryCode: p.lclssystm1 ?? undefined,
+        average_rating: rating?.average ?? null,
+        review_count: rating?.count ?? 0,
+        like_count: likeCounts.get(cid) ?? 0
+      };
+    })
   );
 }

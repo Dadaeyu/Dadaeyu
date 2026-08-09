@@ -2,21 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, Filter, LocateFixed, X } from "lucide-react";
+import { Search, Filter, LocateFixed, X, ChevronDown } from "lucide-react";
 import { useFilters } from "@/components/PlaceFilters";
-import { PLACE_COLORS } from "@/data/placesData";
-import KakaoMap, { type MapMarker, type MapPathSegment } from "@/components/KakaoMap";
+import KakaoMap, {
+  type MapMarker,
+  type MapPathSegment,
+  type TooltipInfo
+} from "@/components/KakaoMap";
 import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
 import TourismDetailPanel, {
   type PlaceRouteGuideState
 } from "@/components/search/TourismDetailPanel";
 import SearchResultList from "@/components/search/SearchResultList";
 import { FilterOverlayPanel } from "@/components/search/FilterPanel";
+import { getCategoryColor } from "@/lib/search/categoryColors";
 import { usePlaceSearch } from "@/hooks/usePlaceSearch";
 import { useMyLocation, type MyLocationErrorReason } from "@/hooks/useMyLocation";
 import { fetchDirections, openKakaoMapRoute, type RouteMode } from "@/lib/kakao/directions";
-
-const MARKER_COLORS = Object.values(PLACE_COLORS).map((c) => c.color);
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────
 // 지도 화면: 사이드바(검색/필터/목록) + KakaoMap. usePlaceSearch·useMyLocation 훅으로
@@ -29,6 +31,7 @@ export default function Map() {
   const mapOnly = searchParams.get("mode") === "map";
 
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [resultsMinimized, setResultsMinimized] = useState(false);
   const { filters, set, toggleList, reset, activeCount } = useFilters({
     themes: initialTheme ? [initialTheme] : []
   });
@@ -49,7 +52,8 @@ export default function Map() {
     isLoadingDetail,
     handleSearch,
     focusPlaceById,
-    topRatedPlaces
+    topRatedPlaces,
+    mapResetTrigger
   } = usePlaceSearch({
     accessibility: filters.accessibility,
     gu: filters.gu,
@@ -72,7 +76,9 @@ export default function Map() {
     status: myLocationStatus,
     errorReason: myLocationError,
     start: startMyLocation,
-    focusTrigger: focusMyLocationTrigger
+    reset: resetMyLocation,
+    focusTrigger: focusMyLocationTrigger,
+    resetTrigger: myLocationResetTrigger
   } = useMyLocation();
 
   const [locationToastDismissed, setLocationToastDismissed] = useState(false);
@@ -89,6 +95,15 @@ export default function Map() {
   const handleStartMyLocation = () => {
     setLocationToastDismissed(false);
     startMyLocation();
+  };
+
+  // 내 위치 버튼 토글: 켜져 있으면 끄면서 대전 전체 화면으로, 꺼져 있으면 내 위치를 조회한다.
+  const handleLocateClick = () => {
+    if (myLocationStatus === "active") {
+      resetMyLocation();
+    } else {
+      handleStartMyLocation();
+    }
   };
 
   const [routePath, setRoutePath] = useState<MapPathSegment[]>([]);
@@ -240,9 +255,23 @@ export default function Map() {
   };
 
   const displayPlaces = searchPlaces.length > 0 ? searchPlaces : topRatedPlaces;
-  // 상위 평점 장소는 목록에 5개 다 보여주되, 지도 마커는 클릭해서 선택하기 전까진 띄우지 않는다.
-  const markerPlaces =
-    searchPlaces.length > 0 ? searchPlaces : topRatedPlaces.filter((p) => p.id === searchDetailId);
+  // 검색 전에는 핫플레이스 5곳을 목록·지도 마커 모두에 바로 보여준다.
+  const markerPlaces = searchPlaces.length > 0 ? searchPlaces : topRatedPlaces;
+
+  // 카카오 검색 마커를 선택했을 때만 지도 위에 미니 정보 카드를 띄운다.
+  // 카카오 검색 결과에는 썸네일/평점/배리어프리 데이터가 없으므로 해당 필드는 비워 두면 카드에서 자동으로 생략된다.
+  const selectedKakaoPlace = markerPlaces.find(
+    (sp) => sp.id === searchDetailId && sp.source === "kakao"
+  );
+  const kakaoTooltip: TooltipInfo | null = selectedKakaoPlace
+    ? {
+        lat: selectedKakaoPlace.lat,
+        lng: selectedKakaoPlace.lng,
+        name: selectedKakaoPlace.name,
+        category: selectedKakaoPlace.category?.split(" > ").pop(),
+        accentColor: "#FEE500"
+      }
+    : null;
 
   // 모바일/mapOnly: 상세 열리면 지도·시트를 실제 상·하 50%로 분할 (오버레이 아님)
   const splitMapForDetail = Boolean(searchDetail);
@@ -339,23 +368,49 @@ export default function Map() {
 
           {searchPlaces.length > 0 && !showMobileFilters && !searchDetail ? (
             <section
-              className={`${mapOnly ? "" : "md:hidden"} border-hairline absolute top-20 right-3 left-3 z-20 max-h-[min(46vh,24rem)] overflow-y-auto rounded-lg border bg-white shadow-xl`}
+              className={`${mapOnly ? "" : "md:hidden"} border-hairline absolute top-20 right-3 left-3 z-20 overflow-hidden rounded-lg border bg-white shadow-xl`}
               aria-label={`검색 결과 ${searchPlaces.length}개`}
             >
-              <div className="border-hairline sticky top-0 border-b bg-white px-4 py-3">
-                <p className="text-ink text-sm font-semibold">검색 결과 {searchPlaces.length}개</p>
-                <p className="text-steel mt-0.5 text-xs">
-                  장소를 선택하면 상세 정보를 확인할 수 있습니다.
-                </p>
-              </div>
-              <SearchResultList places={searchPlaces} onSelect={selectPlace} />
+              <button
+                type="button"
+                onClick={() => setResultsMinimized((v) => !v)}
+                className="border-hairline flex w-full items-center justify-between gap-2 border-b bg-white px-4 py-3 text-left"
+                aria-expanded={!resultsMinimized}
+              >
+                <div className="min-w-0">
+                  <p className="text-ink text-sm font-semibold">
+                    검색 결과 {searchPlaces.length}개
+                  </p>
+                  {!resultsMinimized && (
+                    <p className="text-steel mt-0.5 text-xs">
+                      장소를 선택하면 상세 정보를 확인할 수 있습니다.
+                    </p>
+                  )}
+                </div>
+                <ChevronDown
+                  className={`text-steel h-4 w-4 shrink-0 transition-transform ${resultsMinimized ? "" : "rotate-180"}`}
+                />
+              </button>
+              {!resultsMinimized && (
+                <div className="max-h-[min(46vh,24rem)] overflow-y-auto">
+                  <SearchResultList places={searchPlaces} onSelect={selectPlace} />
+                </div>
+              )}
             </section>
           ) : null}
 
           <KakaoMap
-            markers={markerPlaces.map((sp, i): MapMarker => {
+            markers={markerPlaces.map((sp): MapMarker => {
               if (sp.source === "kakao") {
-                return { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#0891b2", shape: "dot" };
+                // 눈물방울 핀 + 카카오 브랜드 컬러(노랑 + 검정 중앙 점)로 카카오 검색 결과임을 표시.
+                return {
+                  id: sp.id,
+                  lat: sp.lat,
+                  lng: sp.lng,
+                  color: "#FEE500",
+                  borderColor: "#191919",
+                  shape: "teardrop"
+                };
               }
               if (likedIds.has(sp.id)) {
                 return { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#ef4444", shape: "heart" };
@@ -364,7 +419,7 @@ export default function Map() {
                 id: sp.id,
                 lat: sp.lat,
                 lng: sp.lng,
-                color: MARKER_COLORS[i % MARKER_COLORS.length]
+                color: getCategoryColor(sp.categoryCode)
               };
             })}
             selectedId={searchDetailId}
@@ -372,8 +427,11 @@ export default function Map() {
             onDeselect={() => {
               backFromDetail();
             }}
+            tooltip={kakaoTooltip}
+            onCloseTooltip={backFromDetail}
             myLocation={myLocation}
             focusMyLocationTrigger={focusMyLocationTrigger}
+            resetViewTrigger={mapResetTrigger + myLocationResetTrigger}
             path={routePath}
             fitPathKey={
               routeGuide && !routeGuide.loading
@@ -404,7 +462,7 @@ export default function Map() {
             <div
               id="map-location-error"
               role="alert"
-              className="border-hairline bg-background absolute right-4 bottom-[4.75rem] z-20 w-[min(16rem,calc(100%-2rem))] rounded-2xl border p-3.5 shadow-lg"
+              className="border-hairline bg-background absolute right-4 bottom-[9.25rem] z-[60] w-[min(16rem,calc(100%-2rem))] rounded-2xl border p-3.5 shadow-lg md:bottom-16"
             >
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
@@ -427,17 +485,19 @@ export default function Map() {
             </div>
           ) : null}
 
+          {/* 내 위치 확인 버튼 — 켜져 있을 때 다시 누르면 대전 전체 화면으로 되돌아간다 */}
           <button
             type="button"
-            onClick={handleStartMyLocation}
-            className={`absolute right-4 bottom-4 z-20 flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-colors ${
+            onClick={handleLocateClick}
+            className={`absolute right-4 bottom-20 z-[60] flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-colors md:bottom-4 ${
               myLocationStatus === "active"
                 ? "bg-blue-600 text-white hover:bg-blue-700"
                 : myLocationStatus === "error"
                   ? "border-error/30 text-error border bg-white hover:bg-red-50"
                   : "bg-white text-gray-600 hover:bg-gray-50"
             }`}
-            aria-label="내 위치 확인"
+            aria-label={myLocationStatus === "active" ? "대전 전체 보기" : "내 위치 확인"}
+            aria-pressed={myLocationStatus === "active"}
             aria-describedby={showLocationErrorToast ? "map-location-error" : undefined}
           >
             <LocateFixed
