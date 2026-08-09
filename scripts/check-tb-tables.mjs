@@ -96,9 +96,6 @@ async function main() {
     );
   }
 
-  const testStatus = await probe("tb_test");
-  console.log(`\n기타: tb_test → ${testStatus}`);
-
   console.log("\n" + "─".repeat(56));
   console.log("요약");
   console.log(`  tb_ 테이블 존재: ${tbFound.length}/${BASE_NAMES.length}`);

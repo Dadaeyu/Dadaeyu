@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { T } from "@/lib/supabase/tables";
 import type { TourismCoursePlace, TourismSharedCourse } from "@/lib/supabase/types";
+import { getBakeryPlaceIds, splitThemeSelection } from "@/lib/theme/bakeryTheme";
 
 export const dynamic = "force-dynamic";
 
@@ -70,16 +71,26 @@ async function courseIdsContainingPlaces(
   return new Set((data ?? []).map((r) => r.course_id as number));
 }
 
-/** 선택된 테마 코드(LCLSSYSTM1)에 해당하는 장소가 하나라도 있는 코스 id 집합 */
+/** 선택된 테마 코드(LCLSSYSTM1)에 해당하는 장소가 하나라도 있는 코스 id 집합.
+ * "빵지순례"(BK)는 tb_code 상 가상 코드라 lclssystm1로 못 걸러서 getBakeryPlaceIds()로 따로 구한다. */
 async function courseIdsMatchingThemes(
   admin: ReturnType<typeof createAdminClient>,
   themeCodes: string[]
 ): Promise<Set<number>> {
   if (themeCodes.length === 0) return new Set();
-  const { data, error } = await admin.from(T.place).select("place_id").in("lclssystm1", themeCodes);
-  if (error) throw error;
-  const placeIds = (data ?? []).map((p) => p.place_id as number);
-  return courseIdsContainingPlaces(admin, placeIds);
+  const { officialCodes, includeBakery } = splitThemeSelection(themeCodes);
+
+  const placeIds = new Set<number>();
+  if (officialCodes.length > 0) {
+    const { data, error } = await admin.from(T.place).select("place_id").in("lclssystm1", officialCodes);
+    if (error) throw error;
+    for (const p of data ?? []) placeIds.add(p.place_id as number);
+  }
+  if (includeBakery) {
+    for (const id of await getBakeryPlaceIds()) placeIds.add(id);
+  }
+
+  return courseIdsContainingPlaces(admin, [...placeIds]);
 }
 
 /** 선택된 접근성 코드(BARRIERFREE)에 해당하는 장소가 하나라도 있는 코스 id 집합 */

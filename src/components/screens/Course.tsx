@@ -40,7 +40,6 @@ import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
 import TourismDetailPanel from "@/components/search/TourismDetailPanel";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import { usePlaceSearch, type TourismDetail } from "@/hooks/usePlaceSearch";
-import { PLACE_COLORS } from "@/data/placesData";
 import { shareToKakaoTalk } from "@/lib/kakao/loadKakaoShare";
 import { fetchSharedCourses } from "@/lib/supabase/courses";
 import type { TourismSharedCourse } from "@/lib/supabase/types";
@@ -53,9 +52,8 @@ import {
   type RouteMode
 } from "@/lib/kakao/directions";
 
-// 장소 검색으로 새로 추가된 장소(좌표 직접 보유)의 마커 색상 — 순서대로 순환 배정.
-const MARKER_COLORS = Object.values(PLACE_COLORS).map((c) => c.color);
-// Day(일정)별 경로선 색상 — Day 순서대로 순환 배정(마커 색과는 별개 팔레트).
+// Day(일정)별 마커·경로선 색상 — Day 순서대로 순환 배정. 마커와 경로선이 같은 팔레트를 써야
+// "이 색 마커들이 이 색 선으로 이어진 게 같은 Day"라는 게 지도에서 바로 보인다.
 const DAY_LINE_COLORS = [
   "#16a34a",
   "#2563eb",
@@ -164,6 +162,74 @@ function clearCourseListReturn() {
   }
 }
 
+// AI 추천 코스는 저장 전이라 실제 course_id가 없다 — 목록 카드를 누르면 그 초안을
+// sessionStorage에 넣어두고 이 고정 id로 상세 화면(/course/[id])에 진입, 거기서 그대로 읽어와 보여준다.
+const AI_PREVIEW_ROUTE_ID = "ai-preview";
+const AI_PREVIEW_STORAGE_KEY = "dadaeyu:aiCoursePreview";
+
+function saveAiCoursePreview(draft: RecommendedCourseDraft) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(AI_PREVIEW_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    // ignore
+  }
+}
+
+// sessionStorage에 남아있던 draft는 필드가 추가되기 전 옛날 스키마일 수 있다(예: hashtags가
+// 없던 시절 저장분) — 그대로 쓰면 course.hashtags.map() 같은 데서 런타임 에러가 난다. 읽을 때마다
+// 최신 필드를 기본값으로 채워 넣어 방어한다.
+function normalizeRecommendedCourseDraft(draft: RecommendedCourseDraft): RecommendedCourseDraft {
+  return { ...draft, hashtags: Array.isArray(draft.hashtags) ? draft.hashtags : [] };
+}
+
+function readAiCoursePreview(): RecommendedCourseDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(AI_PREVIEW_STORAGE_KEY);
+    if (!raw) return null;
+    return normalizeRecommendedCourseDraft(JSON.parse(raw) as RecommendedCourseDraft);
+  } catch {
+    return null;
+  }
+}
+
+// AI 추천 코스 탭의 필터+결과 세션. LLM 호출로 만든 결과라 비용/시간이 들어서, 뒤로가기는 물론
+// 새로고침해도 그대로 남아있게 한다(탭을 닫기 전까지). 필터와 결과를 하나로 묶어서 저장해야
+// "빈 필터인데 결과만 남아있는" 것 같은 화면 불일치가 안 생긴다 — 이 둘은 항상 같이 갱신된다.
+const RECOMMEND_SESSION_KEY = "dadaeyu:recommendSession";
+type RecommendSessionSnapshot = {
+  filters: Filters;
+  showFilters: boolean;
+  showResults: boolean;
+  courses: RecommendedCourseDraft[];
+  notice: string;
+};
+
+function saveRecommendSession(snapshot: RecommendSessionSnapshot) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(RECOMMEND_SESSION_KEY, JSON.stringify(snapshot));
+  } catch {
+    // ignore
+  }
+}
+
+function readRecommendSession(): RecommendSessionSnapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(RECOMMEND_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as RecommendSessionSnapshot;
+    return {
+      ...parsed,
+      courses: (parsed.courses ?? []).map(normalizeRecommendedCourseDraft)
+    };
+  } catch {
+    return null;
+  }
+}
+
 type AuthorType = "admin" | "user";
 
 // 코스 카드 상단의 "등록자 · 등록일" 행 — 공유/추천/내 코스 목록에서 공통으로 사용.
@@ -200,80 +266,28 @@ function CourseAuthorRow({
   );
 }
 
-const recommendedCourses = [
-  {
-    id: 1,
-    title: "대전 하루 완전 정복",
-    duration: "1일",
-    places: 8,
-    rating: 4.9,
-    likes: 245,
-    themes: ["문화예술", "먹거리", "자연힐링"],
-    author: "다대유 추천단",
-    authorType: "admin" as AuthorType,
-    date: "2025.03.02"
-  },
-  {
-    id: 2,
-    title: "자연 속 힐링 여행",
-    duration: "2일",
-    places: 6,
-    rating: 4.8,
-    likes: 189,
-    themes: ["자연힐링"],
-    author: "다대유 추천단",
-    authorType: "admin" as AuthorType,
-    date: "2025.03.15"
-  },
-  {
-    id: 3,
-    title: "문화와 예술을 찾아서",
-    duration: "1일",
-    places: 5,
-    rating: 4.7,
-    likes: 156,
-    themes: ["문화예술", "역사근대"],
-    author: "다대유 추천단",
-    authorType: "admin" as AuthorType,
-    date: "2025.04.01"
-  },
-  {
-    id: 4,
-    title: "성심당과 빵집 투어",
-    duration: "반일",
-    places: 4,
-    rating: 4.9,
-    likes: 312,
-    themes: ["빵지순례", "먹거리"],
-    author: "다대유 추천단",
-    authorType: "admin" as AuthorType,
-    date: "2025.04.18"
-  },
-  {
-    id: 5,
-    title: "대전 과학 탐험",
-    duration: "1일",
-    places: 5,
-    rating: 4.6,
-    likes: 98,
-    themes: ["과학"],
-    author: "다대유 추천단",
-    authorType: "admin" as AuthorType,
-    date: "2025.05.09"
-  },
-  {
-    id: 6,
-    title: "역사 따라 걷는 대전",
-    duration: "1일",
-    places: 6,
-    rating: 4.5,
-    likes: 74,
-    themes: ["역사근대", "문화예술"],
-    author: "다대유 추천단",
-    authorType: "admin" as AuthorType,
-    date: "2025.05.20"
-  }
-];
+// /api/courses/recommend 응답 — AI가 필터 조건에 맞춰 즉석에서 설계한 코스 초안.
+// 아직 tb_course 에 저장되지 않은 상태라 course_id 가 없다 — "저장" 시에만 실제 코스가 된다.
+interface RecommendedCoursePlace {
+  placeId: number;
+  contentId: number;
+  name: string;
+  lat: number;
+  lng: number;
+  startHour: number;
+  endHour: number;
+}
+interface RecommendedCourseDay {
+  day: number;
+  places: RecommendedCoursePlace[];
+}
+interface RecommendedCourseDraft {
+  title: string;
+  summary: string;
+  placeCount: number;
+  hashtags: string[];
+  days: RecommendedCourseDay[];
+}
 
 // "YYYY-MM-DD..." / "YYYY-MM-DD" 형태의 날짜값을 "YYYY.MM.DD" 로 통일해 보여준다.
 function formatDotDate(value?: string | null): string {
@@ -297,7 +311,7 @@ export default function Course() {
   const id = typeof params.id === "string" ? params.id : undefined;
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, member } = useAuth();
+  const { user, member, loading: authLoading } = useAuth();
   // 코스 추가/취소 후, 혹은 코스 상세에서 뒤로가기 시 원래 보던 탭이 유지되도록 쿼리로 초기 탭을 정한다.
   const tabParam = searchParams.get("tab");
   const initialTab = tabParam === "my" || tabParam === "recommend" ? tabParam : "shared";
@@ -751,15 +765,112 @@ export default function Course() {
   }, []);
 
   // 추천 코스 필터 — 공유 코스와 동일하게 뒤로가기 시 필터 복원.
-  const [showFilters, setShowFilters] = useState(() => {
-    const saved = !id ? readCourseListReturn() : null;
-    return saved?.tab === "recommend" ? !!saved.showFilters : false;
-  });
-  const [filters, setFilters] = useState<Filters>(() => {
-    const saved = !id ? readCourseListReturn() : null;
-    return saved?.tab === "recommend" && saved.filters ? saved.filters : DEFAULT_FILTERS;
-  });
-  const [showResults, setShowResults] = useState(false);
+  // 추천 코스 탭의 필터/결과는 뒤로가기는 물론 새로고침해도 그대로 남아있어야 해서(LLM 호출 결과라
+  // 비용·시간이 듦), "카드를 눌러 상세로 들어갔다 왔는지"와 무관하게 sessionStorage에서 무조건
+  // 복원한다(readRecommendSession). 공유 코스 탭의 필터가 카드 클릭 시점의 courseListReturn에만
+  // 의존하는 것과는 다른 범위 — 필터와 결과를 항상 같이 저장/복원해서 화면이 어긋나지 않게 한다.
+  const restoredRecommendSession = !id ? readRecommendSession() : null;
+  const [showFilters, setShowFilters] = useState(() => restoredRecommendSession?.showFilters ?? false);
+  const [filters, setFilters] = useState<Filters>(
+    () => restoredRecommendSession?.filters ?? DEFAULT_FILTERS
+  );
+  const [showResults, setShowResults] = useState(() => restoredRecommendSession?.showResults ?? false);
+  // 추천 코스 필터의 위치(구/동) 선택지 — 공유 코스와 같은 area-code 조회 결과(sharedAreaCodes)를
+  // 그대로 재사용한다(탭과 무관한 공용 데이터라 따로 다시 조회할 필요가 없다).
+  const recommendGuCode = sharedAreaCodes.find((a) => a.name === filters.gu)?.code ?? "";
+  const [recommendDongOptions, setRecommendDongOptions] = useState<string[]>([]);
+  useEffect(() => {
+    if (!recommendGuCode) {
+      setRecommendDongOptions([]);
+      return;
+    }
+    let active = true;
+    fetch(`/api/area-code/dong?gu=${encodeURIComponent(recommendGuCode)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (active) setRecommendDongOptions(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [recommendGuCode]);
+
+  // AI 추천 코스 — /api/courses/recommend 가 필터 조건에 맞춰 즉석에서 설계해준 초안들.
+  const [recommendCourses, setRecommendCourses] = useState<RecommendedCourseDraft[]>(
+    () => restoredRecommendSession?.courses ?? []
+  );
+  const [recommendLoading, setRecommendLoading] = useState(false);
+  const [recommendError, setRecommendError] = useState("");
+  const [recommendNotice, setRecommendNotice] = useState(
+    () => restoredRecommendSession?.notice ?? ""
+  );
+
+  // 필터/결과가 바뀔 때마다 세션에 동기화 — 상세 화면(id 있음)에서는 건드리지 않는다.
+  useEffect(() => {
+    if (id) return;
+    saveRecommendSession({
+      filters,
+      showFilters,
+      showResults,
+      courses: recommendCourses,
+      notice: recommendNotice
+    });
+  }, [id, filters, showFilters, showResults, recommendCourses, recommendNotice]);
+
+  // 회원 전용인 추천 목록은 비로그인 상태면 항상 비운다 — 보다가 로그아웃했을 때뿐 아니라,
+  // (세션에 남아있던 목록이 있는 상태로) 애초에 비로그인으로 추천 탭에 들어왔을 때도 해당된다.
+  // authLoading 이 끝나기 전(로그인 여부 아직 미확정)엔 건드리지 않는다 — 안 그러면 실제로는
+  // 로그인돼 있는데 세션 확인이 끝나기 전 잠깐의 "user=null" 순간에 목록을 지워버리게 된다.
+  useEffect(() => {
+    if (authLoading || userId) return;
+    if (!showResults && recommendCourses.length === 0 && !recommendNotice && !recommendError) return;
+    setShowResults(false);
+    setRecommendCourses([]);
+    setRecommendNotice("");
+    setRecommendError("");
+  }, [authLoading, userId, showResults, recommendCourses.length, recommendNotice, recommendError]);
+
+  const handleRecommend = async () => {
+    if (!requireLoginOrRedirect(user, router, "/course?tab=recommend")) return;
+    setShowResults(true);
+    setRecommendLoading(true);
+    setRecommendError("");
+    setRecommendNotice("");
+    setRecommendCourses([]);
+    try {
+      const res = await fetch("/api/courses/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessibility: filters.accessibility,
+          themes: filters.themes,
+          gu: recommendGuCode,
+          dong: filters.dong,
+          headcount: filters.headcount,
+          dateFrom: filters.dateFrom,
+          dateTo: filters.dateTo
+        })
+      });
+      const json = (await res.json()) as {
+        courses?: RecommendedCourseDraft[];
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setRecommendError(json.error ?? "코스를 추천받지 못했어요. 잠시 뒤 다시 시도해 주세요.");
+        return;
+      }
+      const courses = json.courses ?? [];
+      setRecommendCourses(courses);
+      setRecommendNotice(courses.length === 0 ? (json.message ?? "조건에 맞는 코스를 찾지 못했어요.") : "");
+    } catch {
+      setRecommendError("코스를 추천받는 중 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.");
+    } finally {
+      setRecommendLoading(false);
+    }
+  };
+
 
   // 코스 상세 → 뒤로가기로 돌아왔을 때, 클릭했던 코스 카드가 보이는 위치로 스크롤 복원.
   // 무한 스크롤이라 그 카드가 아직 로드 안 됐을 수 있어, 못 찾으면 다음 페이지를 더 불러와 재시도한다.
@@ -852,22 +963,18 @@ export default function Course() {
   const resetAll = () => {
     setFilters(DEFAULT_FILTERS);
     setShowResults(false);
+    setRecommendCourses([]);
+    setRecommendError("");
+    setRecommendNotice("");
+    // 세션 동기화 effect가 위 상태 변화를 그대로 sessionStorage에도 반영한다.
   };
   const activeFilterCount = [
     filters.accessibility.length > 0,
     filters.gu,
     filters.themes.length > 0,
     filters.headcount > 1,
-    filters.dateFrom || filters.dateTo,
-    filters.minRating > 0,
-    filters.favoritesOnly
+    filters.dateFrom || filters.dateTo
   ].filter(Boolean).length;
-  const filteredCourses = recommendedCourses.filter((course) => {
-    if (filters.themes.length > 0 && !course.themes.some((t) => filters.themes.includes(t)))
-      return false;
-    if (filters.minRating > 0 && course.rating < filters.minRating) return false;
-    return true;
-  });
 
   return (
     <div className="space-y-6">
@@ -1096,7 +1203,15 @@ export default function Course() {
           {/* 필터 패널 */}
           {showFilters && (
             <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <FilterFields filters={filters} set={set} toggleList={toggleList} />
+              <FilterFields
+                filters={filters}
+                set={set}
+                toggleList={toggleList}
+                guOptions={sharedAreaCodes.map((a) => a.name)}
+                dongOptions={recommendDongOptions}
+                hideRating
+                hideFavorites
+              />
             </div>
           )}
 
@@ -1107,86 +1222,105 @@ export default function Course() {
               <div>
                 <p className="text-brand-900 text-sm font-semibold">AI 코스 추천받기</p>
                 <p className="text-brand-600 mt-0.5 text-xs">
-                  필터 조건에 맞는 최적의 코스를 추천해드려요
+                  필터 조건에 맞는 최적의 코스를 최대 5개까지 설계해드려요
                 </p>
               </div>
             </div>
             <button
-              onClick={() => setShowResults(true)}
-              className="bg-brand-600 hover:bg-brand-700 shrink-0 rounded-lg px-4 py-2 text-sm text-white transition-colors"
+              onClick={handleRecommend}
+              disabled={recommendLoading}
+              className="bg-brand-600 hover:bg-brand-700 shrink-0 rounded-lg px-4 py-2 text-sm text-white transition-colors disabled:opacity-60"
             >
-              추천받기
+              {recommendLoading ? "설계 중..." : "추천받기"}
             </button>
           </div>
 
           {/* 결과 */}
           {showResults ? (
-            <>
-              <p className="text-sm text-gray-500">
-                <span className="font-semibold text-gray-800">{filteredCourses.length}개</span>의
-                코스를 찾았어요
-              </p>
-              <div className="space-y-3">
-                {filteredCourses.length > 0 ? (
-                  filteredCourses.map((course) => (
-                    <Link
-                      key={course.id}
-                      href={`/course/${course.id}`}
-                      data-course-id={course.id}
-                      onClick={() =>
-                        saveCourseListReturn("recommend", course.id, filters, showFilters)
-                      }
-                      className="block rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
-                    >
-                      <CourseAuthorRow
-                        authorType={course.authorType}
-                        author={course.author}
-                        date={course.date}
-                      />
-                      <div className="mb-2 flex items-start justify-between">
-                        <h3 className="font-semibold text-gray-800">{course.title}</h3>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                          <span className="text-gray-700">{course.rating}</span>
-                        </div>
-                      </div>
-                      <div className="mb-3 flex gap-3 text-sm text-gray-600">
-                        <span>{course.duration}</span>
-                        <span>•</span>
-                        <span>{course.places}곳</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-wrap gap-1">
-                          {course.themes.map((t) => (
-                            <span
-                              key={t}
-                              className="bg-brand-50 text-brand-700 rounded-full px-2 py-0.5 text-xs"
-                            >
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-1 text-sm text-gray-500">
-                          <Heart className="h-3.5 w-3.5" />
-                          <span>{course.likes}</span>
-                        </div>
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className="py-12 text-center text-gray-400">
-                    <X className="mx-auto mb-2 h-10 w-10 opacity-30" />
-                    <p className="text-sm">조건에 맞는 코스가 없어요</p>
-                    <button
-                      onClick={resetAll}
-                      className="text-brand-600 hover:text-brand-700 mt-2 text-sm underline underline-offset-2"
-                    >
-                      필터 초기화
-                    </button>
-                  </div>
-                )}
+            recommendLoading ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-14 text-gray-400">
+                <span className="border-brand-500 h-6 w-6 animate-spin rounded-full border-[3px] border-gray-200 border-t-transparent" />
+                <p className="text-sm font-medium text-gray-500">AI가 코스를 설계하고 있어요...</p>
               </div>
-            </>
+            ) : recommendError ? (
+              <div className="py-12 text-center text-gray-400">
+                <X className="mx-auto mb-2 h-10 w-10 opacity-30" />
+                <p className="text-sm">{recommendError}</p>
+                <button
+                  onClick={handleRecommend}
+                  className="text-brand-600 hover:text-brand-700 mt-2 text-sm underline underline-offset-2"
+                >
+                  다시 시도
+                </button>
+              </div>
+            ) : recommendCourses.length > 0 ? (
+              <>
+                <p className="text-sm text-gray-500">
+                  <span className="font-semibold text-gray-800">{recommendCourses.length}개</span>
+                  의 코스를 설계했어요
+                </p>
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  이 목록은 필터를 초기화하거나 다시 추천받거나 로그아웃하면 사라져요. 마음에 드는
+                  코스는 상세로 들어가서 미리 저장해 두세요.
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {recommendCourses.map((course, index) => (
+                    <Card key={`${course.title}-${index}`} asChild variant="interactive">
+                      <Link
+                        href={`/course/${AI_PREVIEW_ROUTE_ID}`}
+                        data-course-id={index}
+                        onClick={() => {
+                          saveAiCoursePreview(course);
+                          saveCourseListReturn("recommend", index, filters, showFilters);
+                        }}
+                        className="block"
+                      >
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <h3 className="text-ink truncate font-semibold">{course.title}</h3>
+                          </div>
+                          <div className="text-brand-600 flex shrink-0 items-center gap-1 text-xs font-semibold">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            AI 추천
+                          </div>
+                        </div>
+                        <CourseAuthorRow authorType="admin" author="다유 AI" badgeAfter />
+                        {course.summary && (
+                          <p className="mb-2 line-clamp-2 text-sm text-gray-500">
+                            {course.summary}
+                          </p>
+                        )}
+                        {course.hashtags.length > 0 && (
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {course.hashtags.map((label) => (
+                              <Badge key={label} tone="brand" shape="pill">
+                                #{label}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex gap-2 text-sm text-gray-500">
+                          <span>{course.days.length}일</span>
+                          <span>•</span>
+                          <span>{course.placeCount}곳</span>
+                        </div>
+                      </Link>
+                    </Card>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="py-12 text-center text-gray-400">
+                <X className="mx-auto mb-2 h-10 w-10 opacity-30" />
+                <p className="text-sm">{recommendNotice || "조건에 맞는 코스가 없어요"}</p>
+                <button
+                  onClick={resetAll}
+                  className="text-brand-600 hover:text-brand-700 mt-2 text-sm underline underline-offset-2"
+                >
+                  필터 초기화
+                </button>
+              </div>
+            )
           ) : (
             <div className="py-14 text-center text-gray-400">
               <Sparkles className="text-brand-300 mx-auto mb-3 h-10 w-10" />
@@ -1322,17 +1456,9 @@ export default function Course() {
 type EditPlace = CoursePlace;
 type EditDay = CourseDay;
 
-// 장소별 지도 좌표 (Map.tsx PLACES 기준) — cx/cy 는 목록/뱃지 색상 등에 사용
-const PLACE_COORDS: Record<string, { cx: number; cy: number; color: string }> = {
-  성심당: { cx: 440, cy: 315, color: "#dc2626" },
-  "대전 엑스포 과학공원": { cx: 557, cy: 165, color: "#7c3aed" },
-  한밭수목원: { cx: 337, cy: 237, color: "#16a34a" },
-  유성온천: { cx: 175, cy: 360, color: "#d97706" },
-  "대청호 오백리길": { cx: 800, cy: 435, color: "#2563eb" }
-};
-
 function CourseDetail({ id }: { id: string }) {
   const isNew = id === "new";
+  const isAiPreview = id === AI_PREVIEW_ROUTE_ID;
   const numId = Number(id);
   const router = useRouter();
   const { user } = useAuth();
@@ -1542,14 +1668,51 @@ function CourseDetail({ id }: { id: string }) {
   );
 
   useEffect(() => {
-    if (isNew || Number.isNaN(numId)) return;
+    if (isNew || isAiPreview || Number.isNaN(numId)) return;
     let alive = true;
     loadCourseFromDb(() => alive);
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNew, numId]);
+  }, [isNew, isAiPreview, numId]);
+
+  // AI 추천 미리보기 — 아직 tb_course 에 저장 안 된 초안이라 DB 조회 대신
+  // 목록에서 카드를 누를 때 sessionStorage 에 넣어둔 draft 를 그대로 읽어와 dbCourse 에 채운다.
+  // 이렇게 채워 넣기만 하면 "내 코스에 추가" 버튼 등 나머지 로직은 실제 코스일 때와 동일하게 동작한다.
+  useEffect(() => {
+    if (!isAiPreview) return;
+    const draft = readAiCoursePreview();
+    if (!draft) {
+      setDbCourseError("추천 코스 미리보기를 찾을 수 없어요. 추천 코스 목록에서 다시 눌러 주세요.");
+      setDbCourseLoading(false);
+      return;
+    }
+    setDbCourse({
+      id: 0,
+      title: draft.title,
+      duration: `${draft.days.length}일`,
+      isPrivate: true,
+      rating: 0,
+      likes: 0,
+      tags: [],
+      days: draft.days.map((day) => ({
+        day: day.day,
+        places: day.places.map((place, index) => ({
+          id: index,
+          name: place.name,
+          startHour: place.startHour,
+          endHour: place.endHour,
+          placeId: place.placeId,
+          lat: place.lat,
+          lng: place.lng,
+          contentId: place.contentId
+        }))
+      }))
+    });
+    setCourseBadges(draft.hashtags.map((label) => ({ label, count: 0 })));
+    setDbCourseLoading(false);
+  }, [isAiPreview]);
 
   const isOwned = isNew || (!!user && courseRegister === user.id);
 
@@ -1731,6 +1894,7 @@ function CourseDetail({ id }: { id: string }) {
   };
 
   // "내 코스에 추가" — 이 코스(장소·일정 그대로)를 내 소유의 새 코스로 복사한다.
+  // 같은 코스를 여러 번 추가하는 것도 허용한다 — 클릭할 때마다 새 코스로 복사된다.
   const [addingCourse, setAddingCourse] = useState(false);
   const handleAddToMyCourse = async () => {
     if (!requireLoginOrRedirect(user, router, `/course/${id}`)) return;
@@ -1769,7 +1933,8 @@ function CourseDetail({ id }: { id: string }) {
         if (detailErr) throw detailErr;
       }
 
-      router.push("/course?tab=my");
+      setFavoriteNotice("내 코스에 추가했어요");
+      setTimeout(() => setFavoriteNotice(""), 2000);
     } catch (e) {
       const message =
         e instanceof Error
@@ -1937,44 +2102,52 @@ function CourseDetail({ id }: { id: string }) {
     lng: number;
     color: string;
     day: number;
+    orderInDay: number;
   };
 
   const markerSources: MarkerSource[] = [];
   const sortedDays = [...courseData.days].sort((a, b) => a.day - b.day);
-  let colorIdx = 0;
-  for (const d of sortedDays) {
+  // Day 탭 배지도 이 색으로 맞춰서, 지도의 경로선 색 = 패널의 Day 배지 색이 되게 한다.
+  const dayColorByDay = new Map<number, string>();
+  sortedDays.forEach((d, dayIdx) => {
+    const dayColor = DAY_LINE_COLORS[dayIdx % DAY_LINE_COLORS.length];
+    dayColorByDay.set(d.day, dayColor);
+    let orderInDay = 0;
     for (const p of d.places) {
       if (p.lat == null || p.lng == null) continue;
+      orderInDay += 1;
       markerSources.push({
         markerId: `real:${d.day}:${p.id}`,
         lat: p.lat,
         lng: p.lng,
-        color: MARKER_COLORS[colorIdx % MARKER_COLORS.length],
+        color: dayColor,
         kind: "real",
         item: p,
-        day: d.day
+        day: d.day,
+        orderInDay
       });
-      colorIdx += 1;
     }
-  }
+  });
 
+  // 마커에 Day 색상 + "그 Day 안에서 몇 번째 장소인지" 번호를 같이 표시해서, 지도만 보고도
+  // 일정별 방문 순서를 바로 알 수 있게 한다.
   const mapMarkers: MapMarker[] = markerSources.map((m) => ({
     id: m.markerId,
     lat: m.lat,
     lng: m.lng,
-    color: m.color
+    color: m.color,
+    label: String(m.orderInDay)
   }));
 
   // 경로선 — Day 별로 색을 다르게 준다. 같은 Day 안의 장소끼리는 그 Day 색의 실선으로 잇고,
   // Day 가 바뀌는 경계(Day1 마지막 장소 → Day2 첫 장소)는 별도 회색 점선으로 표시한다.
+  // 색은 markerSources 에 이미 정해둔 걸 그대로 써서, 마커 색과 절대 어긋나지 않게 한다.
   const coursePath: MapPathSegment[] = [];
-  let dayIdx = 0;
   let prevDayLastPoint: { lat: number; lng: number } | null = null;
   for (const d of sortedDays) {
-    const dayPoints = markerSources
-      .filter((m) => m.day === d.day)
-      .map((m) => ({ lat: m.lat, lng: m.lng }));
-    if (dayPoints.length === 0) continue;
+    const dayMarkers = markerSources.filter((m) => m.day === d.day);
+    if (dayMarkers.length === 0) continue;
+    const dayPoints = dayMarkers.map((m) => ({ lat: m.lat, lng: m.lng }));
 
     if (prevDayLastPoint) {
       coursePath.push({
@@ -1985,11 +2158,12 @@ function CourseDetail({ id }: { id: string }) {
     }
     coursePath.push({
       points: dayPoints,
-      color: DAY_LINE_COLORS[dayIdx % DAY_LINE_COLORS.length]
+      color: dayMarkers[0].color,
+      label: `Day ${d.day}`,
+      day: d.day
     });
 
     prevDayLastPoint = dayPoints[dayPoints.length - 1];
-    dayIdx += 1;
   }
   const selectedMarkerId = selectedSearchPlace
     ? (markerSources.find((m) => m.item.id === selectedSearchPlace.id)?.markerId ?? null)
@@ -2539,7 +2713,7 @@ function CourseDetail({ id }: { id: string }) {
                       {/* Number badge */}
                       <div
                         className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                        style={{ background: PLACE_COORDS[place.name]?.color ?? "#16a34a" }}
+                        style={{ background: "#16a34a" }}
                       >
                         {idx + 1}
                       </div>
@@ -2677,7 +2851,8 @@ function CourseDetail({ id }: { id: string }) {
               )}
 
               {/* 별점 · 즐겨찾기(별점은 0점 고정 — 추후 실제 집계, 즐겨찾기는 tb_course_like 실집계) */}
-              {!isNew && (
+              {/* AI 추천 미리보기는 아직 저장 전이라 별점/즐겨찾기 개념이 없다 */}
+              {!isNew && !isAiPreview && (
                 <div className="border-b border-gray-100 px-4 py-3">
                   <p className="mb-1.5 text-xs font-semibold text-gray-700">별점 · 즐겨찾기</p>
                   <div className="flex items-center gap-3">
@@ -2704,22 +2879,24 @@ function CourseDetail({ id }: { id: string }) {
                 </div>
               ) : (
                 <>
-                  {/* 공유 여부 (readonly) */}
-                  <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-700">공유 여부</p>
-                      <p className="mt-0.5 text-xs text-gray-400">
-                        {courseData.isPrivate ? "나만 볼 수 있어요" : "모두에게 공개돼요"}
-                      </p>
-                    </div>
-                    <span
-                      className={`relative h-6 w-10 shrink-0 rounded-full ${courseData.isPrivate ? "bg-gray-200" : "bg-brand-500"}`}
-                    >
+                  {/* 공유 여부 (readonly) — AI 추천 미리보기는 아직 저장 전이라 의미가 없다 */}
+                  {!isAiPreview && (
+                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700">공유 여부</p>
+                        <p className="mt-0.5 text-xs text-gray-400">
+                          {courseData.isPrivate ? "나만 볼 수 있어요" : "모두에게 공개돼요"}
+                        </p>
+                      </div>
                       <span
-                        className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow ${courseData.isPrivate ? "left-1" : "left-5"}`}
-                      />
-                    </span>
-                  </div>
+                        className={`relative h-6 w-10 shrink-0 rounded-full ${courseData.isPrivate ? "bg-gray-200" : "bg-brand-500"}`}
+                      >
+                        <span
+                          className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow ${courseData.isPrivate ? "left-1" : "left-5"}`}
+                        />
+                      </span>
+                    </div>
+                  )}
 
                   {/* 기간 (readonly) */}
                   {(courseData.startDate || courseData.endDate) && (
@@ -2735,7 +2912,7 @@ function CourseDetail({ id }: { id: string }) {
                   )}
 
                   {/* Meta */}
-                  {!isOwned && (
+                  {!isOwned && !isAiPreview && (
                     <div className="shrink-0 border-b border-gray-100 px-4 py-3">
                       <div className="mb-2 flex items-center gap-3 text-sm text-gray-600">
                         <div className="flex items-center gap-1">
@@ -2760,21 +2937,26 @@ function CourseDetail({ id }: { id: string }) {
                     </div>
                   )}
 
-                  {/* Day tabs */}
+                  {/* Day tabs — 지도 경로선과 같은 Day 색을 배지에도 써서 서로 매칭되게 한다. */}
                   <div className="flex shrink-0 flex-wrap gap-2 border-b border-gray-100 px-4 py-3">
-                    {courseData.days.map((day) => (
-                      <button
-                        key={day.day}
-                        onClick={() => setActiveDay(day.day)}
-                        className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
-                          activeDay === day.day
-                            ? "bg-brand-600 text-white"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                      >
-                        Day {day.day}
-                      </button>
-                    ))}
+                    {courseData.days.map((day) => {
+                      const dayColor = dayColorByDay.get(day.day) ?? "#16a34a";
+                      const active = activeDay === day.day;
+                      return (
+                        <button
+                          key={day.day}
+                          onClick={() => setActiveDay(day.day)}
+                          className="rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors"
+                          style={
+                            active
+                              ? { background: dayColor, color: "white" }
+                              : { border: `1.5px solid ${dayColor}`, color: dayColor, background: "white" }
+                          }
+                        >
+                          Day {day.day}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* Place list */}
@@ -2789,7 +2971,7 @@ function CourseDetail({ id }: { id: string }) {
                       >
                         <div
                           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                          style={{ background: PLACE_COORDS[place.name]?.color ?? "#16a34a" }}
+                          style={{ background: "#16a34a" }}
                         >
                           {index + 1}
                         </div>
@@ -2911,22 +3093,26 @@ function CourseDetail({ id }: { id: string }) {
                       {addingCourse ? "추가하는 중..." : "내 코스에 추가"}
                     </button>
                   )}
-                  <button
-                    onClick={handleToggleFavorite}
-                    disabled={favoriteBusy}
-                    className={`shrink-0 rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-60 ${favorited ? "border-red-300 bg-red-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
-                  >
-                    <Heart
-                      className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-700"}`}
-                    />
-                  </button>
-                  <button
-                    onClick={handleShareKakao}
-                    disabled={sharing}
-                    className="shrink-0 rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 disabled:opacity-60"
-                  >
-                    <Share2 className="h-4 w-4 text-gray-700" />
-                  </button>
+                  {!isAiPreview && (
+                    <>
+                      <button
+                        onClick={handleToggleFavorite}
+                        disabled={favoriteBusy}
+                        className={`shrink-0 rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-60 ${favorited ? "border-red-300 bg-red-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                      >
+                        <Heart
+                          className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-700"}`}
+                        />
+                      </button>
+                      <button
+                        onClick={handleShareKakao}
+                        disabled={sharing}
+                        className="shrink-0 rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 disabled:opacity-60"
+                      >
+                        <Share2 className="h-4 w-4 text-gray-700" />
+                      </button>
+                    </>
+                  )}
                   {isOwned && (
                     <button
                       onClick={handleDeleteCourse}
@@ -2968,6 +3154,7 @@ function CourseDetail({ id }: { id: string }) {
             setSelectedSearchPlace(null);
           }}
           path={dayGuidePath ?? coursePath}
+          onPathClick={(day) => setActiveDay(day)}
           fitPathKey={
             dayGuideMode && dayGuidePath && !dayGuideLoading
               ? `${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}`

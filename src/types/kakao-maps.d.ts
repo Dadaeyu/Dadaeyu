@@ -36,6 +36,7 @@ declare namespace kakao.maps {
       clickable?: boolean;
     });
     setMap(map: Map | null): void;
+    setPosition(position: LatLng): void;
   }
 
   class ZoomControl {}
@@ -59,8 +60,16 @@ declare namespace kakao.maps {
     setMap(map: Map | null): void;
   }
 
+  interface MouseEvent {
+    latLng: LatLng;
+  }
+
   namespace event {
-    function addListener(target: Map | Marker | object, type: string, callback: () => void): void;
+    function addListener(
+      target: Map | Marker | Polyline | object,
+      type: string,
+      callback: (event: MouseEvent) => void
+    ): void;
   }
 
   function load(callback: () => void): void;

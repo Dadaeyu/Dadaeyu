@@ -22,8 +22,7 @@ export const T = {
   places: "tb_places",
   place: "tb_place",
   placeReviews: "tb_place_reviews",
-  adminMonthlySignups: "tb_admin_monthly_signups",
-  test: "tb_test"
+  adminMonthlySignups: "tb_admin_monthly_signups"
 } as const;
 
 export type TableName = (typeof T)[keyof typeof T];

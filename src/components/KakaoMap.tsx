@@ -27,6 +27,8 @@ export interface MapMarker {
   lng: number;
   color: string;
   shape?: "pin" | "dot" | "heart";
+  /** 마커 안에 표시할 짧은 텍스트(예: 코스 방문 순서 번호). pin/dot에서만 그려진다. */
+  label?: string;
 }
 
 export interface TooltipInfo {
@@ -42,6 +44,10 @@ export interface MapPathSegment {
   points: { lat: number; lng: number }[];
   color?: string; // 기본 초록
   dashed?: boolean; // true 면 점선(Day 간 연결 구간 표시용)
+  /** 이 구간에 마우스를 올렸을 때 커서 위치에 보여줄 라벨(예: "Day 1"). 없으면 호버해도 안 뜬다. */
+  label?: string;
+  /** 이 구간을 클릭했을 때 onPathClick 으로 전달할 값(예: Day 번호). label 이 있어야 클릭도 반응한다. */
+  day?: number;
 }
 
 // ── Props ──────────────────────────────────────────────────
@@ -59,6 +65,8 @@ interface Props {
   focusMyLocationTrigger?: number;
   // 여러 구간의 경로선(코스 일정용). 구간별로 색상·점선 여부를 다르게 줄 수 있다.
   path?: MapPathSegment[];
+  /** 경로선 구간(day 있는 것) 클릭 시 그 구간의 day 값을 전달한다. */
+  onPathClick?: (day: number) => void;
   /** 값이 바뀌면 path 전체가 화면에 들어오도록 panTo(bounds). 안내 경로 전용 */
   fitPathKey?: string | number | null;
   /** 하단 시트 등 UI가 가리는 높이(px). 경로 맞춤 시 bottom padding으로 사용 */
@@ -66,10 +74,13 @@ interface Props {
 }
 
 // ── 핀 렌더러 ──────────────────────────────────────────────
-function renderDot(el: HTMLDivElement, color: string, selected: boolean) {
+function renderDot(el: HTMLDivElement, color: string, selected: boolean, label?: string) {
   const size = selected ? 20 : 14;
+  const labelEl = label
+    ? `<div style="font-size:${Math.round(size / 1.9)}px;line-height:1;font-weight:700;color:white;">${label}</div>`
+    : "";
   el.innerHTML = `
-    <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.28);${selected ? `outline:3px solid ${color}55;outline-offset:1px;` : ""}cursor:pointer;transition:all 0.15s;"></div>`;
+    <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.28);${selected ? `outline:3px solid ${color}55;outline-offset:1px;` : ""}cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;">${labelEl}</div>`;
 }
 
 function renderHeart(el: HTMLDivElement, color: string, selected: boolean) {
@@ -88,17 +99,20 @@ function getRenderer(shape?: "pin" | "dot" | "heart") {
   return renderPin;
 }
 
-function renderPin(el: HTMLDivElement, color: string, selected: boolean) {
+function renderPin(el: HTMLDivElement, color: string, selected: boolean, label?: string) {
   const size = selected ? 36 : 28;
   const tri = Math.round(size / 3);
   const dot = Math.round(size / 3.5);
   const ring = selected
     ? `box-shadow:0 0 0 6px ${color}30,0 2px 8px rgba(0,0,0,0.35);`
     : "box-shadow:0 2px 6px rgba(0,0,0,0.28);";
+  const inner = label
+    ? `<div style="font-size:${Math.round(size / 2.4)}px;line-height:1;font-weight:700;color:white;">${label}</div>`
+    : `<div style="width:${dot}px;height:${dot}px;background:white;border-radius:50%;"></div>`;
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;cursor:pointer;${selected ? "transform:scale(1.15);" : ""}transition:transform 0.15s;">
       <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid white;${ring}display:flex;align-items:center;justify-content:center;">
-        <div style="width:${dot}px;height:${dot}px;background:white;border-radius:50%;"></div>
+        ${inner}
       </div>
       <div style="width:0;height:0;border-left:${tri}px solid transparent;border-right:${tri}px solid transparent;border-top:${tri}px solid ${color};margin-top:-1px;"></div>
     </div>`;
@@ -176,6 +190,7 @@ export default function KakaoMap({
   myLocation = null,
   focusMyLocationTrigger = 0,
   path = [],
+  onPathClick,
   fitPathKey = null,
   bottomOverlayPx = 0
 }: Props) {
@@ -186,6 +201,9 @@ export default function KakaoMap({
   const markerElemsRef = useRef(new Map<string, HTMLDivElement>());
   const polylineRef = useRef<kakao.maps.Polyline | null>(null);
   const pathPolylinesRef = useRef<kakao.maps.Polyline[]>([]);
+  // 경로선 호버 시 커서 위치에 뜨는 라벨 — 한 번에 하나만 필요해서 배열이 아니라 단일 참조.
+  const pathHoverOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
+  const pathHoverElRef = useRef<HTMLDivElement | null>(null);
   const tooltipOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const myLocationOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const [mapInitCount, setMapInitCount] = useState(0);
@@ -261,7 +279,7 @@ export default function KakaoMap({
       const el = document.createElement("div");
       markerElemsRef.current.set(marker.id, el);
       const render = getRenderer(marker.shape);
-      render(el, marker.color, marker.id === selectedId);
+      render(el, marker.color, marker.id === selectedId, marker.label);
 
       const overlay = new K.CustomOverlay({
         position: new K.LatLng(marker.lat, marker.lng),
@@ -289,7 +307,7 @@ export default function KakaoMap({
       const el = markerElemsRef.current.get(marker.id);
       if (!el) return;
       const render = getRenderer(marker.shape);
-      render(el, marker.color, marker.id === selectedId);
+      render(el, marker.color, marker.id === selectedId, marker.label);
     });
   }, [selectedId, markers]);
 
@@ -356,24 +374,71 @@ export default function KakaoMap({
 
   // 코스 경로선 — 구간(path)별로 순서대로 잇는다(코스 일정 장소 순서). 구간마다 색상·점선 여부가 다를 수 있다.
   // 각 구간의 지점이 2개 미만이면 그 구간은 그리지 않음.
+  // 구간 라벨(예: "Day 1")은 고정 위치가 아니라, 그 경로선에 마우스를 올렸을 때 커서가 있는
+  // 지점에 붙여서 보여준다 — 노드(장소 마커) 위치와 안 겹치고, 어느 구간을 가리키는지 명확하다.
+  // 같은 구간을 클릭하면 onPathClick(day)로 알려줘서 패널의 장소 목록도 그 Day로 전환할 수 있다.
   useEffect(() => {
     if (!mapRef.current || !window.kakao?.maps) return;
     const K = window.kakao.maps;
 
     pathPolylinesRef.current.forEach((line) => line.setMap(null));
     pathPolylinesRef.current = [];
+    pathHoverOverlayRef.current?.setMap(null);
+    pathHoverOverlayRef.current = null;
+
+    const hoverEl = document.createElement("div");
+    hoverEl.style.cssText =
+      "color:white;font-size:11px;font-weight:700;line-height:1;padding:3px 7px;border-radius:999px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.3);border:1.5px solid white;pointer-events:none;";
+    pathHoverElRef.current = hoverEl;
+
+    const showHoverLabel = (text: string, color: string, position: kakao.maps.LatLng) => {
+      hoverEl.textContent = text;
+      hoverEl.style.background = color;
+      if (!pathHoverOverlayRef.current) {
+        pathHoverOverlayRef.current = new K.CustomOverlay({
+          content: hoverEl,
+          position,
+          yAnchor: 1.6,
+          xAnchor: 0.5,
+          zIndex: 10
+        });
+        pathHoverOverlayRef.current.setMap(mapRef.current);
+      } else {
+        pathHoverOverlayRef.current.setPosition(position);
+        pathHoverOverlayRef.current.setMap(mapRef.current);
+      }
+    };
+    const hideHoverLabel = () => {
+      pathHoverOverlayRef.current?.setMap(null);
+    };
 
     for (const segment of path) {
       if (segment.points.length < 2) continue;
+      const color = segment.color ?? "#16a34a";
       const line = new K.Polyline({
         path: segment.points.map((p) => new K.LatLng(p.lat, p.lng)),
         strokeWeight: 4,
-        strokeColor: segment.color ?? "#16a34a",
+        strokeColor: color,
         strokeOpacity: 0.8,
         strokeStyle: segment.dashed ? "shortdash" : "solid"
       });
       line.setMap(mapRef.current);
       pathPolylinesRef.current.push(line);
+
+      if (segment.label) {
+        const label = segment.label;
+        K.event.addListener(line, "mouseover", (e: kakao.maps.MouseEvent) =>
+          showHoverLabel(label, color, e.latLng)
+        );
+        K.event.addListener(line, "mousemove", (e: kakao.maps.MouseEvent) =>
+          showHoverLabel(label, color, e.latLng)
+        );
+        K.event.addListener(line, "mouseout", hideHoverLabel);
+        if (segment.day != null) {
+          const day = segment.day;
+          K.event.addListener(line, "click", () => onPathClick?.(day));
+        }
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(path), mapInitCount]);

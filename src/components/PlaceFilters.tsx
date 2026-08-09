@@ -70,7 +70,9 @@ export function FilterFields({
   toggleList,
   guOptions = [],
   dongOptions = [],
-  compact = false
+  compact = false,
+  hideRating = false,
+  hideFavorites = false
 }: {
   filters: Filters;
   set: <K extends keyof Filters>(key: K, val: Filters[K]) => void;
@@ -78,6 +80,8 @@ export function FilterFields({
   guOptions?: string[];
   dongOptions?: string[];
   compact?: boolean;
+  hideRating?: boolean; // 별점 필터를 지원하지 않는 화면(예: AI 추천 코스)에서 숨긴다.
+  hideFavorites?: boolean; // 즐겨찾기 필터를 지원하지 않는 화면에서 숨긴다.
 }) {
   // 접근성 · 테마 옵션은 전역 캐시에서 가져온다 (브라우저 첫 진입 시 1회 조회).
   const { accessibility: accessOptions, themes: themeOptions } = useFilterOptions();
@@ -234,39 +238,43 @@ export function FilterFields({
         </div>
 
         {/* 별점 */}
-        <div>
-          <p className={`${xs} text-steel mb-1.5 font-semibold`}>별점</p>
-          <div className="flex items-center gap-0.5">
-            {[1, 2, 3, 4, 5].map((s) => (
-              <button key={s} onClick={() => set("minRating", filters.minRating === s ? 0 : s)}>
-                <Star
-                  className={`h-5 w-5 transition-colors ${s <= filters.minRating ? "fill-yellow-400 text-yellow-500" : "text-hairline"}`}
-                />
-              </button>
-            ))}
-            {filters.minRating > 0 && (
-              <span className="text-steel ml-1 text-xs">{filters.minRating}점↑</span>
-            )}
+        {!hideRating && (
+          <div>
+            <p className={`${xs} text-steel mb-1.5 font-semibold`}>별점</p>
+            <div className="flex items-center gap-0.5">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button key={s} onClick={() => set("minRating", filters.minRating === s ? 0 : s)}>
+                  <Star
+                    className={`h-5 w-5 transition-colors ${s <= filters.minRating ? "fill-yellow-400 text-yellow-500" : "text-hairline"}`}
+                  />
+                </button>
+              ))}
+              {filters.minRating > 0 && (
+                <span className="text-steel ml-1 text-xs">{filters.minRating}점↑</span>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* 즐겨찾기 */}
-        <div>
-          <p className={`${xs} text-steel mb-1.5 font-semibold`}>즐겨찾기</p>
-          <button
-            onClick={() => set("favoritesOnly", !filters.favoritesOnly)}
-            className={`flex items-center gap-1 rounded-full border px-2 py-1.5 text-xs transition-colors ${
-              filters.favoritesOnly
-                ? "border-red-400 bg-red-50 text-red-600"
-                : "border-hairline text-steel bg-white hover:border-red-300 hover:text-red-500"
-            }`}
-          >
-            <Heart
-              className={`h-3.5 w-3.5 ${filters.favoritesOnly ? "fill-red-500 text-red-500" : ""}`}
-            />
-            즐겨찾기
-          </button>
-        </div>
+        {!hideFavorites && (
+          <div>
+            <p className={`${xs} text-steel mb-1.5 font-semibold`}>즐겨찾기</p>
+            <button
+              onClick={() => set("favoritesOnly", !filters.favoritesOnly)}
+              className={`flex items-center gap-1 rounded-full border px-2 py-1.5 text-xs transition-colors ${
+                filters.favoritesOnly
+                  ? "border-red-400 bg-red-50 text-red-600"
+                  : "border-hairline text-steel bg-white hover:border-red-300 hover:text-red-500"
+              }`}
+            >
+              <Heart
+                className={`h-3.5 w-3.5 ${filters.favoritesOnly ? "fill-red-500 text-red-500" : ""}`}
+              />
+              즐겨찾기
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

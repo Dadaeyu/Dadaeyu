@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { getBakeryPlaceIds, splitThemeSelection } from "@/lib/theme/bakeryTheme";
 
 // 접근성 필터 값(tb_code BARRIERFREE 의 code_id) → tb_place_barrierfree 의 has_* 플래그 매핑.
 // 필터 옵션은 /api/codes/filter-options 에서 오며 임산부(MT)·고령자(SN)는 데이터가 없어 제외된다.
@@ -10,7 +11,7 @@ const BARRIERFREE_COLS: Record<string, string> = {
 };
 
 // 선택된 접근성 유형들을 OR로 합친다 (예: 청각+보행 선택 시 둘 중 하나라도 true면 노출).
-async function getBarrierFreeIds(types: string[]): Promise<number[]> {
+export async function getBarrierFreeIds(types: string[]): Promise<number[]> {
   const cols = Array.from(new Set(types.map((t) => BARRIERFREE_COLS[t]).filter(Boolean)));
   if (cols.length === 0) return [];
 
@@ -57,7 +58,7 @@ async function getRatedContentIds(minRating: number): Promise<number[]> {
 //  - accommax < headcount : 최대 수용이 요청보다 적음 (수용 초과)
 //  - accommin > headcount : 최소 인원이 요청보다 많음 (단체 전용 등, 인원 미달)
 //  ※ lt/gt 는 null 을 매칭하지 않으므로 "정보 없음"은 자동으로 통과된다. 1명도 실제 값으로 취급해 필터한다.
-async function getHeadcountExcludeIds(headcount: number): Promise<number[]> {
+export async function getHeadcountExcludeIds(headcount: number): Promise<number[]> {
   if (headcount < 1) return [];
   const { data } = await supabase
     .from("tb_place_detail_normalized")
@@ -78,7 +79,7 @@ function isoWeekday(dateStr: string): number {
 //  - 공휴일 휴무이면서 비공휴일 날은 요일로 전부 닫는 곳 → 결국 기간 내내 휴무.
 //    (기간이 전부 공휴일이면 공휴일 휴무만으로도 기간 내내 휴무이므로 제외)
 // has_irregular_closing(부정기 휴무)는 특정 날짜 판정이 불가하므로 제외하지 않는다(노출 유지).
-async function getScheduleExcludeIds(dateFrom: string, dateTo: string): Promise<number[]> {
+export async function getScheduleExcludeIds(dateFrom: string, dateTo: string): Promise<number[]> {
   const from = dateFrom || dateTo;
   const to = dateTo || dateFrom;
   if (!from) return [];
@@ -201,9 +202,24 @@ export async function GET(request: Request) {
   if (keyword.trim()) query = query.ilike("title", `%${keyword}%`);
   if (guCode.trim()) query = query.eq("ldongsigngucd", guCode);
   if (dong.trim()) query = query.eq("dong", dong.trim());
-  if (themes.length > 0) query = query.in("lclssystm1", themes); // 테마(대분류) — 선택 중 하나라도 해당
 
   try {
+    // 테마(대분류) — 선택 중 하나라도 해당. "빵지순례"(BK)는 tb_code 상 가상 코드라
+    // lclssystm1로 못 걸러서 별도 로직(getBakeryPlaceIds)으로 place_id를 구해 합친다.
+    if (themes.length > 0) {
+      const { officialCodes, includeBakery } = splitThemeSelection(themes);
+      const bakeryIds = includeBakery ? await getBakeryPlaceIds() : [];
+      if (officialCodes.length > 0 && includeBakery) {
+        query = query.or(
+          `lclssystm1.in.(${officialCodes.join(",")}),place_id.in.(${bakeryIds.length ? bakeryIds.join(",") : "-1"})`
+        );
+      } else if (officialCodes.length > 0) {
+        query = query.in("lclssystm1", officialCodes);
+      } else {
+        query = query.in("place_id", bakeryIds.length > 0 ? bakeryIds : [-1]);
+      }
+    }
+
     if (accessTypes.length > 0) {
       const accessIds = await getBarrierFreeIds(accessTypes);
       query = query.in("contentid", accessIds.length > 0 ? accessIds : [-1]);
