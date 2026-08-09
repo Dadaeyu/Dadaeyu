@@ -1,0 +1,76 @@
+import type { MetadataRoute } from "next";
+
+const description =
+  "장애물 없이 즐기는 대전 무장애 여행 가이드. 필요한 도움에 맞는 장소와 코스를 찾아보세요.";
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    id: "/",
+    name: "다대유 - 대전 무장애 여행",
+    short_name: "다대유",
+    description,
+    lang: "ko-KR",
+    start_url: "/",
+    scope: "/",
+    display: "standalone",
+    orientation: "any",
+    background_color: "#ffffff",
+    theme_color: "#0f2847",
+    categories: ["travel", "navigation"],
+    prefer_related_applications: false,
+    icons: [
+      {
+        src: "/icons/pwa-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any"
+      },
+      {
+        src: "/icons/pwa-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any"
+      },
+      {
+        src: "/icons/pwa-maskable-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "maskable"
+      },
+      {
+        src: "/icons/pwa-maskable-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable"
+      }
+    ],
+    shortcuts: [
+      {
+        name: "지도에서 장소 찾기",
+        short_name: "지도",
+        description: "대전의 무장애 여행 장소를 지도에서 찾아보세요.",
+        url: "/map",
+        icons: [
+          {
+            src: "/icons/pwa-192x192.png",
+            sizes: "192x192",
+            type: "image/png"
+          }
+        ]
+      },
+      {
+        name: "여행 코스 보기",
+        short_name: "코스",
+        description: "다대유의 대전 여행 코스를 확인해 보세요.",
+        url: "/course",
+        icons: [
+          {
+            src: "/icons/pwa-192x192.png",
+            sizes: "192x192",
+            type: "image/png"
+          }
+        ]
+      }
+    ]
+  };
+}
