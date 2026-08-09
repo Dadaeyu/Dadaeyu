@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
-import { HOME_NEED_OPTIONS, type HomeLocation, type HomeNeedId } from "@/features/home/homeData";
+import {
+  HOME_NEED_OPTIONS,
+  getHomeRecommendationNeedIds,
+  type HomeLocation,
+  type HomeNeedId
+} from "@/features/home/homeData";
 import { HomeDataError, loadHomePlaces } from "@/features/home/server/loadHomePlaces";
+import { parseHomeExcludedPlaceIds, parseHomeRecommendationSeed } from "./request-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -10,13 +16,23 @@ const allowedNeedIds = new Set<HomeNeedId>(HOME_NEED_OPTIONS.map((option) => opt
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = (searchParams.get("q") ?? "").trim().slice(0, 80);
-  const needIds = (searchParams.get("needs") ?? "")
-    .split(",")
-    .filter((value): value is HomeNeedId => allowedNeedIds.has(value as HomeNeedId));
+  const needIds = getHomeRecommendationNeedIds(
+    (searchParams.get("needs") ?? "")
+      .split(",")
+      .filter((value): value is HomeNeedId => allowedNeedIds.has(value as HomeNeedId))
+  );
   const location = parseLocation(searchParams.get("lat"), searchParams.get("lng"));
+  const recommendationSeed = parseHomeRecommendationSeed(searchParams.get("seed"));
+  const excludedPlaceIds = parseHomeExcludedPlaceIds(searchParams.getAll("exclude"));
 
   try {
-    const data = await loadHomePlaces({ needIds, location, query });
+    const data = await loadHomePlaces({
+      needIds,
+      location,
+      query,
+      recommendationSeed,
+      excludedPlaceIds
+    });
     return NextResponse.json(data, {
       headers: { "Cache-Control": "private, no-store" }
     });
