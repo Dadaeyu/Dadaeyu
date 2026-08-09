@@ -5,13 +5,13 @@ import Link from "next/link";
 import {
   Accessibility,
   Baby,
+  CalendarDays,
   CalendarX2,
   ChevronDown,
   ChevronUp,
   CircleAlert,
   CircleCheck,
   CircleHelp,
-  ClipboardCheck,
   Clock3,
   Ear,
   ExternalLink,
@@ -27,23 +27,30 @@ import {
   formatDistance,
   formatSourceDate,
   getAccessibilityGroups,
+  getConfirmedHomeEvidenceForNeeds,
   getHomeEvidenceStatus,
   getNeedEvidenceChecks,
   sortHomeEvidenceForNeeds,
   type HomeAccessibilityEvidence,
   type HomeAccessibilityGroup,
   type HomeEvidenceStatus,
-  type HomeNeedEvidenceCheck,
   type HomeNeedId,
   type RankedHomePlace
 } from "@/features/home/homeData";
+import {
+  formatHomeDetailValue,
+  formatHomeEventPeriod,
+  shouldShowHomeParkingDetail,
+  summarizeHomeFee,
+  summarizeHomeEvidence
+} from "@/features/home/homePresentation";
 
 type PlaceSectionId = "decision" | "visit" | "access";
 
 const SECTION_LINKS: Array<{ id: PlaceSectionId; label: string }> = [
-  { id: "decision", label: "방문 전 확인" },
-  { id: "visit", label: "장소 안내" },
-  { id: "access", label: "접근성 상세" }
+  { id: "decision", label: "선택한 조건" },
+  { id: "visit", label: "방문 정보" },
+  { id: "access", label: "이용 편의" }
 ];
 
 const GROUP_ICONS: Record<
@@ -75,28 +82,23 @@ export function HomePlaceDialog({
   );
   const sourceDate = formatSourceDate(place.sourceUpdatedAt);
   const distance = formatDistance(place.distanceMeters);
-  const decisionChecks = useMemo<HomeNeedEvidenceCheck[]>(() => {
-    if (!selectedNeedIds.includes("short_distance")) return needChecks;
-    return [
-      ...needChecks,
-      {
-        id: "location-distance",
-        label: "현재 위치와의 거리",
-        status: distance ? "available" : "unknown",
-        evidence: []
-      }
-    ];
-  }, [distance, needChecks, selectedNeedIds]);
+  const decisionChecks = needChecks;
   const usesSelectedNeedSummary = decisionChecks.length > 0;
-  const statusCounts = usesSelectedNeedSummary
-    ? countNeedCheckStatuses(decisionChecks)
-    : countEvidenceStatuses(place.accessibility);
-  const decisionSummary = getDecisionSummary(statusCounts);
-  const summaryEvidence = sortHomeEvidenceForNeeds(place.accessibility, selectedNeedIds)
+  const confirmedSummaryEvidence = getConfirmedHomeEvidenceForNeeds(place, selectedNeedIds);
+  const hasStrictCondition = selectedNeedIds.length > 0;
+  const summaryEvidence = sortHomeEvidenceForNeeds(
+    hasStrictCondition ? confirmedSummaryEvidence : place.accessibility,
+    selectedNeedIds
+  )
     .filter((item) => getHomeEvidenceStatus(item) === "available")
-    .slice(0, 2);
-  const attentionCount = statusCounts.unavailable + statusCounts.unknown;
+    .slice(0, 3);
+  const visibleSectionLinks = usesSelectedNeedSummary
+    ? SECTION_LINKS
+    : SECTION_LINKS.filter((section) => section.id !== "decision");
+  const hasDialogSummary = usesSelectedNeedSummary || summaryEvidence.length > 0;
   const hasLongOverview = (place.overview?.length ?? 0) > 220;
+  const eventPeriod = formatHomeEventPeriod(place.eventStartDate, place.eventEndDate);
+  const showParkingDetail = shouldShowHomeParkingDetail(place.parking);
   const phoneHref = place.phone ? `tel:${place.phone.replace(/[^\d+]/g, "")}` : null;
 
   useEffect(() => {
@@ -159,7 +161,7 @@ export function HomePlaceDialog({
       }}
       className="m-0 h-dvh max-h-none w-full max-w-none bg-transparent p-0 backdrop:bg-black/55 md:m-auto md:h-[min(90dvh,54rem)] md:w-[min(64rem,calc(100%-3rem))] md:rounded-3xl md:shadow-2xl"
       aria-labelledby="place-dialog-title"
-      aria-describedby="place-dialog-summary"
+      aria-describedby={hasDialogSummary ? "place-dialog-summary" : undefined}
     >
       <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-white md:rounded-3xl">
         <button
@@ -196,40 +198,22 @@ export function HomePlaceDialog({
                   <span>{place.address}</span>
                 </p>
               ) : (
-                <p className="text-steel mt-4">공개된 주소 정보가 없습니다.</p>
+                <p className="text-steel mt-4">주소는 방문 전에 운영처에서 확인해 주세요.</p>
               )}
-              <div className="text-steel mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
-                {distance ? <span>내 위치에서 직선거리 {distance}</span> : null}
-                <span>{sourceDate ? `정보 기준 ${sourceDate}` : "정보 기준일 미확인"}</span>
-              </div>
+              {distance ? (
+                <p className="text-steel mt-3 text-sm">내 위치에서 직선거리 {distance}</p>
+              ) : null}
 
-              <div id="place-dialog-summary" className="border-hairline mt-4 border-y py-4 sm:mt-6">
-                <div className="flex items-start gap-3">
-                  <span className="bg-brand-800 grid h-10 w-10 shrink-0 place-items-center rounded-lg text-white">
-                    <ClipboardCheck className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-brand-800 text-xs font-semibold tracking-[0.08em]">
-                      {usesSelectedNeedSummary ? "내 조건 방문 준비표" : "전체 접근성 방문 준비표"}
-                    </p>
-                    <p className="text-ink mt-1 font-semibold">{decisionSummary.title}</p>
-                    <p className="text-slate mt-1 text-sm leading-5">
-                      {summaryEvidence.length
-                        ? summaryEvidence.map((item) => item.label).join(" · ")
-                        : decisionSummary.description}
-                    </p>
-                  </div>
-                </div>
-                <dl className="border-hairline mt-3 grid grid-cols-3 divide-x border-y bg-white">
-                  <SummaryFact label="공개 편의정보" value={`${statusCounts.available}개`} />
-                  <SummaryFact label="확인 필요" value={`${attentionCount}개`} />
-                  <SummaryFact label="정보 기준" value={sourceDate ?? "미제공"} />
+              {!usesSelectedNeedSummary && summaryEvidence.length ? (
+                <dl
+                  id="place-dialog-summary"
+                  className="border-hairline mt-5 grid gap-2 border-y py-4 sm:mt-6 sm:grid-cols-3"
+                >
+                  {summaryEvidence.map((item) => (
+                    <ConfirmedFact key={item.key} label={item.label} value={item.value} />
+                  ))}
                 </dl>
-                <p className="text-steel mt-2 text-xs leading-5">
-                  한국관광공사 공개정보 · 제한 안내 {statusCounts.unavailable}개 · 판단 필요
-                  {` ${statusCounts.unknown}개`} · 현장 확인일 미제공
-                </p>
-              </div>
+              ) : null}
             </div>
           </section>
 
@@ -237,8 +221,12 @@ export function HomePlaceDialog({
             className="border-hairline z-20 hidden border-b bg-white sm:sticky sm:top-0 sm:block sm:bg-white/95 sm:backdrop-blur-md"
             aria-label="장소 정보 바로가기"
           >
-            <div className="mx-auto grid max-w-3xl grid-cols-3 gap-1 px-3 py-1.5 sm:px-5 sm:py-2">
-              {SECTION_LINKS.map((section) => (
+            <div
+              className={`mx-auto grid max-w-3xl gap-1 px-3 py-1.5 sm:px-5 sm:py-2 ${
+                visibleSectionLinks.length === 3 ? "grid-cols-3" : "grid-cols-2"
+              }`}
+            >
+              {visibleSectionLinks.map((section) => (
                 <button
                   key={section.id}
                   type="button"
@@ -252,26 +240,21 @@ export function HomePlaceDialog({
           </nav>
 
           <div className="mx-auto max-w-4xl px-4 py-3 sm:px-6 sm:py-9">
-            <section
-              data-place-section="decision"
-              tabIndex={-1}
-              className="scroll-mt-14 outline-none"
-              aria-labelledby="decision-title"
-            >
-              <SectionHeading
-                id="decision-title"
-                eyebrow={usesSelectedNeedSummary ? "내 조건 체크" : "방문 전 체크"}
-                title={
-                  usesSelectedNeedSummary ? "내게 필요한 조건의 공개정보" : "출발 전에 확인할 점"
-                }
-                description={
-                  usesSelectedNeedSummary
-                    ? "선택한 조건과 관련된 공개 내용과 판단이 필요한 항목을 나눠 보여드려요."
-                    : "접근성 정보는 실제 현장과 달라질 수 있어 중요한 시설을 한 번 더 확인하는 것이 좋아요."
-                }
-              />
+            {usesSelectedNeedSummary ? (
+              <section
+                id="place-dialog-summary"
+                data-place-section="decision"
+                tabIndex={-1}
+                className="scroll-mt-14 outline-none"
+                aria-labelledby="decision-title"
+              >
+                <SectionHeading
+                  id="decision-title"
+                  eyebrow="선택한 조건"
+                  title="내 조건에서 먼저 볼 내용"
+                  description="선택한 조건과 직접 관련된 정보만 모았습니다."
+                />
 
-              {decisionChecks.length ? (
                 <div className="border-hairline mt-5 divide-y overflow-hidden rounded-2xl border bg-white">
                   {decisionChecks.map((check) => (
                     <NeedCheckRow
@@ -287,43 +270,21 @@ export function HomePlaceDialog({
                     />
                   ))}
                 </div>
-              ) : (
-                <div className="border-hairline mt-5 grid grid-cols-[1.5rem_minmax(0,1fr)] gap-3 border-y px-1 py-4">
-                  <CircleHelp className="text-brand-700 mt-0.5 h-5 w-5" aria-hidden="true" />
-                  <div>
-                    <p className="text-ink font-semibold">필요한 시설을 아래에서 확인해 보세요</p>
-                    <p className="text-slate mt-1 text-sm leading-6">
-                      이동, 시각·청각 안내, 영유아 편의 정보는 접근성 상세에 목적별로 정리했어요.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className="border-gold-200 bg-gold-50 mt-5 grid grid-cols-[1.5rem_minmax(0,1fr)] gap-3 rounded-xl border p-4">
-                <CircleAlert className="text-gold-700 mt-0.5 h-5 w-5" aria-hidden="true" />
-                <div>
-                  <p className="text-ink font-semibold">출발 전 한 번 더 확인해 주세요</p>
-                  <p className="text-slate mt-1 text-sm leading-6">
-                    공사나 시설 고장처럼 실시간으로 달라지는 내용은 방문 전에 최신 정보를 다시
-                    확인해 주세요.
-                  </p>
-                </div>
-              </div>
-            </section>
+              </section>
+            ) : null}
 
             <section
               data-place-section="visit"
               tabIndex={-1}
-              className="border-hairline mt-10 scroll-mt-14 border-t pt-9 outline-none"
+              className={`${usesSelectedNeedSummary ? "mt-10 border-t pt-9" : ""} border-hairline scroll-mt-14 outline-none`}
               aria-labelledby="visit-title"
             >
-              <SectionHeading
-                id="visit-title"
-                title="장소 안내"
-                description="운영시간과 연락처처럼 방문 계획에 필요한 정보를 모았어요."
-              />
+              <SectionHeading id="visit-title" title="방문 정보" />
 
               <dl className="border-hairline mt-5 divide-y border-y">
+                {eventPeriod ? (
+                  <VisitInfoRow icon={CalendarDays} label="행사 기간" value={eventPeriod} />
+                ) : null}
                 <VisitInfoRow icon={Clock3} label="운영시간" value={place.hours} critical />
                 {place.restDate ? (
                   <VisitInfoRow icon={CalendarX2} label="휴무일" value={place.restDate} />
@@ -333,8 +294,8 @@ export function HomePlaceDialog({
                 ) : null}
                 <VisitInfoRow icon={Phone} label="연락처" value={place.phone} critical />
                 <VisitInfoRow icon={MapPin} label="주소" value={place.address} critical />
-                {place.parking ? (
-                  <VisitInfoRow icon={Accessibility} label="일반 주차 안내" value={place.parking} />
+                {showParkingDetail ? (
+                  <VisitInfoRow icon={Accessibility} label="주차" value={place.parking} />
                 ) : null}
               </dl>
 
@@ -358,38 +319,6 @@ export function HomePlaceDialog({
                   ) : null}
                 </div>
               ) : null}
-
-              <div className="mt-7">
-                <h3 className="text-ink text-lg font-semibold">장소 소개</h3>
-                {place.overview ? (
-                  <>
-                    <p
-                      className={`text-slate mt-3 max-w-[68ch] text-base leading-7 ${
-                        hasLongOverview && !overviewOpen ? "line-clamp-5" : ""
-                      }`}
-                    >
-                      {place.overview}
-                    </p>
-                    {hasLongOverview ? (
-                      <button
-                        type="button"
-                        onClick={() => setOverviewOpen((value) => !value)}
-                        aria-expanded={overviewOpen}
-                        className="text-brand-800 mt-2 inline-flex min-h-12 items-center gap-1 font-medium"
-                      >
-                        {overviewOpen ? "소개 접기" : "소개 더 보기"}
-                        {overviewOpen ? (
-                          <ChevronUp className="h-4 w-4" aria-hidden="true" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" aria-hidden="true" />
-                        )}
-                      </button>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="text-steel mt-3 leading-6">공개된 장소 소개가 없습니다.</p>
-                )}
-              </div>
             </section>
 
             <section
@@ -400,31 +329,59 @@ export function HomePlaceDialog({
             >
               <SectionHeading
                 id="access-title"
-                title="접근성 상세"
-                description="이동과 안내에 필요한 내용을 목적별로 나누어 확인할 수 있어요."
+                title="이용 편의"
+                description="이동과 안내에 필요한 편의 정보를 항목별로 확인해 보세요."
               />
 
               {groups.length ? (
-                <div className="mt-6 space-y-9">
+                <div className="mt-6 space-y-3">
                   {groups.map((group) => (
                     <AccessGroup key={group.id} group={group} />
                   ))}
                 </div>
               ) : (
                 <div className="bg-surface-soft text-slate mt-5 rounded-2xl p-4 leading-6">
-                  공개된 접근성 세부 정보가 없습니다. 방문 전 장소에 문의해 주세요.
+                  접근성 세부 안내가 아직 충분하지 않아요. 방문 전 장소에 문의해 주세요.
                 </div>
               )}
             </section>
 
+            {place.overview ? (
+              <section
+                className="border-hairline mt-10 border-t pt-9"
+                aria-labelledby="overview-title"
+              >
+                <h2 id="overview-title" className="text-ink text-2xl font-semibold">
+                  장소 소개
+                </h2>
+                <p
+                  className={`text-slate mt-3 max-w-[68ch] text-base leading-7 ${
+                    hasLongOverview && !overviewOpen ? "line-clamp-5" : ""
+                  }`}
+                >
+                  {formatHomeDetailValue(place.overview, undefined, 2_000)}
+                </p>
+                {hasLongOverview ? (
+                  <button
+                    type="button"
+                    onClick={() => setOverviewOpen((value) => !value)}
+                    aria-expanded={overviewOpen}
+                    className="text-brand-800 mt-2 inline-flex min-h-12 items-center gap-1 font-medium"
+                  >
+                    {overviewOpen ? "소개 접기" : "소개 더 보기"}
+                    {overviewOpen ? (
+                      <ChevronUp className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                    )}
+                  </button>
+                ) : null}
+              </section>
+            ) : null}
+
             <details className="group border-hairline bg-surface-soft mt-10 overflow-hidden rounded-xl border">
               <summary className="text-ink flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 font-semibold select-none [&::-webkit-details-marker]:hidden">
-                <span>
-                  <span className="block">정보 출처와 기준일</span>
-                  <span className="text-steel mt-0.5 block text-xs font-normal">
-                    관광·접근성 정보가 언제, 어디서 제공됐는지 확인하기
-                  </span>
-                </span>
+                <span>정보 출처와 기준일</span>
                 <ChevronDown
                   className="text-steel h-5 w-5 shrink-0 transition-transform group-open:rotate-180"
                   aria-hidden="true"
@@ -434,11 +391,10 @@ export function HomePlaceDialog({
                 <dl className="divide-hairline divide-y">
                   <SourceRow label="정보 출처" value="한국관광공사 관광정보·무장애 여행정보" />
                   <SourceRow label="관광정보 갱신" value={sourceDate ?? "확인할 수 없음"} />
-                  <SourceRow label="현장 접근성 확인일" value="제공되지 않음" />
-                  <SourceRow label="실시간 운영·시설 상태" value="제공되지 않음" />
                 </dl>
                 <p className="text-steel mt-2 text-sm leading-6">
-                  출입구, 엘리베이터, 화장실처럼 방문에 중요한 정보는 장소에 직접 확인해 주세요.
+                  시설 상태는 달라질 수 있습니다. 출입구, 엘리베이터, 화장실처럼 중요한 정보는 방문
+                  전에 장소에 직접 확인해 주세요.
                 </p>
               </div>
             </details>
@@ -494,12 +450,8 @@ function NeedCheckRow({
   detail?: string;
 }) {
   const statusText =
-    check.status === "available"
-      ? "공개 정보 있음"
-      : check.status === "unavailable"
-        ? "이용 제한 내용 있음"
-        : "공개 정보 없음";
-  const evidenceText = detail ?? check.evidence[0]?.value;
+    check.status === "unavailable" ? "제한 안내" : check.status === "unknown" ? "문의 권장" : null;
+  const evidenceText = formatHomeDetailValue(detail ?? check.evidence[0]?.value, check.label);
 
   return (
     <div className="grid min-h-16 grid-cols-[1.5rem_minmax(0,1fr)] gap-3 p-4">
@@ -507,7 +459,7 @@ function NeedCheckRow({
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <p className="text-ink font-semibold">{check.label}</p>
-          <p className="text-steel text-sm">{statusText}</p>
+          {statusText ? <p className="text-steel text-sm">{statusText}</p> : null}
         </div>
         {evidenceText ? (
           <p className="text-slate mt-1 line-clamp-3 text-sm leading-6">{evidenceText}</p>
@@ -531,6 +483,8 @@ function VisitInfoRow({
   critical?: boolean;
 }) {
   if (!value && !critical) return null;
+  const displayValue =
+    label === "이용요금" ? summarizeHomeFee(value) : formatHomeDetailValue(value, label);
   return (
     <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 py-4">
       <span className="bg-surface text-steel grid h-10 w-10 place-items-center rounded-md">
@@ -539,7 +493,7 @@ function VisitInfoRow({
       <div className="min-w-0">
         <dt className="text-steel text-sm">{label}</dt>
         <dd className={`mt-1 leading-6 ${value ? "text-ink" : "text-gold-800"}`}>
-          {value ?? "공개 정보 없음"}
+          {displayValue || "방문 전 확인 필요"}
         </dd>
       </div>
     </div>
@@ -579,36 +533,44 @@ function VisitResourceLink({
 
 function AccessGroup({ group }: { group: HomeAccessibilityGroup }) {
   const Icon = GROUP_ICONS[group.id];
+  const previewLabels = group.evidence.slice(0, 2).map((evidence) => evidence.label);
+  const preview = `${previewLabels.join(" · ")}${group.evidence.length > previewLabels.length ? " 외" : ""}`;
   return (
-    <section aria-labelledby={`access-group-${group.id}`}>
-      <div className="flex items-start gap-3">
-        <span className="bg-brand-50 text-brand-800 grid h-11 w-11 shrink-0 place-items-center rounded-md">
-          <Icon className="h-5 w-5" aria-hidden={true} />
+    <details className="group/access border-hairline overflow-hidden rounded-2xl border bg-white">
+      <summary
+        id={`access-group-${group.id}`}
+        className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 select-none [&::-webkit-details-marker]:hidden"
+      >
+        <span className="flex min-w-0 items-start gap-3">
+          <span className="bg-brand-50 text-brand-800 grid h-10 w-10 shrink-0 place-items-center rounded-md">
+            <Icon className="h-5 w-5" aria-hidden={true} />
+          </span>
+          <span className="min-w-0">
+            <span className="text-ink block font-semibold">{group.label}</span>
+            <span className="text-steel mt-0.5 line-clamp-1 block text-sm leading-5">
+              {preview}
+            </span>
+          </span>
         </span>
-        <div>
-          <h3 id={`access-group-${group.id}`} className="text-ink text-lg font-semibold">
-            {group.label}
-          </h3>
-          <p className="text-steel mt-1 text-sm leading-5">{group.description}</p>
-        </div>
-      </div>
-      <dl className="border-hairline mt-4 divide-y border-y">
+        <ChevronDown
+          className="text-steel h-5 w-5 shrink-0 transition-transform group-open/access:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <dl className="border-hairline divide-y border-t px-4">
         {group.evidence.map((evidence) => (
           <AccessDetail key={evidence.key} evidence={evidence} />
         ))}
       </dl>
-    </section>
+    </details>
   );
 }
 
 function AccessDetail({ evidence }: { evidence: HomeAccessibilityEvidence }) {
   const status = getHomeEvidenceStatus(evidence);
   const statusLabel =
-    status === "available"
-      ? "공개 내용 있음"
-      : status === "unavailable"
-        ? "이용 제한 안내"
-        : "내용 확인 필요";
+    status === "unavailable" ? "제한 안내" : status === "unknown" ? "문의 권장" : null;
+  const displayValue = formatHomeDetailValue(evidence.value, evidence.label);
 
   return (
     <div className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-3 py-4">
@@ -616,9 +578,9 @@ function AccessDetail({ evidence }: { evidence: HomeAccessibilityEvidence }) {
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <dt className="text-ink font-semibold">{evidence.label}</dt>
-          <dd className="text-steel text-sm">{statusLabel}</dd>
+          {statusLabel ? <dd className="text-steel text-sm">{statusLabel}</dd> : null}
         </div>
-        <dd className="text-slate mt-1 leading-6">{evidence.value}</dd>
+        <dd className="text-slate mt-1 leading-6">{displayValue}</dd>
       </div>
     </div>
   );
@@ -643,11 +605,13 @@ function SourceRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SummaryFact({ label, value }: { label: string; value: string }) {
+function ConfirmedFact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 px-2 py-2.5 text-center sm:px-3">
-      <dt className="text-steel text-[0.6875rem] leading-4 sm:text-xs">{label}</dt>
-      <dd className="text-ink mt-0.5 text-sm font-semibold sm:text-base">{value}</dd>
+    <div className="border-hairline min-w-0 rounded-xl border bg-white px-3 py-2.5">
+      <dt className="text-brand-800 text-xs font-semibold">{label}</dt>
+      <dd className="text-slate mt-1 line-clamp-2 text-sm leading-5">
+        {summarizeHomeEvidence(value)}
+      </dd>
     </div>
   );
 }
@@ -661,7 +625,7 @@ function SectionHeading({
   id: string;
   eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
 }) {
   return (
     <div>
@@ -669,57 +633,9 @@ function SectionHeading({
       <h2 id={id} className={`text-ink text-2xl font-semibold ${eyebrow ? "mt-1" : ""}`}>
         {title}
       </h2>
-      <p className="text-steel mt-2 max-w-[62ch] text-sm leading-6">{description}</p>
+      {description ? (
+        <p className="text-steel mt-2 max-w-[62ch] text-sm leading-6">{description}</p>
+      ) : null}
     </div>
   );
-}
-
-function countEvidenceStatuses(evidence: readonly HomeAccessibilityEvidence[]) {
-  return evidence.reduce(
-    (counts, item) => {
-      counts[getHomeEvidenceStatus(item)] += 1;
-      return counts;
-    },
-    { available: 0, unavailable: 0, unknown: 0 } satisfies Record<HomeEvidenceStatus, number>
-  );
-}
-
-function countNeedCheckStatuses(checks: readonly HomeNeedEvidenceCheck[]) {
-  return checks.reduce(
-    (counts, check) => {
-      counts[check.status] += 1;
-      return counts;
-    },
-    { available: 0, unavailable: 0, unknown: 0 } satisfies Record<HomeEvidenceStatus, number>
-  );
-}
-
-function getDecisionSummary(counts: Record<HomeEvidenceStatus, number>) {
-  const total = counts.available + counts.unavailable + counts.unknown;
-  if (total === 0) {
-    return {
-      title: "공개된 접근성 세부 정보가 아직 없어요",
-      description: "출발 전에 필요한 시설의 최신 상태를 장소에 확인해 주세요."
-    };
-  }
-  if (counts.unavailable > 0) {
-    return {
-      title: `주의해서 볼 내용 ${counts.unavailable}개`,
-      description: counts.available
-        ? `확인된 편의정보 ${counts.available}개와 함께 아래에서 자세히 살펴보세요.`
-        : "이용이 어렵거나 제한된 내용이 있어 아래 세부 정보를 먼저 확인해 주세요."
-    };
-  }
-  if (counts.available > 0) {
-    return {
-      title: `공개된 편의정보 ${counts.available}개`,
-      description: counts.unknown
-        ? `${counts.unknown}개 항목은 현장 확인이 필요해요. 아래에서 내용을 살펴보세요.`
-        : "아래 접근성 상세에서 시설별 내용을 확인할 수 있어요."
-    };
-  }
-  return {
-    title: `판단이 필요한 정보 ${counts.unknown}개`,
-    description: "공개된 설명만으로 판단하기 어려워 출발 전에 최신 상태를 확인하는 것이 좋아요."
-  };
 }

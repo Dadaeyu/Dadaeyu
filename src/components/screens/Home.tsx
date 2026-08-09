@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Chatbot from "@/components/Chatbot";
-import { HomeFeaturedPlace, HomeHero, HomeNeedsPicker } from "@/features/home/HomeHero";
+import { HomeHero, HomeNeedsPicker } from "@/features/home/HomeHero";
 import { HomePlaceDialog } from "@/features/home/HomePlaceDialog";
 import { HomeRecommendations } from "@/features/home/HomeRecommendations";
 import { homeNeedIdsToChatNeeds } from "@/features/home/homeData";
@@ -27,14 +27,13 @@ export default function Home() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-7 overflow-x-clip pb-6 sm:space-y-9">
+    <div className="mx-auto max-w-6xl space-y-4 overflow-x-clip pb-24 sm:space-y-8 md:pb-8">
       <HomeHero experience={experience} onOpenChat={openChat} />
 
-      <HomeFeaturedPlace experience={experience} />
-
-      {experience.needsProfilePrompt ? <HomeNeedsPicker experience={experience} /> : null}
-
-      <HomeRecommendations experience={experience} />
+      <div className="border-hairline overflow-hidden rounded-[1.25rem] border bg-white shadow-[0_18px_44px_-40px_rgba(15,44,41,0.72)]">
+        <HomeNeedsPicker experience={experience} />
+        <HomeRecommendations experience={experience} />
+      </div>
 
       {experience.selectedPlace ? (
         <HomePlaceDialog
