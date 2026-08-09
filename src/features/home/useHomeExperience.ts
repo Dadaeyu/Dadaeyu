@@ -2,11 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useMyLocation } from "@/hooks/useMyLocation";
-import { updateUserPreferences } from "@/lib/supabase/member";
 import {
-  homeNeedIdsToStorageValues,
+  buildHomeRequestKey,
+  createHomeRecommendationSeed,
+  getCriteriaScopedHomeResponse,
+  getOwnerScopedHomeResponse,
+  mergeRecentHomePlaceIds,
+  parseRecentHomePlaceIds
+} from "@/features/home/homeExperienceState";
+import { useMyLocation } from "@/hooks/useMyLocation";
+import {
+  getHomeRecommendationNeedIds,
+  normalizeHomeNeedSelection,
   resolveHomeNeedIds,
+  toggleHomeNeedSelection,
   type HomeDataResponse,
   type HomeNeedId,
   type RankedHomePlace
@@ -14,11 +23,21 @@ import {
 
 type HomeLoadState = "loading" | "ready" | "empty" | "error";
 type HomeResponseState = {
+  ownerId: string | null;
   key: string;
+  criteriaKey: string;
   data: HomeDataResponse | null;
   loadState: Exclude<HomeLoadState, "loading">;
   loadError: string | null;
 };
+type HomeDiscoveryState = {
+  ownerScope: string;
+  seed: number;
+  excludedPlaceIds: string[];
+};
+
+const HOME_RECENT_PLACE_STORAGE_KEY = "dadaeyu.home.recentPlaces.v1";
+const HOME_RECOMMENDATION_SEED_RANGE = 0x1_0000_0000;
 
 export function useHomeExperience() {
   const auth = useAuth();
@@ -26,12 +45,12 @@ export function useHomeExperience() {
     ownerId: string | null;
     needIds: HomeNeedId[];
   } | null>(null);
-  const [query, setQuery] = useState("");
-  const [committedQuery, setCommittedQuery] = useState("");
   const [responseState, setResponseState] = useState<HomeResponseState | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [requestNeedState, setRequestNeedState] = useState<{
+    ownerId: string | null;
+    key: string;
+  } | null>(null);
+  const [discoveryState, setDiscoveryState] = useState<HomeDiscoveryState | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [selectedPlace, setSelectedPlace] = useState<RankedHomePlace | null>(null);
   const placeTriggerRef = useRef<HTMLElement | null>(null);
@@ -39,32 +58,78 @@ export function useHomeExperience() {
     key: string;
     controller: AbortController;
   } | null>(null);
+  const initializedDiscoveryOwnerRef = useRef<string | null>(null);
 
   const location = useMyLocation();
   const ownerId = auth.user?.id ?? null;
+  const ownerScope = ownerId ?? "guest";
+  const recentPlaceStorageKey = `${HOME_RECENT_PLACE_STORAGE_KEY}:${ownerScope}`;
   const savedNeedIds = useMemo(
-    () => resolveHomeNeedIds(auth.preferences?.accessibility_needs),
+    () => normalizeHomeNeedSelection(resolveHomeNeedIds(auth.preferences?.accessibility_needs)),
     [auth.preferences?.accessibility_needs]
   );
-  const selectedNeedIds = needSelection?.ownerId === ownerId ? needSelection.needIds : savedNeedIds;
+  const selectedNeedIds = useMemo(
+    () =>
+      normalizeHomeNeedSelection(
+        needSelection?.ownerId === ownerId ? needSelection.needIds : savedNeedIds
+      ),
+    [needSelection, ownerId, savedNeedIds]
+  );
   const locationLat = location.location ? Number(location.location.lat.toFixed(4)) : null;
   const locationLng = location.location ? Number(location.location.lng.toFixed(4)) : null;
-  const selectedNeedKey = selectedNeedIds.join(",");
+  const selectedNeedKey = getHomeRecommendationNeedIds(selectedNeedIds).join(",");
+
+  useEffect(() => {
+    if (auth.loading || initializedDiscoveryOwnerRef.current === ownerScope) return;
+    initializedDiscoveryOwnerRef.current = ownerScope;
+    let excludedPlaceIds: string[] = [];
+    try {
+      excludedPlaceIds = parseRecentHomePlaceIds(
+        window.sessionStorage.getItem(recentPlaceStorageKey)
+      );
+    } catch {
+      // 브라우저 저장소를 사용할 수 없어도 추천 자체는 정상적으로 동작한다.
+    }
+    setDiscoveryState({
+      ownerScope,
+      seed: createHomeRecommendationSeed(),
+      excludedPlaceIds
+    });
+  }, [auth.loading, ownerScope, recentPlaceStorageKey]);
+
+  useEffect(() => {
+    if (auth.loading) return;
+    const ownerChanged = requestNeedState?.ownerId !== ownerId;
+    const timer = window.setTimeout(
+      () => setRequestNeedState({ ownerId, key: selectedNeedKey }),
+      ownerChanged ? 0 : 180
+    );
+    return () => window.clearTimeout(timer);
+  }, [auth.loading, ownerId, requestNeedState?.ownerId, selectedNeedKey]);
+
+  const requestNeedKey = requestNeedState?.ownerId === ownerId ? requestNeedState.key : null;
+  const isRequestNeedCurrent = requestNeedKey !== null && requestNeedKey === selectedNeedKey;
+  const currentDiscoveryState = discoveryState?.ownerScope === ownerScope ? discoveryState : null;
+  const criteriaKey =
+    requestNeedKey === null ? null : JSON.stringify([requestNeedKey, locationLat, locationLng]);
   const requestUrl = useMemo(() => {
-    if (auth.loading) return null;
+    if (auth.loading || requestNeedKey === null || !currentDiscoveryState) return null;
     const params = new URLSearchParams();
-    if (committedQuery) params.set("q", committedQuery);
-    if (selectedNeedKey) params.set("needs", selectedNeedKey);
+    if (requestNeedKey) params.set("needs", requestNeedKey);
+    params.set("seed", String(currentDiscoveryState.seed));
+    if (currentDiscoveryState.excludedPlaceIds.length) {
+      params.set("exclude", currentDiscoveryState.excludedPlaceIds.join(","));
+    }
     if (locationLat !== null && locationLng !== null) {
       params.set("lat", String(locationLat));
       params.set("lng", String(locationLng));
     }
     return `/api/home?${params.toString()}`;
-  }, [auth.loading, committedQuery, selectedNeedKey, locationLat, locationLng]);
-  const requestKey = requestUrl ? `${requestUrl}#${retryKey}` : null;
+  }, [auth.loading, currentDiscoveryState, requestNeedKey, locationLat, locationLng]);
+  const requestKey = buildHomeRequestKey(ownerId, requestUrl, retryKey);
 
   useEffect(() => {
-    if (!requestUrl || !requestKey) return;
+    if (!requestUrl || !requestKey || !criteriaKey) return;
     if (
       homeRequestRef.current?.key === requestKey &&
       !homeRequestRef.current.controller.signal.aborted
@@ -88,8 +153,22 @@ export function useHomeExperience() {
           );
         }
         if (homeRequestRef.current?.key !== requestKey) return;
+        try {
+          const storedPlaceIds = parseRecentHomePlaceIds(
+            window.sessionStorage.getItem(recentPlaceStorageKey)
+          );
+          const nextPlaceIds = mergeRecentHomePlaceIds(
+            storedPlaceIds,
+            body.places.map((place) => place.id)
+          );
+          window.sessionStorage.setItem(recentPlaceStorageKey, JSON.stringify(nextPlaceIds));
+        } catch {
+          // 저장소가 차단된 환경에서는 현재 방문 동안의 순환만 유지한다.
+        }
         setResponseState({
+          ownerId,
           key: requestKey,
+          criteriaKey,
           data: body,
           loadState: body.places.length ? "ready" : "empty",
           loadError: null
@@ -99,13 +178,15 @@ export function useHomeExperience() {
         if (error instanceof DOMException && error.name === "AbortError") return;
         if (homeRequestRef.current?.key !== requestKey) return;
         setResponseState({
+          ownerId,
           key: requestKey,
+          criteriaKey,
           data: null,
           loadState: "error",
           loadError: error instanceof Error ? error.message : "관광정보를 불러오지 못했습니다."
         });
       });
-  }, [requestKey, requestUrl]);
+  }, [criteriaKey, ownerId, recentPlaceStorageKey, requestKey, requestUrl]);
 
   useEffect(
     () => () => {
@@ -114,75 +195,50 @@ export function useHomeExperience() {
     []
   );
 
-  const currentResponse = requestKey && responseState?.key === requestKey ? responseState : null;
-  const data = currentResponse?.data ?? null;
-  const loadState: HomeLoadState = requestKey
-    ? (currentResponse?.loadState ?? "loading")
-    : "loading";
+  const ownerResponseState = getOwnerScopedHomeResponse(responseState, ownerId);
+  const criteriaResponseState = getCriteriaScopedHomeResponse(responseState, ownerId, criteriaKey);
+  const currentResponse =
+    requestKey && ownerResponseState?.key === requestKey ? ownerResponseState : null;
+  const data =
+    requestKey && isRequestNeedCurrent
+      ? currentResponse
+        ? currentResponse.data
+        : (criteriaResponseState?.data ?? null)
+      : null;
+  const loadState: HomeLoadState =
+    requestKey && isRequestNeedCurrent ? (currentResponse?.loadState ?? "loading") : "loading";
   const loadError = currentResponse?.loadError ?? null;
+  const isRefreshing = loadState === "loading" && Boolean(data?.places.length);
 
   const toggleNeed = useCallback(
     (needId: HomeNeedId) => {
-      setSaveError(null);
-      setSaveMessage(null);
       setNeedSelection({
         ownerId,
-        needIds: selectedNeedIds.includes(needId)
-          ? selectedNeedIds.filter((currentNeedId) => currentNeedId !== needId)
-          : [...selectedNeedIds, needId]
+        needIds: toggleHomeNeedSelection(selectedNeedIds, needId)
       });
     },
     [ownerId, selectedNeedIds]
   );
 
-  const saveNeeds = useCallback(async () => {
-    if (!auth.user) return;
-    setSaving(true);
-    setSaveError(null);
-    setSaveMessage(null);
-    try {
-      await updateUserPreferences(auth.user.id, {
-        accessibility_needs: homeNeedIdsToStorageValues(selectedNeedIds)
-      });
-      await auth.refreshMember();
-      setSaveMessage("선택한 도움을 내 조건에 저장했습니다.");
-    } catch {
-      setSaveError("조건을 저장하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.");
-    } finally {
-      setSaving(false);
-    }
-  }, [auth, selectedNeedIds]);
+  const clearNeeds = useCallback(() => {
+    setNeedSelection({ ownerId, needIds: [] });
+  }, [ownerId]);
 
-  const submitSearch = useCallback(() => {
-    const nextQuery = query.trim();
-    if (nextQuery === committedQuery) {
-      setRetryKey((value) => value + 1);
-      return;
-    }
-    setCommittedQuery(nextQuery);
-  }, [committedQuery, query]);
-
-  const clearSearch = useCallback(() => {
-    setQuery("");
-    if (!committedQuery) {
-      setRetryKey((value) => value + 1);
-      return;
-    }
-    setCommittedQuery("");
-  }, [committedQuery]);
-
-  const searchFor = useCallback(
-    (value: string) => {
-      const nextQuery = value.trim();
-      setQuery(nextQuery);
-      if (nextQuery === committedQuery) {
-        setRetryKey((current) => current + 1);
-        return;
-      }
-      setCommittedQuery(nextQuery);
-    },
-    [committedQuery]
-  );
+  const refreshRecommendations = useCallback(() => {
+    const currentPlaceIds = data?.places.map((place) => place.id) ?? [];
+    setDiscoveryState((currentState) => {
+      if (!currentState || currentState.ownerScope !== ownerScope) return currentState;
+      const generatedSeed = createHomeRecommendationSeed();
+      return {
+        ownerScope,
+        seed:
+          generatedSeed === currentState.seed
+            ? (generatedSeed + 1) % HOME_RECOMMENDATION_SEED_RANGE
+            : generatedSeed,
+        excludedPlaceIds: mergeRecentHomePlaceIds(currentState.excludedPlaceIds, currentPlaceIds)
+      };
+    });
+  }, [data, ownerScope]);
 
   const openPlace = useCallback((place: RankedHomePlace, trigger: HTMLElement) => {
     placeTriggerRef.current = trigger;
@@ -196,34 +252,21 @@ export function useHomeExperience() {
     });
   }, []);
 
-  const hasSavedNeeds = Boolean(auth.preferences?.accessibility_needs?.length);
-  const needsProfilePrompt =
-    !auth.loading && !hasSavedNeeds && (!auth.user || Boolean(auth.member));
-
   return useMemo(
     () => ({
       auth,
       selectedNeedIds,
       toggleNeed,
-      query,
-      setQuery,
-      committedQuery,
-      submitSearch,
-      searchFor,
-      clearSearch,
+      clearNeeds,
+      refreshRecommendations,
       data,
       loadState,
       loadError,
+      isRefreshing,
       retry: () => {
         setRetryKey((value) => value + 1);
       },
       location,
-      saving,
-      saveNeeds,
-      saveError,
-      saveMessage,
-      hasSavedNeeds,
-      needsProfilePrompt,
       selectedPlace,
       openPlace,
       closePlace
@@ -232,21 +275,13 @@ export function useHomeExperience() {
       auth,
       selectedNeedIds,
       toggleNeed,
-      query,
-      committedQuery,
-      submitSearch,
-      searchFor,
-      clearSearch,
+      clearNeeds,
+      refreshRecommendations,
       data,
       loadState,
       loadError,
+      isRefreshing,
       location,
-      saving,
-      saveNeeds,
-      saveError,
-      saveMessage,
-      hasSavedNeeds,
-      needsProfilePrompt,
       selectedPlace,
       openPlace,
       closePlace
