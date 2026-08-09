@@ -16,10 +16,6 @@ const DAEJEON_BOUNDS = { minLat: 36.05, maxLat: 36.55, minLng: 127.15, maxLng: 1
 
 // 이 정도(m) 이내로 정확해지면 더 기다리지 않고 확정한다.
 const ACCURACY_THRESHOLD_M = 100;
-// 첫 화면 표시(카메라 이동)는 이 정도로 정확한 값이 나오기 전까지는 하지 않는다.
-// (초기 Wi-Fi/IP 기반 리딩은 정확도가 수백m~수km로 나빠서, 그대로 보여주면
-// "엉뚱한 곳이 먼저 잡혔다가 내 위치로 바뀌는" 것처럼 보인다 — 이를 막기 위한 값.)
-const ACCEPTABLE_ACCURACY_M = 500;
 // 정확도가 끝까지 안 좋아도(Wi-Fi/IP 기반 등) 이 횟수까지만 시도하고 마지막 값으로 확정한다.
 const MAX_READINGS = 6;
 
@@ -83,12 +79,6 @@ export function useMyLocation() {
           setStatus("error");
           setErrorReason("outside_daejeon");
           setResetTrigger((n) => n + 1);
-          return;
-        }
-
-        // 아직 신뢰하기엔 부정확한 초기 리딩(Wi-Fi/IP 기반 등)은 화면에 반영하지 않고
-        // 조용히 다음 리딩을 기다린다 — 단, 시도 횟수를 다 채웠으면 마지막 값이라도 확정한다.
-        if (accuracy > ACCEPTABLE_ACCURACY_M && !isLastAllowedReading) {
           return;
         }
 
