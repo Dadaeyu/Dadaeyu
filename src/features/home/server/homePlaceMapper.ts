@@ -26,6 +26,8 @@ export type PlaceDetailRow = {
   parking: string | null;
   infocenter: string | null;
   reservationurl: string | null;
+  eventstartdate?: string | null;
+  eventenddate?: string | null;
   modifiedtime: string | null;
 };
 
@@ -125,6 +127,8 @@ export function mapHomePlace(
     parking: cleanText(detail?.parking),
     officialUrl,
     reservationUrl: reservationUrl === officialUrl ? null : reservationUrl,
+    eventStartDate: cleanText(detail?.eventstartdate),
+    eventEndDate: cleanText(detail?.eventenddate),
     accessibility: buildAccessibility(barrierfree)
   };
 }
@@ -148,7 +152,7 @@ export function normalizePublicWebUrl(value: unknown): string | null {
 function buildAccessibility(row: PlaceBarrierfreeRow | undefined): HomeAccessibilityEvidence[] {
   if (!row) return [];
   return ACCESSIBILITY_FIELDS.flatMap(({ key, label, field }) => {
-    const value = cleanText(row[field]);
+    const value = cleanAccessibilityText(row[field]);
     return value ? [{ key, label, value }] : [];
   });
 }
@@ -161,6 +165,14 @@ function cleanText(value: unknown): string | null {
     .replace(/\s+/gu, " ")
     .trim();
   return cleaned || null;
+}
+
+function cleanAccessibilityText(value: unknown): string | null {
+  const cleaned = cleanText(value)?.replace(
+    /_\s*(?:무장애|장애인|시각장애인|청각장애인|영유아(?:가족)?)\s*편의(?:시설|정보)\s*$/u,
+    ""
+  );
+  return cleaned?.trim() || null;
 }
 
 function decodeBasicEntities(value: string) {

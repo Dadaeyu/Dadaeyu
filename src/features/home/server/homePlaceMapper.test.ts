@@ -30,12 +30,14 @@ const detail: PlaceDetailRow = {
   parking: "주차장 이용 가능",
   infocenter: "042-270-7370",
   reservationurl: "https://www.daejeon.go.kr/dma/reserve.do",
+  eventstartdate: "20260801",
+  eventenddate: "20260831",
   modifiedtime: "20260702100000"
 };
 
 const barrierfree: PlaceBarrierfreeRow = {
   contentid: "130551",
-  parking: "장애인 주차장 있음",
+  parking: "장애인 주차장 있음_무장애 편의시설",
   route: "출입구까지 완만한 경사로가 설치되어 있음",
   publictransport: "606번 버스 예술의전당 정류장 하차",
   wheelchair: "휠체어 대여 가능",
@@ -43,7 +45,7 @@ const barrierfree: PlaceBarrierfreeRow = {
   elevator: "엘리베이터 있음",
   restroom: "장애인 화장실 있음",
   handicapetc: null,
-  braileblock: null,
+  braileblock: "주 출입구 앞 점자블록 설치_시각장애인 편의시설",
   helpdog: null,
   guidehuman: null,
   audioguide: null,
@@ -72,16 +74,36 @@ test("정식 장소·상세·무장애 테이블을 홈 장소 계약으로 변�
   assert.equal(mapped.overview, "대전의 전시 문화를 만나는 공간입니다. 기획전을 운영합니다.");
   assert.equal(mapped.officialUrl, "https://www.daejeon.go.kr/dma/index.do");
   assert.equal(mapped.reservationUrl, "https://www.daejeon.go.kr/dma/reserve.do");
+  assert.equal(mapped.eventStartDate, "20260801");
+  assert.equal(mapped.eventEndDate, "20260831");
 });
 
 test("접근로와 대중교통을 실제 정식 테이블 의미대로 표시한다", () => {
   const mapped = mapHomePlace(place, detail, barrierfree);
   const evidenceByKey = new Map(mapped.accessibility.map((item) => [item.key, item]));
 
+  assert.equal(evidenceByKey.get("parking")?.value, "장애인 주차장 있음");
   assert.equal(evidenceByKey.get("route")?.label, "접근로");
   assert.equal(evidenceByKey.get("route")?.value, "출입구까지 완만한 경사로가 설치되어 있음");
   assert.equal(evidenceByKey.get("public_transport")?.label, "대중교통");
   assert.equal(evidenceByKey.get("public_transport")?.value, "606번 버스 예술의전당 정류장 하차");
+  assert.equal(evidenceByKey.get("braile_block")?.value, "주 출입구 앞 점자블록 설치");
+});
+
+test("무장애 원문 뒤의 공공데이터 편의시설 표시는 사용자 화면에 노출하지 않는다", () => {
+  const mapped = mapHomePlace(place, detail, {
+    ...barrierfree,
+    restroom: "장애인 화장실 있음_장애인 편의시설",
+    helpdog: "동반 가능_시각장애인 편의시설",
+    audioguide: "한국어 음성 안내 제공",
+    handicapetc: "편의시설 안내 문구 자체는 유지"
+  });
+  const evidenceByKey = new Map(mapped.accessibility.map((item) => [item.key, item]));
+
+  assert.equal(evidenceByKey.get("restroom")?.value, "장애인 화장실 있음");
+  assert.equal(evidenceByKey.get("help_dog")?.value, "동반 가능");
+  assert.equal(evidenceByKey.get("audio_guide")?.value, "한국어 음성 안내 제공");
+  assert.equal(evidenceByKey.get("handicap_etc")?.value, "편의시설 안내 문구 자체는 유지");
 });
 
 test("외부 웹 링크만 허용하고 내부 주소와 실행형 URL은 버린다", () => {

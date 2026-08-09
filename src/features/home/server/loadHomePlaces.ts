@@ -3,9 +3,8 @@ import { unstable_cache } from "next/cache";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getServerSupabaseConfig } from "@/lib/supabase/config";
 import {
-  buildEssentialFacilities,
   rankHomePlaces,
-  rotateDailyFeaturedPlace,
+  selectHomePlacesForDisplay,
   type HomeDataResponse,
   type HomeLocation,
   type HomeNeedId,
@@ -23,7 +22,7 @@ const RELATED_ROW_BATCH_SIZE = 150;
 let homeDataClient: SupabaseClient | null = null;
 const getCachedBaseHomePlaces = unstable_cache(
   async () => fetchNormalizedHomePlaces(),
-  ["home-base-places-v2"],
+  ["home-base-places-v3"],
   { revalidate: 300, tags: ["home-places"] }
 );
 
@@ -40,26 +39,30 @@ export class HomeDataError extends Error {
 export async function loadHomePlaces({
   needIds,
   location,
-  query
+  query,
+  recommendationSeed,
+  excludedPlaceIds
 }: {
   needIds: HomeNeedId[];
   location: HomeLocation | null;
   query: string;
+  recommendationSeed?: number;
+  excludedPlaceIds?: readonly string[];
 }): Promise<HomeDataResponse> {
   const normalizedPlaces = await getCachedBaseHomePlaces();
   if (!normalizedPlaces.length) {
-    return { places: [], facilities: [], source: "한국관광공사 관광정보·무장애 여행정보" };
+    return { places: [], source: "한국관광공사 관광정보·무장애 여행정보" };
   }
 
-  const allRankedPlaces = rankHomePlaces(normalizedPlaces, needIds, location, query);
-  const displayPlaces =
-    !query && !needIds.length && !location
-      ? rotateDailyFeaturedPlace(allRankedPlaces, new Date())
-      : allRankedPlaces;
-  const rankedPlaces = displayPlaces.slice(0, 16);
+  const rankedPlaces = rankHomePlaces(normalizedPlaces, needIds, location, query);
   return {
-    places: rankedPlaces,
-    facilities: buildEssentialFacilities(allRankedPlaces),
+    places: selectHomePlacesForDisplay(rankedPlaces, {
+      needIds,
+      query,
+      limit: 16,
+      recommendationSeed,
+      excludedPlaceIds
+    }),
     source: "한국관광공사 관광정보·무장애 여행정보"
   };
 }
@@ -114,7 +117,7 @@ async function fetchPlaceDetails(contentIds: string[]): Promise<PlaceDetailRow[]
       const { data, error } = await supabase
         .from("tb_place_detail_normalized")
         .select(
-          "contentid,homepage,tel,overview,usetime,restdate,usefee,parking,infocenter,reservationurl,modifiedtime"
+          "contentid,homepage,tel,overview,usetime,restdate,usefee,parking,infocenter,reservationurl,eventstartdate,eventenddate,modifiedtime"
         )
         .in("contentid", batch);
       if (error) throw new HomeDataError(error.message, "unavailable");
