@@ -49,7 +49,8 @@ interface CandidatePlace extends RoutePoint {
   placeId: number;
   contentId: number;
   title: string;
-  category: string | null;
+  category: string | null; // 표시용 테마 이름(예: "음식") — 프롬프트/해시태그용
+  categoryCode: string | null; // tb_place.lclssystm1 원본 코드(예: "FD") — 지도 마커 색상용
   dong: string | null;
 }
 
@@ -249,6 +250,7 @@ async function fetchPlaces(params: {
       contentId: row.contentid,
       title: row.title,
       category: row.lclssystm1 ? (params.themeNames.get(row.lclssystm1) ?? row.lclssystm1) : null,
+      categoryCode: row.lclssystm1,
       dong: row.dong,
       lat: Number(row.mapy),
       lng: Number(row.mapx)
@@ -371,6 +373,7 @@ interface ScheduledPlaceOut {
   lng: number;
   startHour: number;
   endHour: number;
+  categoryCode: string | null;
 }
 
 function toScheduled(p: CandidatePlace, startHour: number, endHour: number): ScheduledPlaceOut {
@@ -381,7 +384,8 @@ function toScheduled(p: CandidatePlace, startHour: number, endHour: number): Sch
     lat: p.lat,
     lng: p.lng,
     startHour,
-    endHour
+    endHour,
+    categoryCode: p.categoryCode
   };
 }
 

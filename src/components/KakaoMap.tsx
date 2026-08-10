@@ -31,6 +31,10 @@ export interface MapMarker {
   borderColor?: string;
   /** 마커 안에 표시할 짧은 텍스트(예: 코스 방문 순서 번호). pin/dot에서만 그려진다. */
   label?: string;
+  /** "sm"이면 살짝 작게 그린다(예: 선택되지 않은 Day를 옅게 보여줄 때). 기본 "md". */
+  size?: "sm" | "md";
+  /** 겹칠 때 위/아래 순서(클수록 위). 기본 3, 선택된 마커는 항상 이 값과 무관하게 맨 위. */
+  zIndex?: number;
 }
 
 // 마커 선택 시 지도 위에 뜨는 정보 카드. 값이 없는 필드(image/rating/barrierFree)는 카드에서 생략된다
@@ -56,6 +60,8 @@ export interface MapPathSegment {
   label?: string;
   /** 이 구간을 클릭했을 때 onPathClick 으로 전달할 값(예: Day 번호). label 이 있어야 클릭도 반응한다. */
   day?: number;
+  /** 겹칠 때 위/아래 순서(클수록 위). 기본 점선=1, 실선=2. */
+  zIndex?: number;
 }
 
 // ── Props ──────────────────────────────────────────────────
@@ -89,9 +95,10 @@ function renderDot(
   color: string,
   selected: boolean,
   _borderColor?: string,
-  label?: string
+  label?: string,
+  markerSize?: "sm" | "md"
 ) {
-  const size = selected ? 20 : 14;
+  const size = selected ? 20 : markerSize === "sm" ? 10 : 14;
   const labelEl = label
     ? `<div style="font-size:${Math.round(size / 1.9)}px;line-height:1;font-weight:700;color:white;">${label}</div>`
     : "";
@@ -104,7 +111,8 @@ function renderHeart(
   color: string,
   selected: boolean,
   _borderColor?: string,
-  _label?: string
+  _label?: string,
+  _markerSize?: "sm" | "md"
 ) {
   const size = selected ? 26 : 20;
   el.innerHTML = `
@@ -128,7 +136,8 @@ function renderTeardrop(
   color: string,
   selected: boolean,
   dotColor = "#191919",
-  _label?: string
+  _label?: string,
+  _markerSize?: "sm" | "md"
 ) {
   const w = selected ? 34 : 28;
   const h = Math.round(w * 1.25);
@@ -146,17 +155,24 @@ function renderPin(
   color: string,
   selected: boolean,
   borderColor = "white",
-  label?: string
+  label?: string,
+  markerSize?: "sm" | "md"
 ) {
-  const size = selected ? 36 : 28;
+  const size = selected ? 36 : markerSize === "sm" ? 22 : 28;
   const tri = Math.round(size / 3);
   const sw = 1.5; // 삼각형 테두리 두께
   const dot = Math.round(size / 3.5);
   const ring = selected
     ? `box-shadow:0 0 0 6px ${color}30,0 2px 8px rgba(0,0,0,0.35);`
     : "box-shadow:0 2px 6px rgba(0,0,0,0.28);";
+  // 라벨(순서 번호)의 글자색은 borderColor 를 그대로 쓰면 기본값(white)일 때 흰 배경 위에
+  // 흰 글씨가 돼서 안 보인다 — 항상 보이도록 마커 자체 색(color)을 쓴다.
+  // 박스/글자 크기는 dot(size/3.5)에 "+4"를 더해서 구했었는데, 그 고정 오프셋 때문에 선택 시
+  // 바깥 원(size)은 28→36으로 커져도 안쪽 숫자는 거의 안 커 보였다 — 바깥 원과 같은 비율로
+  // 커지도록 size에서 직접 비례식으로 계산한다.
+  const labelBoxSize = Math.round(size * 0.42);
   const centerDot = label
-    ? `<div style="width:${dot + 4}px;height:${dot + 4}px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:${Math.round((dot + 4) * 0.65)}px;font-weight:800;color:${borderColor};line-height:1;">${label}</div>`
+    ? `<div style="width:${labelBoxSize}px;height:${labelBoxSize}px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:${Math.round(labelBoxSize * 0.65)}px;font-weight:800;color:${color};line-height:1;">${label}</div>`
     : `<div style="width:${dot}px;height:${dot}px;background:${borderColor};border-radius:50%;"></div>`;
   const triW = tri * 2;
   const triH = tri;
@@ -397,14 +413,14 @@ export default function KakaoMap({
       const el = document.createElement("div");
       markerElemsRef.current.set(marker.id, el);
       const render = getRenderer(marker.shape);
-      render(el, marker.color, marker.id === selectedId, marker.borderColor, marker.label);
+      render(el, marker.color, marker.id === selectedId, marker.borderColor, marker.label, marker.size);
 
       const overlay = new K.CustomOverlay({
         position: new K.LatLng(marker.lat, marker.lng),
         content: el,
         yAnchor: marker.shape === "dot" || marker.shape === "heart" ? 0.5 : 1,
         xAnchor: 0.5,
-        zIndex: marker.id === selectedId ? 5 : 3,
+        zIndex: marker.id === selectedId ? 6 : (marker.zIndex ?? 3),
         // 마커 클릭이 지도 클릭(onDeselect)으로 이어지지 않게 함 → 다른 마커 클릭 시 바로 그 상세로 전환.
         clickable: true
       });
@@ -425,7 +441,7 @@ export default function KakaoMap({
       const el = markerElemsRef.current.get(marker.id);
       if (!el) return;
       const render = getRenderer(marker.shape);
-      render(el, marker.color, marker.id === selectedId, marker.borderColor, marker.label);
+      render(el, marker.color, marker.id === selectedId, marker.borderColor, marker.label, marker.size);
     });
   }, [selectedId, markers]);
 
@@ -538,7 +554,10 @@ export default function KakaoMap({
         strokeWeight: 4,
         strokeColor: color,
         strokeOpacity: 0.8,
-        strokeStyle: segment.dashed ? "shortdash" : "solid"
+        strokeStyle: segment.dashed ? "shortdash" : "solid",
+        // 점선(Day 경계 연결 구간)이 실선 위를 덮지 않도록 항상 아래에 깔리고,
+        // 실선끼리도 segment.zIndex 로 우선순위를 줄 수 있다(예: 선택된 Day 경로선을 위로).
+        zIndex: segment.zIndex ?? (segment.dashed ? 1 : 2)
       });
       line.setMap(mapRef.current);
       pathPolylinesRef.current.push(line);

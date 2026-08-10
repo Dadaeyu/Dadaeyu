@@ -6,6 +6,7 @@ import { fetchKakaoPlaces, type SearchPlace } from "@/lib/search/kakaoSearch";
 export interface TourismDetail {
   title: string;
   category: string | null;
+  categoryCode: string | null; // tb_place.lclssystm1 원본 코드 — 지도 노드/순서아이콘 테마색용
   image: string;
   addr1: string;
   overview: string | null;

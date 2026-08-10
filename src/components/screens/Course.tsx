@@ -40,6 +40,7 @@ import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
 import TourismDetailPanel from "@/components/search/TourismDetailPanel";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import { usePlaceSearch, type TourismDetail } from "@/hooks/usePlaceSearch";
+import { getCategoryColor } from "@/lib/search/categoryColors";
 import { shareToKakaoTalk } from "@/lib/kakao/loadKakaoShare";
 import { fetchSharedCourses } from "@/lib/supabase/courses";
 import type { TourismSharedCourse } from "@/lib/supabase/types";
@@ -79,6 +80,7 @@ interface CoursePlace {
   lat?: number; // 장소 검색으로 추가된 경우의 좌표 (지도 마커·경로선 표시용)
   lng?: number;
   contentId?: number; // tb_place.contentid (TourAPI id) — /api/tourism/detail 조회용. placeId(내부 PK)와는 다른 값.
+  categoryCode?: string | null; // tb_place.lclssystm1 — 지도/장소목록의 테마별 색상에 쓴다.
 }
 
 interface CourseDay {
@@ -107,7 +109,6 @@ function formatDateOnly(value?: string | null): string {
   if (!value) return "-";
   return value.slice(0, 10);
 }
-import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 
@@ -180,7 +181,17 @@ function saveAiCoursePreview(draft: RecommendedCourseDraft) {
 // 없던 시절 저장분) — 그대로 쓰면 course.hashtags.map() 같은 데서 런타임 에러가 난다. 읽을 때마다
 // 최신 필드를 기본값으로 채워 넣어 방어한다.
 function normalizeRecommendedCourseDraft(draft: RecommendedCourseDraft): RecommendedCourseDraft {
-  return { ...draft, hashtags: Array.isArray(draft.hashtags) ? draft.hashtags : [] };
+  return {
+    ...draft,
+    hashtags: Array.isArray(draft.hashtags) ? draft.hashtags : [],
+    days: draft.days.map((day) => ({
+      ...day,
+      places: day.places.map((place) => ({
+        ...place,
+        categoryCode: place.categoryCode ?? null
+      }))
+    }))
+  };
 }
 
 function readAiCoursePreview(): RecommendedCourseDraft | null {
@@ -276,6 +287,7 @@ interface RecommendedCoursePlace {
   lng: number;
   startHour: number;
   endHour: number;
+  categoryCode: string | null;
 }
 interface RecommendedCourseDay {
   day: number;
@@ -1622,7 +1634,8 @@ function CourseDetail({ id }: { id: string }) {
             contentId:
               place?.contentid != null && place.contentid !== ""
                 ? Number(place.contentid)
-                : undefined
+                : undefined,
+            categoryCode: place?.lclssystm1 ?? null
           });
           dayMap.set(r.day, list);
         }
@@ -1706,7 +1719,8 @@ function CourseDetail({ id }: { id: string }) {
           placeId: place.placeId,
           lat: place.lat,
           lng: place.lng,
-          contentId: place.contentId
+          contentId: place.contentId,
+          categoryCode: place.categoryCode
         }))
       }))
     });
@@ -1785,6 +1799,21 @@ function CourseDetail({ id }: { id: string }) {
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   };
+
+  // 모바일에선 바텀시트가 화면 하단 mobileSheetHeight%를 덮어서, 지도 초기 위치를 맞출 때
+  // 그만큼을 가려진 영역으로 쳐줘야 경로가 시트 위(보이는 영역)에 들어온다. 데스크톱(md 이상)은
+  // 시트가 옆 사이드바라 지도를 안 가리므로 0.
+  const [mapBottomOverlayPx, setMapBottomOverlayPx] = useState(0);
+  useEffect(() => {
+    const updateOverlay = () => {
+      const isMobile = window.innerWidth < 768; // Tailwind md 기준
+      setMapBottomOverlayPx(isMobile ? Math.round(window.innerHeight * (mobileSheetHeight / 100)) : 0);
+    };
+    updateOverlay();
+    window.addEventListener("resize", updateOverlay);
+    return () => window.removeEventListener("resize", updateOverlay);
+  }, [mobileSheetHeight]);
+
   const [editTitle, setEditTitle] = useState(baseCourseData.title);
   const [editIsPrivate, setEditIsPrivate] = useState(baseCourseData.isPrivate);
   const [editStartDate, setEditStartDate] = useState(baseCourseData.startDate ?? "");
@@ -1995,7 +2024,9 @@ function CourseDetail({ id }: { id: string }) {
               lng: sp.lng,
               // sp.id 는 DB 출처일 때만 contentid(숫자 문자열)다 — /api/tourism/detail 조회용.
               contentId:
-                sp.source === "db" && !Number.isNaN(Number(sp.id)) ? Number(sp.id) : undefined
+                sp.source === "db" && !Number.isNaN(Number(sp.id)) ? Number(sp.id) : undefined,
+              // 지금 상세 패널에 열려있는 장소의 테마 코드 — 노드/순서아이콘 색이 바로 반영되게.
+              categoryCode: ps.tourismDetail?.categoryCode ?? null
             }
           ]
         };
@@ -2094,6 +2125,8 @@ function CourseDetail({ id }: { id: string }) {
   // KakaoMap 마커·경로선 — 특정 Day 만이 아니라 "모든 일정"을 Day 순서 → 각 Day 내 장소 순서로
   // 이어서 한 번에 보여준다(Day1 마지막 장소 → Day2 첫 장소 순으로 연결).
   // 좌표(p.lat/lng)가 있는 항목(장소 검색으로 추가된 실제 장소)만 지도에 표시한다.
+  // 색은 "지금 보고 있는 Day"에만 쓴다 — 그 Day 노드는 테마색 + 원래 크기, 경로선은 원래 초록.
+  // 다른 Day는 노드·선 전부 회색 + 노드 크기도 살짝 작게 줄여서 덜 눈에 띄게 한다.
   type MarkerSource = {
     kind: "real";
     item: CoursePlace;
@@ -2103,15 +2136,16 @@ function CourseDetail({ id }: { id: string }) {
     color: string;
     day: number;
     orderInDay: number;
+    isActiveDay: boolean;
   };
+
+  const INACTIVE_DAY_COLOR = "#9ca3af";
+  const ACTIVE_DAY_LINE_COLOR = "#16a34a";
 
   const markerSources: MarkerSource[] = [];
   const sortedDays = [...courseData.days].sort((a, b) => a.day - b.day);
-  // Day 탭 배지도 이 색으로 맞춰서, 지도의 경로선 색 = 패널의 Day 배지 색이 되게 한다.
-  const dayColorByDay = new Map<number, string>();
-  sortedDays.forEach((d, dayIdx) => {
-    const dayColor = DAY_LINE_COLORS[dayIdx % DAY_LINE_COLORS.length];
-    dayColorByDay.set(d.day, dayColor);
+  sortedDays.forEach((d) => {
+    const isActiveDay = d.day === activeDay;
     let orderInDay = 0;
     for (const p of d.places) {
       if (p.lat == null || p.lng == null) continue;
@@ -2120,47 +2154,54 @@ function CourseDetail({ id }: { id: string }) {
         markerId: `real:${d.day}:${p.id}`,
         lat: p.lat,
         lng: p.lng,
-        color: dayColor,
+        color: isActiveDay ? getCategoryColor(p.categoryCode) : INACTIVE_DAY_COLOR,
         kind: "real",
         item: p,
         day: d.day,
-        orderInDay
+        orderInDay,
+        isActiveDay
       });
     }
   });
 
-  // 마커에 Day 색상 + "그 Day 안에서 몇 번째 장소인지" 번호를 같이 표시해서, 지도만 보고도
-  // 일정별 방문 순서를 바로 알 수 있게 한다.
+  // 지금 보는 Day의 마커는 장소 테마별 색 + 원래 크기, 다른 Day는 회색 + 살짝 작게.
+  // 방문 순서 번호는 두 경우 다 표시한다.
   const mapMarkers: MapMarker[] = markerSources.map((m) => ({
     id: m.markerId,
     lat: m.lat,
     lng: m.lng,
     color: m.color,
-    label: String(m.orderInDay)
+    label: String(m.orderInDay),
+    size: m.isActiveDay ? "md" : "sm",
+    // 회색(다른 Day) 노드와 겹칠 때 색 있는(지금 보는 Day) 노드가 항상 위로 오게 한다.
+    zIndex: m.isActiveDay ? 4 : 2
   }));
 
-  // 경로선 — Day 별로 색을 다르게 준다. 같은 Day 안의 장소끼리는 그 Day 색의 실선으로 잇고,
-  // Day 가 바뀌는 경계(Day1 마지막 장소 → Day2 첫 장소)는 별도 회색 점선으로 표시한다.
-  // 색은 markerSources 에 이미 정해둔 걸 그대로 써서, 마커 색과 절대 어긋나지 않게 한다.
+  // 경로선 — 지금 보는 Day만 원래 초록색 실선, 나머지 Day는 회색 실선으로 죽여둔다.
+  // Day 가 바뀌는 경계(Day1 마지막 장소 → Day2 첫 장소)는 항상 옅은 회색 점선.
+  // 어느 Day의 선을 클릭해도 그 Day로 전환되니, 회색 선을 눌러서 바로 확인할 수 있다.
   const coursePath: MapPathSegment[] = [];
   let prevDayLastPoint: { lat: number; lng: number } | null = null;
   for (const d of sortedDays) {
     const dayMarkers = markerSources.filter((m) => m.day === d.day);
     if (dayMarkers.length === 0) continue;
     const dayPoints = dayMarkers.map((m) => ({ lat: m.lat, lng: m.lng }));
+    const isActiveDay = d.day === activeDay;
 
     if (prevDayLastPoint) {
       coursePath.push({
         points: [prevDayLastPoint, dayPoints[0]],
-        color: "#9ca3af",
+        color: "#d1d5db",
         dashed: true
       });
     }
     coursePath.push({
       points: dayPoints,
-      color: dayMarkers[0].color,
+      color: isActiveDay ? ACTIVE_DAY_LINE_COLOR : INACTIVE_DAY_COLOR,
       label: `Day ${d.day}`,
-      day: d.day
+      day: d.day,
+      // 회색(다른 Day) 선과 겹칠 때 색 있는(지금 보는 Day) 선이 항상 위로 오게 한다.
+      zIndex: isActiveDay ? 3 : 2
     });
 
     prevDayLastPoint = dayPoints[dayPoints.length - 1];
@@ -2501,45 +2542,14 @@ function CourseDetail({ id }: { id: string }) {
         ) : isEditing ? (
           /* ── 편집 패널 ── */
           <>
-            {/* Edit header — 타이틀 + 취소·초기화·저장 */}
-            <div className="border-hairline-soft bg-gold-50 shrink-0 space-y-2 border-b px-3 py-2.5">
-              <p className="text-gold-700 text-sm font-bold">{isNew ? "코스 추가" : "코스 편집"}</p>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCancel}
-                  disabled={saving}
-                  className="flex-1 gap-1 text-xs"
-                >
-                  <X className="h-3 w-3" />
-                  취소
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleReset}
-                  disabled={saving}
-                  className="flex-1 gap-1 text-xs hover:border-red-300 hover:bg-red-50 hover:text-red-500"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  초기화
-                </Button>
-                <Button
-                  variant="accent"
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex-1 gap-1 text-xs"
-                >
-                  <Check className="h-3 w-3" />
-                  {saving ? "저장 중..." : "저장"}
-                </Button>
-              </div>
-              {saveError && <p className="mt-2 text-xs text-red-500">저장 실패: {saveError}</p>}
+            {/* Edit header — 코스 상세 패널과 동일한 스타일(제목만, 버튼은 하단 Actions로) */}
+            <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2.5">
+              <h2 className="flex-1 truncate text-sm font-bold text-gray-800">
+                {isNew ? "코스 추가" : "코스 편집"}
+              </h2>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto pb-16 md:pb-0">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
               {/* Title edit */}
               <div className="border-hairline-soft border-b px-4 py-3">
                 <p className="text-steel mb-1.5 text-xs font-semibold">
@@ -2688,9 +2698,9 @@ function CourseDetail({ id }: { id: string }) {
                             )
                           }
                           aria-label="위로 이동"
-                          className="hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 rounded-md border border-gray-300 bg-white p-1 text-gray-600 shadow-sm transition-colors disabled:opacity-30 disabled:shadow-none disabled:hover:border-gray-300 disabled:hover:bg-white disabled:hover:text-gray-600"
+                          className="hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 rounded-md border border-gray-300 bg-white p-0.5 text-gray-600 shadow-sm transition-colors disabled:opacity-30 disabled:shadow-none disabled:hover:border-gray-300 disabled:hover:bg-white disabled:hover:text-gray-600"
                         >
-                          <ChevronUp className="h-4 w-4" />
+                          <ChevronUp className="h-3 w-3" />
                         </button>
                         <button
                           disabled={idx === arr.length - 1}
@@ -2705,15 +2715,15 @@ function CourseDetail({ id }: { id: string }) {
                             )
                           }
                           aria-label="아래로 이동"
-                          className="hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 rounded-md border border-gray-300 bg-white p-1 text-gray-600 shadow-sm transition-colors disabled:opacity-30 disabled:shadow-none disabled:hover:border-gray-300 disabled:hover:bg-white disabled:hover:text-gray-600"
+                          className="hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 rounded-md border border-gray-300 bg-white p-0.5 text-gray-600 shadow-sm transition-colors disabled:opacity-30 disabled:shadow-none disabled:hover:border-gray-300 disabled:hover:bg-white disabled:hover:text-gray-600"
                         >
-                          <ChevronDown className="h-4 w-4" />
+                          <ChevronDown className="h-3 w-3" />
                         </button>
                       </div>
                       {/* Number badge */}
                       <div
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                        style={{ background: "#16a34a" }}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                        style={{ background: getCategoryColor(place.categoryCode) }}
                       >
                         {idx + 1}
                       </div>
@@ -2784,6 +2794,39 @@ function CourseDetail({ id }: { id: string }) {
                   )
                 )}
               </div>
+            </div>
+
+            {/* Actions — 코스 상세 패널의 Actions 바와 같은 위치·스타일로 하단에 고정. */}
+            {saveError && (
+              <p className="shrink-0 border-t border-gray-100 px-4 pt-2 text-xs text-red-500">
+                저장 실패: {saveError}
+              </p>
+            )}
+            <div className="mb-16 flex shrink-0 gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
+              <button
+                onClick={handleCancel}
+                disabled={saving}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-2 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60"
+              >
+                <X className="h-4 w-4" />
+                취소
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={saving}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-2 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-60"
+              >
+                <RotateCcw className="h-4 w-4" />
+                초기화
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="bg-brand-600 hover:bg-brand-700 flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+              >
+                <Check className="h-4 w-4" />
+                {saving ? "저장 중..." : "저장"}
+              </button>
             </div>
           </>
         ) : (
@@ -2937,26 +2980,24 @@ function CourseDetail({ id }: { id: string }) {
                     </div>
                   )}
 
-                  {/* Day tabs — 지도 경로선과 같은 Day 색을 배지에도 써서 서로 매칭되게 한다. */}
-                  <div className="flex shrink-0 flex-wrap gap-2 border-b border-gray-100 px-4 py-3">
-                    {courseData.days.map((day) => {
-                      const dayColor = dayColorByDay.get(day.day) ?? "#16a34a";
-                      const active = activeDay === day.day;
-                      return (
+                  {/* Day tabs — 코스 편집 폼의 "일정" 섹션과 라벨·버튼 스타일을 맞췄다. */}
+                  <div className="border-b border-gray-100 px-4 py-3">
+                    <p className="text-steel mb-1.5 text-xs font-semibold">일정</p>
+                    <div className="flex shrink-0 flex-wrap gap-1.5">
+                      {courseData.days.map((day) => (
                         <button
                           key={day.day}
                           onClick={() => setActiveDay(day.day)}
-                          className="rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors"
-                          style={
-                            active
-                              ? { background: dayColor, color: "white" }
-                              : { border: `1.5px solid ${dayColor}`, color: dayColor, background: "white" }
-                          }
+                          className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+                            activeDay === day.day
+                              ? "bg-brand-600 text-white"
+                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          }`}
                         >
                           Day {day.day}
                         </button>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
 
                   {/* Place list */}
@@ -2971,7 +3012,7 @@ function CourseDetail({ id }: { id: string }) {
                       >
                         <div
                           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                          style={{ background: "#16a34a" }}
+                          style={{ background: getCategoryColor(place.categoryCode) }}
                         >
                           {index + 1}
                         </div>
@@ -3079,7 +3120,7 @@ function CourseDetail({ id }: { id: string }) {
                         clearDayGuide();
                         setIsEditing(true);
                       }}
-                      className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-2 py-2.5 text-sm font-semibold whitespace-nowrap text-white transition-colors hover:bg-amber-600"
+                      className="bg-brand-600 hover:bg-brand-700 flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-sm font-semibold whitespace-nowrap text-white transition-colors"
                     >
                       <Pencil className="h-4 w-4 shrink-0" />
                       코스 편집
@@ -3155,11 +3196,17 @@ function CourseDetail({ id }: { id: string }) {
           }}
           path={dayGuidePath ?? coursePath}
           onPathClick={(day) => setActiveDay(day)}
+          // 안내 모드가 아니면 처음 코스를 볼 때도 경로 전체가 (바텀시트에 안 가려진 영역 안에)
+          // 보이도록 한 번 맞춘다 — 안 그러면 기본 지도 중심에서 시작해 경로가 시트에 가려지거나
+          // 화면 밖에 있을 수 있다.
           fitPathKey={
             dayGuideMode && dayGuidePath && !dayGuideLoading
-              ? `${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}`
-              : null
+              ? `guide-${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}`
+              : mapMarkers.length > 0
+                ? `course-${id}-${mapMarkers.length}`
+                : null
           }
+          bottomOverlayPx={mapBottomOverlayPx}
         />
       </div>
 
