@@ -269,7 +269,7 @@ export default function Map() {
         lng: selectedKakaoPlace.lng,
         name: selectedKakaoPlace.name,
         category: selectedKakaoPlace.category?.split(" > ").pop(),
-        accentColor: "#FEE500"
+        accentColor: "#2563EB"
       }
     : null;
 
@@ -402,13 +402,13 @@ export default function Map() {
           <KakaoMap
             markers={markerPlaces.map((sp): MapMarker => {
               if (sp.source === "kakao") {
-                // 눈물방울 핀 + 카카오 브랜드 컬러(노랑 + 검정 중앙 점)로 카카오 검색 결과임을 표시.
+                // 눈물방울 핀(파란 배경 + 카카오 옐로우 중앙 점)으로 카카오 검색 결과임을 표시.
                 return {
                   id: sp.id,
                   lat: sp.lat,
                   lng: sp.lng,
-                  color: "#FEE500",
-                  borderColor: "#191919",
+                  color: "#2563EB",
+                  borderColor: "#FEE500",
                   shape: "teardrop"
                 };
               }

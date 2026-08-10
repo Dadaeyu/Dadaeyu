@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminMember } from "@/lib/community/ownership";
 
 export const dynamic = "force-dynamic";
 
 const DETAIL_COLUMNS =
-  "post_id, board_id, title, content, writer_id, writer_nm, rating, view_cnt, like_cnt, comment_cnt, notice_yn, created_at, content_id, tb_board(board_nm, comment_yn), tb_members!writer_id(community_level), tb_post_image(image_url, sort_order), tb_post_file(file_url, file_name, file_size, sort_order)";
+  "post_id, board_id, title, content, writer_id, writer_nm, rating, course_rating, view_cnt, like_cnt, comment_cnt, notice_yn, created_at, content_id, course_id, tb_board(board_nm, comment_yn), tb_members!writer_id(community_level), tb_post_image(image_url, sort_order), tb_post_file(file_url, file_name, file_size, sort_order)";
 
 type BoardRef =
   { board_nm: string; comment_yn: boolean } | { board_nm: string; comment_yn: boolean }[] | null;
@@ -81,6 +82,21 @@ export async function GET(_request: Request, { params }: Params) {
       }
     }
 
+    // tb_course는 RLS로 보호돼 있어(작성자 본인만 select) 다른 사용자가 첨부된 코스 이름을
+    // 보려면 admin 클라이언트가 필요하다 (공유코스 목록과 동일한 이유).
+    let attachedCourse: { course_id: number; course_nm: string } | null = null;
+    if (rest.course_id != null) {
+      const admin = createAdminClient();
+      const { data: course } = await admin
+        .from("tb_course")
+        .select("course_id, course_nm")
+        .eq("course_id", rest.course_id)
+        .maybeSingle();
+      if (course) {
+        attachedCourse = { course_id: course.course_id, course_nm: course.course_nm };
+      }
+    }
+
     const {
       data: { user }
     } = await supabase.auth.getUser();
@@ -111,6 +127,7 @@ export async function GET(_request: Request, { params }: Params) {
         comment_yn: boardInfo.comment_yn,
         writer_community_level: communityLevelOf(tb_members),
         attached_place: attachedPlace,
+        attached_course: attachedCourse,
         images,
         files,
         can_edit: canEdit,
@@ -160,7 +177,9 @@ export async function PATCH(request: Request, { params }: Params) {
       title?: string;
       content?: string;
       content_id?: number | null;
+      course_id?: number | null;
       rating?: number | null;
+      course_rating?: number | null;
       images?: string[];
       files?: { url: string; name: string; size?: number }[];
     };
@@ -188,6 +207,12 @@ export async function PATCH(request: Request, { params }: Params) {
           ? Number(body.content_id)
           : null;
     }
+    if (body.course_id !== undefined) {
+      updates.course_id =
+        body.course_id != null && Number.isFinite(Number(body.course_id))
+          ? Number(body.course_id)
+          : null;
+    }
     if (body.rating !== undefined) {
       if (body.rating == null) {
         updates.rating = null;
@@ -202,6 +227,25 @@ export async function PATCH(request: Request, { params }: Params) {
           return NextResponse.json({ error: "별점은 1~5 사이로 입력해 주세요." }, { status: 400 });
         }
         updates.rating = parsed;
+      }
+    }
+    if (body.course_rating !== undefined) {
+      if (body.course_rating == null) {
+        updates.course_rating = null;
+      } else {
+        const { data: board } = await supabase
+          .from("tb_board")
+          .select("rating_yn")
+          .eq("board_id", existing.board_id)
+          .maybeSingle();
+        const parsed = Number(body.course_rating);
+        if (!board?.rating_yn || !Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+          return NextResponse.json(
+            { error: "코스 별점은 1~5 사이로 입력해 주세요." },
+            { status: 400 }
+          );
+        }
+        updates.course_rating = parsed;
       }
     }
 

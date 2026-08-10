@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { getBakeryPlaceIds, splitThemeSelection } from "@/lib/theme/bakeryTheme";
+import { getBakeryPlaceIds, splitThemeSelection, BAKERY_THEME_CODE } from "@/lib/theme/bakeryTheme";
 import { getRatingsByContentId, getLikeCountsByContentId } from "@/lib/search/placeAggregates";
 
 // 접근성 필터 값(tb_code BARRIERFREE 의 code_id) → tb_place_barrierfree 의 has_* 플래그 매핑.
@@ -168,10 +168,12 @@ export async function GET(request: Request) {
     if (error) return Response.json({ error: error.message }, { status: 500 });
 
     const ids = (data ?? []).map((p) => String(p.contentid));
-    const [ratings, likeCounts] = await Promise.all([
+    const [ratings, likeCounts, bakeryIds] = await Promise.all([
       getRatingsByContentId(supabase, ids),
-      getLikeCountsByContentId(supabase, ids)
+      getLikeCountsByContentId(supabase, ids),
+      getBakeryPlaceIds()
     ]);
+    const bakerySet = new Set(bakeryIds);
 
     return Response.json(
       (data ?? []).map((p) => {
@@ -185,7 +187,8 @@ export async function GET(request: Request) {
           lng: Number(p.mapx),
           image: p.firstimage ?? "",
           address: p.addr1 ?? undefined,
-          categoryCode: p.lclssystm1 ?? undefined,
+          // 빵지순례(BK)는 실제 LCLSSYSTM1 코드가 아니지만, 마커 색은 카테고리 하나처럼 취급한다.
+          categoryCode: bakerySet.has(p.place_id) ? BAKERY_THEME_CODE : (p.lclssystm1 ?? undefined),
           average_rating: rating?.average ?? null,
           review_count: rating?.count ?? 0,
           like_count: likeCounts.get(cid) ?? 0
@@ -219,20 +222,25 @@ export async function GET(request: Request) {
   if (guCode.trim()) query = query.eq("ldongsigngucd", guCode);
   if (dong.trim()) query = query.eq("dong", dong.trim());
 
+  // 검색 경로(테마/키워드/필터)와 무관하게 빵집 판정 결과를 마커 색에 쓰므로, 테마 필터에서
+  // 이미 조회했으면 재사용하고 아니면 응답을 만들 때 한 번만 조회한다.
+  let bakeryIds: number[] | null = null;
+
   try {
     // 테마(대분류) — 선택 중 하나라도 해당. "빵지순례"(BK)는 tb_code 상 가상 코드라
     // lclssystm1로 못 걸러서 별도 로직(getBakeryPlaceIds)으로 place_id를 구해 합친다.
     if (themes.length > 0) {
       const { officialCodes, includeBakery } = splitThemeSelection(themes);
-      const bakeryIds = includeBakery ? await getBakeryPlaceIds() : [];
+      if (includeBakery) bakeryIds = await getBakeryPlaceIds();
+      const activeBakeryIds = bakeryIds ?? [];
       if (officialCodes.length > 0 && includeBakery) {
         query = query.or(
-          `lclssystm1.in.(${officialCodes.join(",")}),place_id.in.(${bakeryIds.length ? bakeryIds.join(",") : "-1"})`
+          `lclssystm1.in.(${officialCodes.join(",")}),place_id.in.(${activeBakeryIds.length ? activeBakeryIds.join(",") : "-1"})`
         );
       } else if (officialCodes.length > 0) {
         query = query.in("lclssystm1", officialCodes);
       } else {
-        query = query.in("place_id", bakeryIds.length > 0 ? bakeryIds : [-1]);
+        query = query.in("place_id", activeBakeryIds.length > 0 ? activeBakeryIds : [-1]);
       }
     }
 
@@ -267,6 +275,8 @@ export async function GET(request: Request) {
     getRatingsByContentId(supabase, ids),
     getLikeCountsByContentId(supabase, ids)
   ]);
+  bakeryIds ??= await getBakeryPlaceIds();
+  const bakerySet = new Set(bakeryIds);
 
   return Response.json(
     (data ?? []).map((p) => {
@@ -280,7 +290,8 @@ export async function GET(request: Request) {
         lng: Number(p.mapx),
         image: p.firstimage ?? "",
         address: p.addr1 ?? undefined,
-        categoryCode: p.lclssystm1 ?? undefined,
+        // 빵지순례(BK)는 실제 LCLSSYSTM1 코드가 아니지만, 마커 색은 카테고리 하나처럼 취급한다.
+        categoryCode: bakerySet.has(p.place_id) ? BAKERY_THEME_CODE : (p.lclssystm1 ?? undefined),
         average_rating: rating?.average ?? null,
         review_count: rating?.count ?? 0,
         like_count: likeCounts.get(cid) ?? 0

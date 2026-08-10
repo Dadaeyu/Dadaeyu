@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getLikeCountsByContentId } from "@/lib/search/placeAggregates";
+import { getBakeryPlaceIds, BAKERY_THEME_CODE } from "@/lib/theme/bakeryTheme";
 
 export const dynamic = "force-dynamic";
 
@@ -119,11 +120,20 @@ export async function GET() {
       result = [...result, ...filler];
     }
 
-    const likeCounts = await getLikeCountsByContentId(
-      supabase,
-      result.map((r) => r.id)
-    );
-    const resultWithLikes = result.map((r) => ({ ...r, like_count: likeCounts.get(r.id) ?? 0 }));
+    const [likeCounts, bakeryIds] = await Promise.all([
+      getLikeCountsByContentId(
+        supabase,
+        result.map((r) => r.id)
+      ),
+      getBakeryPlaceIds()
+    ]);
+    const bakerySet = new Set(bakeryIds);
+    const resultWithLikes = result.map((r) => ({
+      ...r,
+      like_count: likeCounts.get(r.id) ?? 0,
+      // 빵지순례(BK)는 실제 LCLSSYSTM1 코드가 아니지만, 마커 색은 카테고리 하나처럼 취급한다.
+      categoryCode: bakerySet.has(r.placeId) ? BAKERY_THEME_CODE : r.categoryCode
+    }));
 
     return NextResponse.json({ places: resultWithLikes });
   } catch (e) {
