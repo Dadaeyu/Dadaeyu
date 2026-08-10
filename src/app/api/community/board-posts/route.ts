@@ -97,7 +97,9 @@ export async function POST(request: Request) {
       title?: string;
       content?: string;
       content_id?: number | null;
+      course_id?: number | null;
       rating?: number | null;
+      course_rating?: number | null;
       images?: string[];
       files?: { url: string; name: string; size?: number }[];
     };
@@ -113,6 +115,10 @@ export async function POST(request: Request) {
     const content_id =
       body.content_id != null && Number.isFinite(Number(body.content_id))
         ? Number(body.content_id)
+        : null;
+    const course_id =
+      body.course_id != null && Number.isFinite(Number(body.course_id))
+        ? Number(body.course_id)
         : null;
 
     if (!Number.isFinite(board_id) || board_id <= 0) {
@@ -144,6 +150,18 @@ export async function POST(request: Request) {
       rating = parsed;
     }
 
+    let course_rating: number | null = null;
+    if (board.rating_yn && body.course_rating != null) {
+      const parsed = Number(body.course_rating);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+        return NextResponse.json(
+          { error: "코스 별점은 1~5 사이로 입력해 주세요." },
+          { status: 400 }
+        );
+      }
+      course_rating = parsed;
+    }
+
     const images = board.allow_image ? (body.images ?? []).filter(Boolean) : [];
     const files = board.allow_file ? (body.files ?? []).filter((f) => f?.url) : [];
     if (images.length + files.length > board.max_upload_count) {
@@ -171,7 +189,9 @@ export async function POST(request: Request) {
         title,
         content,
         content_id,
+        course_id,
         rating,
+        course_rating,
         writer_id: user.id,
         writer_nm: member.nickname
       })

@@ -112,6 +112,77 @@ function usePlaceQuickSearch() {
   return { keyword, setKeyword, results, loading };
 }
 
+// 글쓰기 화면의 코스 첨부용 최소 검색 결과 (이름 + 내 코스/좋아요 여부)
+type SearchCourseLite = { id: number; name: string; isMine: boolean; isLiked: boolean };
+
+// tb_course 이름 검색(디바운스) — 공개(open_yn=Y)·삭제 안 됨 코스만 대상으로 한다.
+// 검색어가 비어 있어도 호출한다 — 로그인 상태면 내 코스·좋아요한 코스를 미리 보여준다(미리보기).
+function useCourseQuickSearch() {
+  const [keyword, setKeyword] = useState("");
+  const [results, setResults] = useState<SearchCourseLite[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => setLoading(true));
+    const t = setTimeout(
+      () => {
+        fetch(`/api/courses/search?keyword=${encodeURIComponent(keyword.trim())}`)
+          .then((r) => (r.ok ? r.json() : []))
+          .then((data) => {
+            if (!cancelled) setResults(Array.isArray(data) ? data.slice(0, 20) : []);
+          })
+          .catch(() => {
+            if (!cancelled) setResults([]);
+          })
+          .finally(() => {
+            if (!cancelled) setLoading(false);
+          });
+      },
+      keyword.trim() ? 300 : 0
+    );
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [keyword]);
+
+  return { keyword, setKeyword, results, loading };
+}
+
+// 장소/코스 첨부에 각각 붙는 별점 위젯 — 같은 게시글 안에서도 장소 별점과 코스 별점을 따로 매긴다.
+function StarRatingInput({
+  label,
+  value,
+  onChange
+}: {
+  label: string;
+  value: number | null;
+  onChange: (next: number | null) => void;
+}) {
+  return (
+    <div className="mt-2">
+      <p className="text-slate mb-1 text-xs font-semibold">{label}</p>
+      <div className="flex gap-1">
+        {([1, 2, 3, 4, 5] as const).map((n) => (
+          <button
+            key={n}
+            onClick={() => onChange(value === n ? null : n)}
+            aria-label={`${label} ${n}점`}
+            className="p-0.5"
+          >
+            <Star
+              className={`h-6 w-6 ${
+                value != null && n <= value ? "fill-yellow-400 text-yellow-500" : "text-hairline"
+              }`}
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type BoardPostItem = {
   id: number;
   board_id: number;
@@ -708,7 +779,10 @@ function CommunityWrite() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedPlace, setSelectedPlace] = useState<SearchPlaceLite | null>(null);
   const [showPlacePicker, setShowPlacePicker] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState<SearchCourseLite | null>(null);
+  const [showCoursePicker, setShowCoursePicker] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
+  const [courseRating, setCourseRating] = useState<number | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(isEditing);
   const [editForbidden, setEditForbidden] = useState(false);
   const {
@@ -717,6 +791,12 @@ function CommunityWrite() {
     results: placeResults,
     loading: placeSearching
   } = usePlaceQuickSearch();
+  const {
+    keyword: courseKeyword,
+    setKeyword: setCourseKeyword,
+    results: courseResults,
+    loading: courseSearching
+  } = useCourseQuickSearch();
 
   useEffect(() => {
     fetch("/api/community/boards")
@@ -759,6 +839,7 @@ function CommunityWrite() {
         setTitle(json.post.title);
         setContent(json.post.content);
         setRating(json.post.rating);
+        setCourseRating(json.post.course_rating);
         setImages(json.post.images ?? []);
         setFiles(json.post.files ?? []);
         if (json.post.attached_place) {
@@ -766,6 +847,14 @@ function CommunityWrite() {
             id: String(json.post.attached_place.content_id),
             name: json.post.attached_place.name,
             image: json.post.attached_place.image
+          });
+        }
+        if (json.post.attached_course) {
+          setSelectedCourse({
+            id: json.post.attached_course.course_id,
+            name: json.post.attached_course.course_nm,
+            isMine: false,
+            isLiked: false
           });
         }
       })
@@ -783,7 +872,12 @@ function CommunityWrite() {
   const selectedBoard = boards.find((b) => b.board_id === boardId);
 
   useEffect(() => {
-    if (boards.length > 0 && !selectedBoard?.rating_yn) queueMicrotask(() => setRating(null));
+    if (boards.length > 0 && !selectedBoard?.rating_yn) {
+      queueMicrotask(() => {
+        setRating(null);
+        setCourseRating(null);
+      });
+    }
   }, [boards, selectedBoard]);
 
   useEffect(() => {
@@ -801,7 +895,9 @@ function CommunityWrite() {
         title: title.trim(),
         content: content.trim(),
         content_id: selectedPlace ? Number(selectedPlace.id) : null,
-        rating: selectedBoard?.rating_yn ? rating : null,
+        course_id: selectedCourse ? selectedCourse.id : null,
+        rating: selectedBoard?.rating_yn && selectedPlace ? rating : null,
+        course_rating: selectedBoard?.rating_yn && selectedCourse ? courseRating : null,
         images: selectedBoard?.allow_image ? images : [],
         files: selectedBoard?.allow_file ? files : []
       };
@@ -1002,31 +1098,6 @@ function CommunityWrite() {
         <p className="text-stone mt-1 text-right text-xs">{content.length}자</p>
       </div>
 
-      {/* 별점 (게시판에서 별점 사용을 켠 경우만) */}
-      {selectedBoard?.rating_yn && (
-        <div>
-          <p className="text-slate mb-2 text-sm font-semibold">별점</p>
-          <div className="flex gap-1">
-            {([1, 2, 3, 4, 5] as const).map((n) => (
-              <button
-                key={n}
-                onClick={() => setRating((prev) => (prev === n ? null : n))}
-                aria-label={`별점 ${n}점`}
-                className="p-0.5"
-              >
-                <Star
-                  className={`h-6 w-6 ${
-                    rating != null && n <= rating
-                      ? "fill-yellow-400 text-yellow-500"
-                      : "text-hairline"
-                  }`}
-                />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {attachError && (
         <div className="border-error/30 text-error rounded-lg border bg-red-50 px-4 py-3 text-sm">
           {attachError}
@@ -1214,6 +1285,93 @@ function CommunityWrite() {
             )}
           </div>
         )}
+        {selectedBoard?.rating_yn && selectedPlace && (
+          <StarRatingInput label="장소 별점" value={rating} onChange={setRating} />
+        )}
+      </div>
+
+      {/* 코스 첨부 */}
+      <div>
+        <p className="text-slate mb-2 text-sm font-semibold">
+          코스 첨부 <span className="text-stone font-normal">(선택)</span>
+        </p>
+        {selectedCourse ? (
+          <span className="bg-navy-50 border-navy-200 inline-flex max-w-full items-center gap-2 rounded-full border py-1.5 pr-2 pl-1.5 text-sm">
+            <span className="bg-navy-100 flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+              <Route className="text-navy-600 h-3.5 w-3.5" />
+            </span>
+            <span className="text-navy-800 min-w-0 truncate font-medium">
+              {selectedCourse.name}
+            </span>
+            <button
+              onClick={() => setSelectedCourse(null)}
+              aria-label="코스 첨부 해제"
+              className="flex min-h-11 min-w-11 shrink-0 items-center justify-center"
+            >
+              <X className="text-navy-400 hover:text-navy-700 h-3.5 w-3.5" />
+            </button>
+          </span>
+        ) : (
+          <div className="relative">
+            <button
+              onClick={() => setShowCoursePicker((v) => !v)}
+              className="border-hairline text-steel hover:bg-surface-soft flex min-h-11 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors"
+            >
+              <Route className="h-4 w-4" />
+              코스 추가
+            </button>
+            {showCoursePicker && (
+              <div className="border-hairline bg-background absolute top-full left-0 z-20 mt-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border shadow-lg">
+                <div className="border-hairline-soft border-b p-2">
+                  <input
+                    autoFocus
+                    value={courseKeyword}
+                    onChange={(e) => setCourseKeyword(e.target.value)}
+                    placeholder="코스 이름 검색"
+                    className="border-hairline bg-background text-ink w-full rounded-lg border px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {courseSearching && (
+                    <p className="text-stone px-3 py-3 text-center text-xs">검색 중…</p>
+                  )}
+                  {!courseSearching && courseKeyword.trim() && courseResults.length === 0 && (
+                    <p className="text-stone px-3 py-3 text-center text-xs">검색 결과가 없어요</p>
+                  )}
+                  {!courseSearching &&
+                    courseResults.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => {
+                          setSelectedCourse(c);
+                          setShowCoursePicker(false);
+                        }}
+                        className="border-hairline-soft hover:bg-surface-soft flex w-full items-center gap-2.5 border-b px-3 py-2.5 text-left transition-colors last:border-0"
+                      >
+                        <div className="bg-navy-100 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+                          <Route className="text-navy-600 h-4 w-4" />
+                        </div>
+                        <p className="text-ink min-w-0 flex-1 truncate text-sm font-medium">
+                          {c.name}
+                        </p>
+                        {c.isMine && (
+                          <span className="bg-navy-100 text-navy-600 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold">
+                            내 코스
+                          </span>
+                        )}
+                        {c.isLiked && (
+                          <Heart className="h-3.5 w-3.5 shrink-0 fill-red-500 text-red-500" />
+                        )}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {selectedBoard?.rating_yn && selectedCourse && (
+          <StarRatingInput label="코스 별점" value={courseRating} onChange={setCourseRating} />
+        )}
       </div>
 
       {/* 하단 등록 버튼 (모바일용) */}
@@ -1239,12 +1397,14 @@ type PostDetail = {
   writer_nm: string;
   writer_community_level?: number;
   rating: number | null;
+  course_rating: number | null;
   view_cnt: number;
   like_cnt: number;
   comment_cnt: number;
   notice_yn: boolean;
   created_at: string;
   attached_place: { content_id: number; name: string; image: string } | null;
+  attached_course: { course_id: number; course_nm: string } | null;
   images: string[];
   files: AttachedFile[];
   can_edit: boolean;
@@ -1261,9 +1421,6 @@ type CommentItem = {
   author_community_level?: number;
   can_edit: boolean;
 };
-
-// 코스 첨부는 아직 실제 데이터가 없어 하드코딩된 예시 카드로만 보여준다.
-const HARDCODED_COURSE = { id: 101, title: "대전 무장애 가족 나들이" };
 
 function CommunityDetail({ id }: { id: string }) {
   const router = useRouter();
@@ -1627,50 +1784,74 @@ function CommunityDetail({ id }: { id: string }) {
       </article>
 
       {/* 첨부된 장소 · 코스 */}
-      <div className="space-y-2">
-        <p className="text-stone px-1 text-xs font-semibold">첨부된 장소 · 코스</p>
-        {post.attached_place && (
-          <button
-            onClick={() => router.push(`/map?contentId=${post.attached_place!.content_id}`)}
-            className="border-brand-100 hover:bg-brand-50 hover:border-brand-300 bg-background flex w-full items-center gap-3 rounded-full border p-3.5 text-left transition-colors"
-          >
-            {post.attached_place.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={post.attached_place.image}
-                alt=""
-                className="h-10 w-10 shrink-0 rounded-full object-cover"
-              />
-            ) : (
-              <span className="bg-brand-100 flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
-                <MapPin className="text-brand-600 h-5 w-5" />
-              </span>
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="text-ink truncate text-sm font-semibold">{post.attached_place.name}</p>
-              <p className="text-brand-600 mt-0.5 text-xs">지도에서 보기</p>
-            </div>
-            <MapPin className="text-brand-400 h-4 w-4 shrink-0" />
-          </button>
-        )}
-        <button
-          onClick={() => router.push(`/course/${HARDCODED_COURSE.id}`)}
-          className="border-navy-100 hover:border-navy-300 hover:bg-navy-50 bg-background flex w-full items-center gap-3 rounded-full border p-3.5 text-left transition-colors"
-        >
-          <div className="bg-navy-100 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
-            <Route className="text-navy-600 h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-ink text-sm font-semibold">{HARDCODED_COURSE.title}</p>
-            <p className="text-navy-600 mt-0.5 text-xs">코스 상세보기</p>
-          </div>
-          <ChevronDown className="text-navy-400 h-4 w-4 shrink-0 -rotate-90" />
-        </button>
-      </div>
+      {(post.attached_place || post.attached_course) && (
+        <div className="space-y-2">
+          <p className="text-stone px-1 text-xs font-semibold">첨부된 장소 · 코스</p>
+          {post.attached_place && (
+            <button
+              onClick={() => router.push(`/map?contentId=${post.attached_place!.content_id}`)}
+              className="border-brand-100 hover:bg-brand-50 hover:border-brand-300 bg-background flex w-full items-center gap-3 rounded-full border p-3.5 text-left transition-colors"
+            >
+              {post.attached_place.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={post.attached_place.image}
+                  alt=""
+                  className="h-10 w-10 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <span className="bg-brand-100 flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
+                  <MapPin className="text-brand-600 h-5 w-5" />
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-ink truncate text-sm font-semibold">
+                  {post.attached_place.name}
+                </p>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <p className="text-brand-600 text-xs">지도에서 보기</p>
+                  {post.rating != null && (
+                    <span className="text-steel flex items-center gap-0.5 text-xs">
+                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-500" />
+                      {post.rating}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <MapPin className="text-brand-400 h-4 w-4 shrink-0" />
+            </button>
+          )}
+          {post.attached_course && (
+            <button
+              onClick={() => router.push(`/course/${post.attached_course!.course_id}`)}
+              className="border-navy-100 hover:border-navy-300 hover:bg-navy-50 bg-background flex w-full items-center gap-3 rounded-full border p-3.5 text-left transition-colors"
+            >
+              <div className="bg-navy-100 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+                <Route className="text-navy-600 h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-ink text-sm font-semibold">{post.attached_course.course_nm}</p>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <p className="text-navy-600 text-xs">코스 상세보기</p>
+                  {post.course_rating != null && (
+                    <span className="text-steel flex items-center gap-0.5 text-xs">
+                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-500" />
+                      {post.course_rating}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <ChevronDown className="text-navy-400 h-4 w-4 shrink-0 -rotate-90" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="text-steel flex items-center gap-4 text-sm">
-        {post.rating != null && (
+        {/* 장소가 첨부된 경우 별점은 위 장소 카드에 표시하므로 여기선 생략 — 장소 없이 별점만
+            남아 있는 예전 글(장소 첨부가 선택 사항이던 시절 데이터)만 여기서 보여준다. */}
+        {post.rating != null && !post.attached_place && (
           <div className="flex items-center gap-1">
             <Star className="h-4 w-4 fill-yellow-400 text-yellow-500" />
             <span>{post.rating}</span>
