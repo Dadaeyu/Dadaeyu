@@ -1,8 +1,14 @@
 "use client";
 
-// 카카오맵 SDK 래퍼: 마커/툴팁/경로선/내 위치 표시를 관리하는 지도 컴포넌트.
+// 카카오맵 SDK 래퍼: 마커/경로선/내 위치 표시를 관리하는 지도 컴포넌트.
 import { useEffect, useRef, useState } from "react";
 import { loadKakaoMap } from "@/lib/kakao/loadKakaoMap";
+import {
+  formatRouteDistance,
+  formatRouteDuration,
+  formatRouteTollFare,
+  trafficStateToColor
+} from "@/lib/kakao/directions";
 
 export interface KakaoPlaceResult {
   id: string;
@@ -37,25 +43,13 @@ export interface MapMarker {
   zIndex?: number;
 }
 
-// 마커 선택 시 지도 위에 뜨는 정보 카드. 값이 없는 필드(image/rating/barrierFree)는 카드에서 생략된다
-// — 카카오 검색 결과처럼 실제 데이터가 없는 경우 임의의 값을 지어내지 않기 위함.
-export interface TooltipInfo {
-  lat: number;
-  lng: number;
-  name: string;
-  category?: string;
-  image?: string;
-  rating?: number;
-  barrierFree?: boolean;
-  // 썸네일이 없을 때 대체 아이콘의 배경/아이콘 색(출처별로 다르게 줄 수 있음).
-  accentColor?: string;
-}
-
 // 경로선 한 구간(코스 일정용). points 가 2개 미만이면 그리지 않는다.
 export interface MapPathSegment {
   points: { lat: number; lng: number }[];
   color?: string; // 기본 초록
   dashed?: boolean; // true 면 점선(Day 간 연결 구간 표시용)
+  /** 자동차 안내 — 도로별 교통 혼잡도 (있으면 color 대신 구간별 색) */
+  trafficChunks?: { points: { lat: number; lng: number }[]; trafficState: number }[];
   /** 이 구간에 마우스를 올렸을 때 커서 위치에 보여줄 라벨(예: "Day 1"). 없으면 호버해도 안 뜬다. */
   label?: string;
   /** 이 구간을 클릭했을 때 onPathClick 으로 전달할 값(예: Day 번호). label 이 있어야 클릭도 반응한다. */
@@ -73,8 +67,6 @@ interface Props {
   navTarget?: { lat: number; lng: number } | null;
   center?: { lat: number; lng: number };
   level?: number;
-  tooltip?: TooltipInfo | null;
-  onCloseTooltip?: () => void;
   myLocation?: { lat: number; lng: number } | null;
   focusMyLocationTrigger?: number;
   // 값이 바뀔 때마다(0 제외) 지도를 초기 중심·줌(대전 전체가 보이는 화면)으로 되돌린다.
@@ -89,6 +81,8 @@ interface Props {
   bottomOverlayPx?: number;
   /** 확대/축소 컨트롤(데스크탑 전용) 표시 여부. 기본 true — false면 데스크탑에서도 숨긴다. */
   showZoomControl?: boolean;
+  /** 경로 중간점에 고정 표시할 거리·시간 요약 (네이버 지도 스타일 칩) */
+  pathSummary?: { distanceM: number; durationSec: number; tollFare?: number } | null;
 }
 
 // ── 핀 렌더러 ──────────────────────────────────────────────
@@ -203,89 +197,6 @@ function createMyLocationEl(): HTMLDivElement {
   return el;
 }
 
-function createTooltipEl(tooltip: TooltipInfo, onClose: (() => void) | undefined): HTMLDivElement {
-  const container = document.createElement("div");
-  const card = document.createElement("div");
-  card.style.cssText =
-    "position:relative;display:flex;gap:16px;background:white;border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,0.18);width:260px;cursor:default;";
-
-  // ── 썸네일(왼쪽, 80x80) — 이미지가 없으면 출처 색으로 톤을 맞춘 대체 아이콘을 보여준다(가짜 사진 X).
-  const accent = tooltip.accentColor ?? "#FEE500";
-  const thumb = document.createElement("div");
-  thumb.style.cssText =
-    "flex-shrink:0;width:80px;height:80px;border-radius:12px;overflow:hidden;background:" +
-    (tooltip.image ? "#f3f4f6" : `${accent}26`) +
-    ";display:flex;align-items:center;justify-content:center;";
-  if (tooltip.image) {
-    const img = document.createElement("img");
-    img.src = tooltip.image;
-    img.alt = tooltip.name;
-    img.style.cssText = "width:100%;height:100%;object-fit:cover;";
-    thumb.append(img);
-  } else {
-    thumb.innerHTML = `
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="${accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-        <circle cx="12" cy="10" r="3"/>
-      </svg>`;
-  }
-
-  // ── 오른쪽 정보 컬럼 ──────────────────────────────────────
-  const info = document.createElement("div");
-  info.style.cssText = "min-width:0;flex:1;padding-right:20px;";
-
-  const name = document.createElement("p");
-  name.textContent = tooltip.name;
-  name.style.cssText =
-    "font-weight:700;font-size:14px;color:#191919;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
-  info.append(name);
-
-  if (tooltip.category) {
-    const category = document.createElement("p");
-    category.textContent = tooltip.category;
-    category.style.cssText =
-      "font-size:12px;color:#8c8c8c;margin:4px 0 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
-    info.append(category);
-  }
-
-  if (typeof tooltip.rating === "number") {
-    const rating = document.createElement("div");
-    rating.style.cssText = "display:flex;align-items:center;gap:4px;margin-top:8px;";
-    rating.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="#FBBF24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
-      <span style="font-size:12px;font-weight:600;color:#374151;">${tooltip.rating.toFixed(1)}</span>`;
-    info.append(rating);
-  }
-
-  if (tooltip.barrierFree) {
-    const badge = document.createElement("span");
-    badge.textContent = "Barrier-Free";
-    badge.style.cssText =
-      "display:inline-block;margin-top:8px;padding:2px 8px;border-radius:9999px;background:#ECFDF5;color:#047857;font-size:11px;font-weight:600;";
-    info.append(badge);
-  }
-
-  const closeButton = document.createElement("button");
-  closeButton.type = "button";
-  closeButton.setAttribute("aria-label", `${tooltip.name} 정보 닫기`);
-  closeButton.style.cssText =
-    "position:absolute;top:8px;right:8px;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;color:#6b7280;font-size:13px;line-height:1;padding:0;";
-  closeButton.textContent = "×";
-  closeButton.addEventListener("click", (event) => {
-    event.stopPropagation();
-    onClose?.();
-  });
-
-  const pointer = document.createElement("div");
-  pointer.style.cssText =
-    "position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid white;filter:drop-shadow(0 4px 3px rgba(0,0,0,0.06));";
-
-  card.append(thumb, info, closeButton, pointer);
-  container.append(card);
-  container.addEventListener("click", (event) => event.stopPropagation());
-  return container;
-}
-
 // ── 컴포넌트 ───────────────────────────────────────────────
 export default function KakaoMap({
   markers = [],
@@ -295,8 +206,6 @@ export default function KakaoMap({
   navTarget = null,
   center = MAP_CENTER,
   level = MAP_LEVEL,
-  tooltip = null,
-  onCloseTooltip,
   myLocation = null,
   focusMyLocationTrigger = 0,
   resetViewTrigger = 0,
@@ -304,7 +213,8 @@ export default function KakaoMap({
   onPathClick,
   fitPathKey = null,
   bottomOverlayPx = 0,
-  showZoomControl = true
+  showZoomControl = true,
+  pathSummary = null
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
@@ -316,7 +226,7 @@ export default function KakaoMap({
   // 경로선 호버 시 커서 위치에 뜨는 라벨 — 한 번에 하나만 필요해서 배열이 아니라 단일 참조.
   const pathHoverOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const pathHoverElRef = useRef<HTMLDivElement | null>(null);
-  const tooltipOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
+  const pathSummaryOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const myLocationOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const zoomControlRef = useRef<kakao.maps.ZoomControl | null>(null);
   const [mapInitCount, setMapInitCount] = useState(0);
@@ -417,7 +327,14 @@ export default function KakaoMap({
       const el = document.createElement("div");
       markerElemsRef.current.set(marker.id, el);
       const render = getRenderer(marker.shape);
-      render(el, marker.color, marker.id === selectedId, marker.borderColor, marker.label, marker.size);
+      render(
+        el,
+        marker.color,
+        marker.id === selectedId,
+        marker.borderColor,
+        marker.label,
+        marker.size
+      );
 
       const overlay = new K.CustomOverlay({
         position: new K.LatLng(marker.lat, marker.lng),
@@ -445,33 +362,16 @@ export default function KakaoMap({
       const el = markerElemsRef.current.get(marker.id);
       if (!el) return;
       const render = getRenderer(marker.shape);
-      render(el, marker.color, marker.id === selectedId, marker.borderColor, marker.label, marker.size);
+      render(
+        el,
+        marker.color,
+        marker.id === selectedId,
+        marker.borderColor,
+        marker.label,
+        marker.size
+      );
     });
   }, [selectedId, markers]);
-
-  // 말풍선 툴팁
-  useEffect(() => {
-    if (!mapRef.current || !window.kakao?.maps) return;
-    const K = window.kakao.maps;
-
-    tooltipOverlayRef.current?.setMap(null);
-    tooltipOverlayRef.current = null;
-
-    if (!tooltip) return;
-
-    const el = createTooltipEl(tooltip, onCloseTooltip);
-
-    const overlay = new K.CustomOverlay({
-      position: new K.LatLng(tooltip.lat, tooltip.lng),
-      content: el,
-      yAnchor: 1.6,
-      xAnchor: 0.5,
-      zIndex: 10
-    });
-    overlay.setMap(mapRef.current);
-    tooltipOverlayRef.current = overlay;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tooltip, mapInitCount]);
 
   // [줌-투-마커] selectedId 변경 시 해당 마커로 줌인 — 경로 맞춤 중이면 스킵
   // fitPathKey는 deps에 넣지 않음: 안내 종료 시 마커로 다시 점프하지 않게
@@ -551,35 +451,51 @@ export default function KakaoMap({
     };
 
     for (const segment of path) {
-      if (segment.points.length < 2) continue;
-      const color = segment.color ?? "#16a34a";
-      const line = new K.Polyline({
-        path: segment.points.map((p) => new K.LatLng(p.lat, p.lng)),
-        strokeWeight: 4,
-        strokeColor: color,
-        strokeOpacity: 0.8,
-        strokeStyle: segment.dashed ? "shortdash" : "solid",
-        // 점선(Day 경계 연결 구간)이 실선 위를 덮지 않도록 항상 아래에 깔리고,
-        // 실선끼리도 segment.zIndex 로 우선순위를 줄 수 있다(예: 선택된 Day 경로선을 위로).
-        zIndex: segment.zIndex ?? (segment.dashed ? 1 : 2)
-      });
-      line.setMap(mapRef.current);
-      pathPolylinesRef.current.push(line);
+      const defaultColor = segment.color ?? "#16a34a";
+      const drawPolyline = (
+        pts: { lat: number; lng: number }[],
+        strokeColor: string,
+        dashed: boolean
+      ) => {
+        if (pts.length < 2) return;
+        const line = new K.Polyline({
+          path: pts.map((p) => new K.LatLng(p.lat, p.lng)),
+          strokeWeight: 4,
+          strokeColor,
+          strokeOpacity: 0.85,
+          strokeStyle: dashed ? "shortdash" : "solid",
+          // 점선(Day 경계 연결 구간)이 실선 위를 덮지 않도록 항상 아래에 깔리고,
+          // 실선끼리도 segment.zIndex 로 우선순위를 줄 수 있다(예: 선택된 Day 경로선을 위로).
+          zIndex: segment.zIndex ?? (dashed ? 1 : 2)
+        });
+        line.setMap(mapRef.current);
+        pathPolylinesRef.current.push(line);
 
-      if (segment.label) {
-        const label = segment.label;
-        K.event.addListener(line, "mouseover", (e: kakao.maps.MouseEvent) =>
-          showHoverLabel(label, color, e.latLng)
-        );
-        K.event.addListener(line, "mousemove", (e: kakao.maps.MouseEvent) =>
-          showHoverLabel(label, color, e.latLng)
-        );
-        K.event.addListener(line, "mouseout", hideHoverLabel);
-        if (segment.day != null) {
-          const day = segment.day;
-          K.event.addListener(line, "click", () => onPathClick?.(day));
+        if (segment.label) {
+          const label = segment.label;
+          K.event.addListener(line, "mouseover", (e: kakao.maps.MouseEvent) =>
+            showHoverLabel(label, defaultColor, e.latLng)
+          );
+          K.event.addListener(line, "mousemove", (e: kakao.maps.MouseEvent) =>
+            showHoverLabel(label, defaultColor, e.latLng)
+          );
+          K.event.addListener(line, "mouseout", hideHoverLabel);
+          if (segment.day != null) {
+            const day = segment.day;
+            K.event.addListener(line, "click", () => onPathClick?.(day));
+          }
         }
+      };
+
+      if (segment.trafficChunks?.length && !segment.dashed) {
+        for (const chunk of segment.trafficChunks) {
+          drawPolyline(chunk.points, trafficStateToColor(chunk.trafficState), false);
+        }
+        continue;
       }
+
+      if (segment.points.length < 2) continue;
+      drawPolyline(segment.points, defaultColor, Boolean(segment.dashed));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(path), mapInitCount]);
@@ -619,6 +535,63 @@ export default function KakaoMap({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitPathKey, mapInitCount, bottomOverlayPx, JSON.stringify(path)]);
+
+  // 경로 안내 요약 칩 — 경로 중간점에 거리·시간 고정 표시
+  const pathSummaryKey = pathSummary
+    ? `${pathSummary.distanceM}-${pathSummary.durationSec}-${pathSummary.tollFare ?? 0}`
+    : "";
+  const pathPointsKey = JSON.stringify(path);
+
+  useEffect(() => {
+    if (!mapRef.current || !window.kakao?.maps) return;
+    const K = window.kakao.maps;
+
+    pathSummaryOverlayRef.current?.setMap(null);
+    pathSummaryOverlayRef.current = null;
+
+    if (
+      !pathSummary ||
+      !Number.isFinite(pathSummary.distanceM) ||
+      !Number.isFinite(pathSummary.durationSec)
+    ) {
+      return;
+    }
+
+    const points = path.flatMap((segment) => segment.points);
+    const routable = points.filter(
+      (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && !(p.lat === 0 && p.lng === 0)
+    );
+    if (routable.length < 2) return;
+
+    const mid = routable[Math.floor((routable.length - 1) / 2)];
+    const tollPart = formatRouteTollFare(pathSummary.tollFare ?? 0);
+    const label = tollPart
+      ? `${formatRouteDistance(pathSummary.distanceM)} · ${formatRouteDuration(pathSummary.durationSec)} · ${tollPart}`
+      : `${formatRouteDistance(pathSummary.distanceM)} · ${formatRouteDuration(pathSummary.durationSec)}`;
+
+    const el = document.createElement("div");
+    el.textContent = label;
+    el.style.cssText =
+      "background:#fff;color:#0f172a;font-size:12px;font-weight:700;line-height:1.2;padding:6px 10px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 10px rgba(15,23,42,0.18);border:1px solid rgba(15,23,42,0.08);pointer-events:none;";
+
+    const overlay = new K.CustomOverlay({
+      content: el,
+      position: new K.LatLng(mid.lat, mid.lng),
+      yAnchor: 0.5,
+      xAnchor: 0.5,
+      zIndex: 8
+    });
+    overlay.setMap(mapRef.current);
+    pathSummaryOverlayRef.current = overlay;
+
+    return () => {
+      overlay.setMap(null);
+      if (pathSummaryOverlayRef.current === overlay) {
+        pathSummaryOverlayRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapInitCount, pathSummaryKey, pathPointsKey]);
 
   // 내 위치 마커 — myLocation이 바뀔 때마다 다시 그리고, null이면 제거
   useEffect(() => {

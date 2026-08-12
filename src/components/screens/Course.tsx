@@ -44,7 +44,11 @@ import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
 import TourismDetailPanel from "@/components/search/TourismDetailPanel";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import { usePlaceSearch, type TourismDetail } from "@/hooks/usePlaceSearch";
-import { getCategoryColor, LCLSSYSTM1_COLORS, LCLSSYSTM1_LABELS } from "@/lib/search/categoryColors";
+import {
+  getCategoryColor,
+  LCLSSYSTM1_COLORS,
+  LCLSSYSTM1_LABELS
+} from "@/lib/search/categoryColors";
 import { useMyLocation } from "@/hooks/useMyLocation";
 import { shareToKakaoTalk } from "@/lib/kakao/loadKakaoShare";
 import { fetchSharedCourses, type CourseSort } from "@/lib/supabase/courses";
@@ -65,9 +69,15 @@ import {
   fetchDirectionsForStops,
   formatRouteDistance,
   formatRouteDuration,
+  formatRouteTollFare,
   openKakaoMapRoute,
-  type RouteMode
+  pickRouteOption,
+  buildRoutePathFromOption,
+  type RouteMode,
+  type RouteOption
 } from "@/lib/kakao/directions";
+import RouteOptionPicker from "@/components/search/RouteOptionPicker";
+import TrafficLegend from "@/components/search/TrafficLegend";
 
 // Day(일정)별 마커·경로선 색상 — Day 순서대로 순환 배정. 마커와 경로선이 같은 팔레트를 써야
 // "이 색 마커들이 이 색 선으로 이어진 게 같은 Day"라는 게 지도에서 바로 보인다.
@@ -789,11 +799,15 @@ export default function Course() {
   // 복원한다(readRecommendSession). 공유 코스 탭의 필터가 카드 클릭 시점의 courseListReturn에만
   // 의존하는 것과는 다른 범위 — 필터와 결과를 항상 같이 저장/복원해서 화면이 어긋나지 않게 한다.
   const restoredRecommendSession = !id ? readRecommendSession() : null;
-  const [showFilters, setShowFilters] = useState(() => restoredRecommendSession?.showFilters ?? false);
+  const [showFilters, setShowFilters] = useState(
+    () => restoredRecommendSession?.showFilters ?? false
+  );
   const [filters, setFilters] = useState<Filters>(
     () => restoredRecommendSession?.filters ?? DEFAULT_FILTERS
   );
-  const [showResults, setShowResults] = useState(() => restoredRecommendSession?.showResults ?? false);
+  const [showResults, setShowResults] = useState(
+    () => restoredRecommendSession?.showResults ?? false
+  );
   // 추천 코스 필터의 위치(구/동) 선택지 — 공유 코스와 같은 area-code 조회 결과(sharedAreaCodes)를
   // 그대로 재사용한다(탭과 무관한 공용 데이터라 따로 다시 조회할 필요가 없다).
   const recommendGuCode = sharedAreaCodes.find((a) => a.name === filters.gu)?.code ?? "";
@@ -843,7 +857,8 @@ export default function Course() {
   // 로그인돼 있는데 세션 확인이 끝나기 전 잠깐의 "user=null" 순간에 목록을 지워버리게 된다.
   useEffect(() => {
     if (authLoading || userId) return;
-    if (!showResults && recommendCourses.length === 0 && !recommendNotice && !recommendError) return;
+    if (!showResults && recommendCourses.length === 0 && !recommendNotice && !recommendError)
+      return;
     setShowResults(false);
     setRecommendCourses([]);
     setRecommendNotice("");
@@ -851,7 +866,7 @@ export default function Course() {
   }, [authLoading, userId, showResults, recommendCourses.length, recommendNotice, recommendError]);
 
   const handleRecommend = async () => {
-    if (!requireLoginOrRedirect(user, router, "/course?tab=recommend")) return;
+    if (!(await requireLoginOrRedirect(user, router, "/course?tab=recommend"))) return;
     setShowResults(true);
     setRecommendLoading(true);
     setRecommendError("");
@@ -882,14 +897,15 @@ export default function Course() {
       }
       const courses = json.courses ?? [];
       setRecommendCourses(courses);
-      setRecommendNotice(courses.length === 0 ? (json.message ?? "조건에 맞는 코스를 찾지 못했어요.") : "");
+      setRecommendNotice(
+        courses.length === 0 ? (json.message ?? "조건에 맞는 코스를 찾지 못했어요.") : ""
+      );
     } catch {
       setRecommendError("코스를 추천받는 중 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.");
     } finally {
       setRecommendLoading(false);
     }
   };
-
 
   // 코스 상세 → 뒤로가기로 돌아왔을 때, 클릭했던 코스 카드가 보이는 위치로 스크롤 복원.
   // 무한 스크롤이라 그 카드가 아직 로드 안 됐을 수 있어, 못 찾으면 다음 페이지를 더 불러와 재시도한다.
@@ -1321,8 +1337,8 @@ export default function Course() {
             ) : recommendCourses.length > 0 ? (
               <>
                 <p className="text-sm text-gray-500">
-                  <span className="font-semibold text-gray-800">{recommendCourses.length}개</span>
-                  의 코스를 설계했어요
+                  <span className="font-semibold text-gray-800">{recommendCourses.length}개</span>의
+                  코스를 설계했어요
                 </p>
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   이 목록은 필터를 초기화하거나 다시 추천받거나 로그아웃하면 사라져요. 마음에 드는
@@ -1518,79 +1534,79 @@ export default function Course() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {!myCoursesLoading &&
               myDbCourses.map((course) => (
-              <Card key={course.course_id} asChild variant="interactive">
-                <Link
-                  href={`/course/${course.course_id}`}
-                  data-course-id={course.course_id}
-                  onClick={() =>
-                    saveCourseListReturn("my", course.course_id, myFilters, showMyFilters)
-                  }
-                  className="block"
-                >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <h3 className="text-ink truncate font-semibold">{course.course_nm}</h3>
-                      <Badge tone={course.open_yn === "N" ? "neutral" : "brand"} shape="tag">
-                        {course.open_yn === "N" ? "비공개" : "공개"}
-                      </Badge>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <div className="flex items-center gap-1 text-sm">
-                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                        <span className="text-gray-700">
-                          {(courseRatings[course.course_id] ?? 0).toFixed(1)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 text-sm text-gray-400">
-                        <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" />
-                        <span>{courseLikeCounts[course.course_id] ?? 0}</span>
-                      </div>
-                      <button
-                        onClick={(e) => handleDeleteCourse(e, course.course_id)}
-                        disabled={deletingCourseId === course.course_id}
-                        className="rounded-lg p-1 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-60"
-                        aria-label="코스 삭제"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                  <CourseAuthorRow
-                    authorType={member?.role === "admin" ? "admin" : "user"}
-                    author={member?.nickname ?? "나"}
-                    badgeAfter
-                  />
-                  {(courseHashtags[course.course_id]?.length ?? 0) > 0 && (
-                    <div className="mb-2 flex flex-wrap gap-1.5">
-                      {courseHashtags[course.course_id].map((label) => (
-                        <Badge key={label} tone="brand" shape="pill">
-                          #{label}
+                <Card key={course.course_id} asChild variant="interactive">
+                  <Link
+                    href={`/course/${course.course_id}`}
+                    data-course-id={course.course_id}
+                    onClick={() =>
+                      saveCourseListReturn("my", course.course_id, myFilters, showMyFilters)
+                    }
+                    className="block"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <h3 className="text-ink truncate font-semibold">{course.course_nm}</h3>
+                        <Badge tone={course.open_yn === "N" ? "neutral" : "brand"} shape="tag">
+                          {course.open_yn === "N" ? "비공개" : "공개"}
                         </Badge>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm text-gray-500">
-                    <div className="flex shrink-0 gap-2 whitespace-nowrap">
-                      {(course.startdate || course.enddate) && (
-                        <>
-                          <span className="text-steel">
-                            {course.startdate?.slice(0, 10) ?? ""}
-                            {" ~ "}
-                            {course.enddate?.slice(0, 10) ?? ""}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <div className="flex items-center gap-1 text-sm">
+                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                          <span className="text-gray-700">
+                            {(courseRatings[course.course_id] ?? 0).toFixed(1)}
                           </span>
-                          <span>•</span>
-                        </>
-                      )}
-                      <span>{courseMeta[course.course_id]?.places ?? 0}곳</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-sm text-gray-400">
+                          <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" />
+                          <span>{courseLikeCounts[course.course_id] ?? 0}</span>
+                        </div>
+                        <button
+                          onClick={(e) => handleDeleteCourse(e, course.course_id)}
+                          disabled={deletingCourseId === course.course_id}
+                          className="rounded-lg p-1 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-60"
+                          aria-label="코스 삭제"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-steel shrink-0 text-xs whitespace-nowrap">
-                      등록 {formatDotDate(course.registtime)}
-                      {course.updatetime && ` · 수정 ${formatDotDate(course.updatetime)}`}
-                    </span>
-                  </div>
-                </Link>
-              </Card>
-            ))}
+                    <CourseAuthorRow
+                      authorType={member?.role === "admin" ? "admin" : "user"}
+                      author={member?.nickname ?? "나"}
+                      badgeAfter
+                    />
+                    {(courseHashtags[course.course_id]?.length ?? 0) > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {courseHashtags[course.course_id].map((label) => (
+                          <Badge key={label} tone="brand" shape="pill">
+                            #{label}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm text-gray-500">
+                      <div className="flex shrink-0 gap-2 whitespace-nowrap">
+                        {(course.startdate || course.enddate) && (
+                          <>
+                            <span className="text-steel">
+                              {course.startdate?.slice(0, 10) ?? ""}
+                              {" ~ "}
+                              {course.enddate?.slice(0, 10) ?? ""}
+                            </span>
+                            <span>•</span>
+                          </>
+                        )}
+                        <span>{courseMeta[course.course_id]?.places ?? 0}곳</span>
+                      </div>
+                      <span className="text-steel shrink-0 text-xs whitespace-nowrap">
+                        등록 {formatDotDate(course.registtime)}
+                        {course.updatetime && ` · 수정 ${formatDotDate(course.updatetime)}`}
+                      </span>
+                    </div>
+                  </Link>
+                </Card>
+              ))}
           </div>
 
           {/* 무한 스크롤 sentinel — 화면에 보이면 자동으로 다음 페이지 로드 */}
@@ -1946,6 +1962,11 @@ function CourseDetail({ id }: { id: string }) {
   const [dayGuideError, setDayGuideError] = useState<string | null>(null);
   const [dayGuideDistanceM, setDayGuideDistanceM] = useState<number | null>(null);
   const [dayGuideDurationSec, setDayGuideDurationSec] = useState<number | null>(null);
+  const [dayGuideTollFare, setDayGuideTollFare] = useState<number | null>(null);
+  const [dayGuideRouteOptions, setDayGuideRouteOptions] = useState<RouteOption[] | null>(null);
+  const [dayGuideSelectedRouteId, setDayGuideSelectedRouteId] = useState("0");
+  const [dayGuideShowTrafficLegend, setDayGuideShowTrafficLegend] = useState(false);
+  const dayGuideRouteOptionsRef = useRef<RouteOption[] | null>(null);
   const [dayGuidePath, setDayGuidePath] = useState<MapPathSegment[] | null>(null);
   const dayGuideRequestIdRef = useRef(0);
 
@@ -2154,7 +2175,7 @@ function CourseDetail({ id }: { id: string }) {
   // 같은 코스를 여러 번 추가하는 것도 허용한다 — 클릭할 때마다 새 코스로 복사된다.
   const [addingCourse, setAddingCourse] = useState(false);
   const handleAddToMyCourse = async () => {
-    if (!requireLoginOrRedirect(user, router, `/course/${id}`)) return;
+    if (!(await requireLoginOrRedirect(user, router, `/course/${id}`))) return;
     if (!user || !dbCourse || addingCourse) return;
     setAddingCourse(true);
     try {
@@ -2283,8 +2304,62 @@ function CourseDetail({ id }: { id: string }) {
     setDayGuideError(null);
     setDayGuideDistanceM(null);
     setDayGuideDurationSec(null);
+    setDayGuideTollFare(null);
+    dayGuideRouteOptionsRef.current = null;
+    setDayGuideRouteOptions(null);
+    setDayGuideSelectedRouteId("0");
+    setDayGuideShowTrafficLegend(false);
     setDayGuidePath(null);
     setDayGuidePickerOpen(false);
+  };
+
+  const handleDayGuideSelectRoute = (id: string) => {
+    const options = dayGuideRouteOptionsRef.current;
+    if (!options) return;
+    const opt = options.find((r) => r.id === id);
+    if (!opt) return;
+    setDayGuideSelectedRouteId(id);
+    setDayGuidePath([
+      buildRoutePathFromOption(
+        opt,
+        dayGuideMode ?? "car",
+        DAY_LINE_COLORS[(activeDay - 1) % DAY_LINE_COLORS.length]
+      )
+    ]);
+    setDayGuideDistanceM(opt.distanceM);
+    setDayGuideDurationSec(opt.durationSec);
+    setDayGuideTollFare(opt.tollFare);
+    setDayGuideShowTrafficLegend(
+      dayGuideMode === "car" && !opt.fallback && Boolean(opt.trafficChunks?.length)
+    );
+  };
+
+  const applyDayGuideResult = (
+    result: Awaited<ReturnType<typeof fetchDirectionsForStops>>,
+    mode: RouteMode
+  ) => {
+    const options = result.routes?.length ? result.routes : [pickRouteOption(result)];
+    const multi = options.length > 1 ? options : null;
+    dayGuideRouteOptionsRef.current = multi;
+    setDayGuideRouteOptions(multi);
+    const primary = pickRouteOption(result, "0");
+    setDayGuideSelectedRouteId(primary.id);
+    setDayGuidePath([
+      buildRoutePathFromOption(
+        primary,
+        mode,
+        DAY_LINE_COLORS[(activeDay - 1) % DAY_LINE_COLORS.length]
+      )
+    ]);
+    setDayGuideDistanceM(primary.distanceM);
+    setDayGuideDurationSec(primary.durationSec);
+    setDayGuideTollFare(primary.tollFare);
+    setDayGuideShowTrafficLegend(
+      mode === "car" && !result.fallback && Boolean(primary.trafficChunks?.length)
+    );
+    setDayGuideError(
+      result.fallback ? "대략 경로예요. 정확한 안내는 카카오맵에서 시작하세요." : null
+    );
   };
 
   const startDayGuide = async (mode: RouteMode) => {
@@ -2294,6 +2369,11 @@ function CourseDetail({ id }: { id: string }) {
     setDayGuideError(null);
     setDayGuideDistanceM(null);
     setDayGuideDurationSec(null);
+    setDayGuideTollFare(null);
+    dayGuideRouteOptionsRef.current = null;
+    setDayGuideRouteOptions(null);
+    setDayGuideSelectedRouteId("0");
+    setDayGuideShowTrafficLegend(false);
     const requestId = ++dayGuideRequestIdRef.current;
 
     if (dayGuideStops.length < 2) {
@@ -2306,20 +2386,14 @@ function CourseDetail({ id }: { id: string }) {
     try {
       const result = await fetchDirectionsForStops(dayGuideStops, mode);
       if (requestId !== dayGuideRequestIdRef.current) return;
-      setDayGuidePath([
-        {
-          points: result.points,
-          color: DAY_LINE_COLORS[(activeDay - 1) % DAY_LINE_COLORS.length],
-          dashed: Boolean(result.fallback)
-        }
-      ]);
-      setDayGuideDistanceM(result.distanceM);
-      setDayGuideDurationSec(result.durationSec);
-      setDayGuideError(
-        result.fallback ? "대략 경로예요. 정확한 안내는 카카오맵에서 시작하세요." : null
-      );
+      applyDayGuideResult(result, mode);
     } catch (e) {
       if (requestId !== dayGuideRequestIdRef.current) return;
+      dayGuideRouteOptionsRef.current = null;
+      setDayGuideRouteOptions(null);
+      setDayGuideSelectedRouteId("0");
+      setDayGuideShowTrafficLegend(false);
+      setDayGuideTollFare(null);
       setDayGuidePath([
         {
           points: dayGuideStops,
@@ -3319,6 +3393,9 @@ function CourseDetail({ id }: { id: string }) {
                           <p className="text-stone mt-0.5 text-xs">
                             {dayGuideStops.length}곳 · {formatRouteDistance(dayGuideDistanceM)} ·{" "}
                             {formatRouteDuration(dayGuideDurationSec)}
+                            {dayGuideTollFare != null && dayGuideTollFare > 0
+                              ? ` · ${formatRouteTollFare(dayGuideTollFare)}`
+                              : ""}
                           </p>
                         ) : null}
                         {dayGuideError ? (
@@ -3334,6 +3411,17 @@ function CourseDetail({ id }: { id: string }) {
                         <X className="h-4 w-4" />
                       </button>
                     </div>
+                    {dayGuideMode === "car" &&
+                    dayGuideRouteOptions &&
+                    dayGuideRouteOptions.length > 1 ? (
+                      <RouteOptionPicker
+                        options={dayGuideRouteOptions}
+                        selectedId={dayGuideSelectedRouteId}
+                        onSelect={handleDayGuideSelectRoute}
+                        disabled={dayGuideLoading}
+                      />
+                    ) : null}
+                    {dayGuideShowTrafficLegend ? <TrafficLegend /> : null}
                     <button
                       type="button"
                       disabled={dayGuideStops.length < 2}
@@ -3434,10 +3522,23 @@ function CourseDetail({ id }: { id: string }) {
           // "초기 상태로" 버튼을 누르면 강제로 다시 fit 되게 한다.
           fitPathKey={
             dayGuideMode && dayGuidePath && !dayGuideLoading
-              ? `guide-${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}`
+              ? `guide-${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}-${dayGuideSelectedRouteId}`
               : mapMarkers.length > 0
                 ? `course-${id}-${mapMarkers.length}-${mapResetNonce}`
                 : null
+          }
+          pathSummary={
+            dayGuideMode &&
+            dayGuidePath &&
+            !dayGuideLoading &&
+            dayGuideDistanceM != null &&
+            dayGuideDurationSec != null
+              ? {
+                  distanceM: dayGuideDistanceM,
+                  durationSec: dayGuideDurationSec,
+                  tollFare: dayGuideTollFare ?? 0
+                }
+              : null
           }
           bottomOverlayPx={mapBottomOverlayPx}
           myLocation={myLocation}
@@ -3464,7 +3565,10 @@ function CourseDetail({ id }: { id: string }) {
               ))}
               {/* 카카오 검색 결과 마커(장소 추가 검색 시)는 카카오 브랜드 옐로우(#FEE500)로 표시된다 */}
               <div className="flex items-center gap-1.5 text-xs text-gray-700">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: "#FEE500" }} />
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: "#FEE500" }}
+                />
                 카카오
               </div>
             </div>
@@ -3508,7 +3612,9 @@ function CourseDetail({ id }: { id: string }) {
                   />
                   내 위치
                 </span>
-                {myLocationStatus === "active" && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
+                {myLocationStatus === "active" && (
+                  <Check className="text-brand-600 h-4 w-4 shrink-0" />
+                )}
               </button>
               <button
                 type="button"

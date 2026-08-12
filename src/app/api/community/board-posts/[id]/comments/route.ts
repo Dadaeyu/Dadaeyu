@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminMember } from "@/lib/community/ownership";
 import { awardPoints, POINT_REASON } from "@/lib/community/points";
+import { REPORT_HIDE_THRESHOLD } from "@/lib/community/report";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export async function GET(_request: Request, { params }: Params) {
       .from("tb_community_comments")
       .select("id, content, created_at, author_id, tb_members!author_id(nickname, community_level)")
       .eq("post_id", postId)
+      .lt("report_cnt", REPORT_HIDE_THRESHOLD)
       .order("created_at", { ascending: true });
 
     if (error) throw error;

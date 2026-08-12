@@ -20,11 +20,13 @@ import {
   Pencil,
   Trash2,
   Paperclip,
-  Download
+  Download,
+  Flag
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatCommunityDate } from "@/lib/community/format";
 import { COMMUNITY_DEFAULT_PAGE_SIZE, COMMUNITY_PAGE_SIZES } from "@/lib/pagination";
 import { ListPagination } from "@/components/community/ListPagination";
@@ -248,6 +250,7 @@ export default function Community() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const auth = useOptionalAuth();
+  const { confirm: dialogConfirm, dialog: loginDialog } = useConfirmDialog();
   const id = typeof params.id === "string" ? params.id : undefined;
   const initialTab = searchParams.get("tab");
   const initialBoardId = searchParams.get("boardId");
@@ -536,9 +539,9 @@ export default function Community() {
           <Button
             variant="accent"
             size="sm"
-            onClick={() => {
+            onClick={async () => {
               const href = filter !== "all" ? `/community/new?board=${filter}` : "/community/new";
-              if (!requireLoginOrRedirect(auth?.user, router, href)) {
+              if (!(await requireLoginOrRedirect(auth?.user, router, href, dialogConfirm))) {
                 return;
               }
               router.push(href);
@@ -749,6 +752,7 @@ export default function Community() {
           />
         </div>
       )}
+      {loginDialog}
     </div>
   );
 }
@@ -757,6 +761,7 @@ export default function Community() {
 function CommunityWrite() {
   const router = useRouter();
   const auth = useOptionalAuth();
+  const { confirm: dialogConfirm, dialog: loginDialog } = useConfirmDialog();
   const searchParams = useSearchParams();
   const boardParam = searchParams.get("board");
   const editParam = searchParams.get("edit");
@@ -882,12 +887,13 @@ function CommunityWrite() {
 
   useEffect(() => {
     if (auth?.loading) return;
-    requireLoginOrRedirect(auth?.user, router, "/community/new");
-  }, [auth?.loading, auth?.user, router]);
+    void requireLoginOrRedirect(auth?.user, router, "/community/new", dialogConfirm);
+  }, [auth?.loading, auth?.user, router, dialogConfirm]);
 
   const handleSubmit = async () => {
     if (!boardId || !title.trim() || !content.trim()) return;
-    if (!requireLoginOrRedirect(auth?.user, router, "/community/new")) return;
+    if (!(await requireLoginOrRedirect(auth?.user, router, "/community/new", dialogConfirm)))
+      return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -1383,6 +1389,7 @@ function CommunityWrite() {
       >
         {isEditing ? "수정 완료" : "등록하기"}
       </Button>
+      {loginDialog}
     </div>
   );
 }
@@ -1411,6 +1418,17 @@ type PostDetail = {
   can_delete: boolean;
   comment_yn: boolean;
   liked: boolean;
+  reply_yn: boolean;
+  can_manage_reply: boolean;
+  reply: PostReply | null;
+};
+
+type PostReply = {
+  reply_id: number;
+  content: string;
+  writer_nm: string;
+  created_at: string;
+  updated_at: string;
 };
 
 type CommentItem = {
@@ -1424,6 +1442,8 @@ type CommentItem = {
 
 function CommunityDetail({ id }: { id: string }) {
   const router = useRouter();
+  const auth = useOptionalAuth();
+  const { confirm: dialogConfirm, alert: dialogAlert, dialog: dialogNode } = useConfirmDialog();
   const [post, setPost] = useState<PostDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1436,6 +1456,10 @@ function CommunityDetail({ id }: { id: string }) {
   const [commentError, setCommentError] = useState<string | null>(null);
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState("");
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replyEditing, setReplyEditing] = useState(false);
+  const [replySubmitting, setReplySubmitting] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const imageScrollRef = useRef<HTMLDivElement>(null);
   const imageDragRef = useRef({ dragging: false, moved: false, startX: 0, startScrollLeft: 0 });
@@ -1502,6 +1526,8 @@ function CommunityDetail({ id }: { id: string }) {
 
   const handleToggleLike = async () => {
     if (liking) return;
+    if (!(await requireLoginOrRedirect(auth?.user, router, `/community/${id}`, dialogConfirm)))
+      return;
     setLiking(true);
     try {
       const res = await fetch(`/api/community/board-posts/${id}/like`, { method: "POST" });
@@ -1540,6 +1566,8 @@ function CommunityDetail({ id }: { id: string }) {
 
   const handleCommentSubmit = async () => {
     if (!commentInput.trim() || commentSubmitting) return;
+    if (!(await requireLoginOrRedirect(auth?.user, router, `/community/${id}`, dialogConfirm)))
+      return;
     setCommentSubmitting(true);
     setCommentError(null);
     try {
@@ -1561,7 +1589,7 @@ function CommunityDetail({ id }: { id: string }) {
   };
 
   const handleCommentDelete = async (commentId: number) => {
-    if (!confirm("이 댓글을 삭제할까요?")) return;
+    if (!(await dialogConfirm("이 댓글을 삭제할까요?"))) return;
     setCommentError(null);
     try {
       const res = await fetch(`/api/community/board-posts/${id}/comments/${commentId}`, {
@@ -1603,8 +1631,78 @@ function CommunityDetail({ id }: { id: string }) {
     }
   };
 
+  const handleReplyCreate = async () => {
+    if (!replyDraft.trim() || replySubmitting) return;
+    setReplySubmitting(true);
+    setReplyError(null);
+    try {
+      const res = await fetch(`/api/community/board-posts/${id}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: replyDraft.trim() })
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        reply?: PostReply;
+      };
+      if (!res.ok) throw new Error(json.error ?? "답변 등록에 실패했습니다.");
+      setPost((prev) => (prev ? { ...prev, reply: json.reply ?? null } : prev));
+      setReplyDraft("");
+    } catch (e) {
+      setReplyError(e instanceof Error ? e.message : "답변 등록 실패");
+    } finally {
+      setReplySubmitting(false);
+    }
+  };
+
+  const startReplyEdit = () => {
+    if (!post?.reply) return;
+    setReplyDraft(post.reply.content);
+    setReplyEditing(true);
+    setReplyError(null);
+  };
+
+  const handleReplyUpdate = async () => {
+    if (!replyDraft.trim() || replySubmitting) return;
+    setReplySubmitting(true);
+    setReplyError(null);
+    try {
+      const res = await fetch(`/api/community/board-posts/${id}/reply`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: replyDraft.trim() })
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        reply?: PostReply;
+      };
+      if (!res.ok) throw new Error(json.error ?? "답변 수정에 실패했습니다.");
+      setPost((prev) => (prev ? { ...prev, reply: json.reply ?? null } : prev));
+      setReplyEditing(false);
+    } catch (e) {
+      setReplyError(e instanceof Error ? e.message : "답변 수정 실패");
+    } finally {
+      setReplySubmitting(false);
+    }
+  };
+
+  const handleReplyDelete = async () => {
+    if (!(await dialogConfirm("등록된 답변을 삭제할까요?"))) return;
+    setReplyError(null);
+    try {
+      const res = await fetch(`/api/community/board-posts/${id}/reply`, { method: "DELETE" });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "답변 삭제에 실패했습니다.");
+      setPost((prev) => (prev ? { ...prev, reply: null } : prev));
+      setReplyDraft("");
+      setReplyEditing(false);
+    } catch (e) {
+      setReplyError(e instanceof Error ? e.message : "답변 삭제 실패");
+    }
+  };
+
   const handleDelete = async () => {
-    if (!confirm("이 게시글을 삭제할까요? 되돌릴 수 없습니다.")) return;
+    if (!(await dialogConfirm("이 게시글을 삭제할까요? 되돌릴 수 없습니다."))) return;
     setDeleting(true);
     try {
       const res = await fetch(`/api/community/board-posts/${id}`, { method: "DELETE" });
@@ -1614,6 +1712,47 @@ function CommunityDetail({ id }: { id: string }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : "삭제 실패");
       setDeleting(false);
+    }
+  };
+
+  const handleReportPost = async () => {
+    if (!(await requireLoginOrRedirect(auth?.user, router, `/community/${id}`, dialogConfirm)))
+      return;
+    if (!(await dialogConfirm("이 게시글을 신고할까요?"))) return;
+    try {
+      const res = await fetch(`/api/community/board-posts/${id}/report`, {
+        method: "POST"
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; hidden?: boolean };
+      if (!res.ok) throw new Error(json.error ?? "신고에 실패했습니다.");
+      await dialogAlert(
+        json.hidden
+          ? "신고가 접수됐어요. 누적 신고로 게시글이 숨김 처리됐어요."
+          : "신고가 접수됐어요."
+      );
+    } catch (e) {
+      await dialogAlert(e instanceof Error ? e.message : "신고에 실패했습니다.");
+    }
+  };
+
+  const handleCommentReport = async (commentId: number) => {
+    if (!(await requireLoginOrRedirect(auth?.user, router, `/community/${id}`, dialogConfirm)))
+      return;
+    if (!(await dialogConfirm("이 댓글을 신고할까요?"))) return;
+    try {
+      const res = await fetch(`/api/community/board-posts/${id}/comments/${commentId}/report`, {
+        method: "POST"
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; hidden?: boolean };
+      if (!res.ok) throw new Error(json.error ?? "신고에 실패했습니다.");
+      await dialogAlert(
+        json.hidden
+          ? "신고가 접수됐어요. 누적 신고로 댓글이 숨김 처리됐어요."
+          : "신고가 접수됐어요."
+      );
+      if (json.hidden) setComments((prev) => prev.filter((c) => c.id !== commentId));
+    } catch (e) {
+      await dialogAlert(e instanceof Error ? e.message : "신고에 실패했습니다.");
     }
   };
 
@@ -1674,7 +1813,7 @@ function CommunityDetail({ id }: { id: string }) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <Button
@@ -1875,89 +2014,185 @@ function CommunityDetail({ id }: { id: string }) {
           <MessageCircle className="h-4 w-4" />
           <span>{post.comment_cnt}</span>
         </div>
+        <button
+          onClick={handleReportPost}
+          className="text-stone hover:text-error ml-auto flex min-h-11 items-center gap-1.5 rounded-full px-3 transition-colors"
+        >
+          <Flag className="h-4 w-4" />
+          신고
+        </button>
       </div>
 
-      {/* Comments */}
-      <div className="space-y-4">
-        <h3 className="text-ink font-semibold">댓글 {post.comment_cnt}</h3>
-
-        {commentError && (
-          <div className="border-error/30 text-error rounded-lg border bg-red-50 px-4 py-3 text-sm">
-            {commentError}
-          </div>
-        )}
-
+      {/* Reply */}
+      {post.reply_yn && (
         <div className="space-y-3">
-          {commentsLoading && <p className="text-stone text-sm">불러오는 중…</p>}
-          {!commentsLoading && comments.length === 0 && (
-            <p className="text-stone text-sm">첫 댓글을 남겨보세요.</p>
+          <h3 className="text-ink font-semibold">답변</h3>
+
+          {replyError && (
+            <div className="border-error/30 text-error rounded-lg border bg-red-50 px-4 py-3 text-sm">
+              {replyError}
+            </div>
           )}
-          {!commentsLoading &&
-            comments.map((c) => (
-              <div key={c.id} className="bg-surface-soft rounded-lg p-4">
-                <div className="mb-1.5 flex items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <CommunityLevelBadge
-                      level={c.author_community_level}
-                      size="sm"
-                      showLabel={false}
-                    />
-                    <span className="text-ink font-semibold">{c.author_nickname}</span>
-                    <span className="text-stone">{formatCommunityDate(c.created_at)}</span>
-                  </div>
-                  {c.can_edit && editingCommentId !== c.id && (
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        onClick={() => startEditComment(c)}
-                        className="text-stone hover:text-ink min-h-11 px-2 text-xs font-semibold"
-                      >
-                        수정
-                      </button>
-                      <button
-                        onClick={() => handleCommentDelete(c.id)}
-                        className="text-stone hover:text-error min-h-11 px-2 text-xs font-semibold"
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  )}
+
+          {post.reply && !replyEditing ? (
+            <div className="bg-surface-soft rounded-lg p-4">
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-ink font-semibold">{post.reply.writer_nm}</span>
+                  <span className="text-stone">{formatCommunityDate(post.reply.updated_at)}</span>
                 </div>
-                {editingCommentId === c.id ? (
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <input
-                      type="text"
-                      value={editingContent}
-                      onChange={(e) => setEditingContent(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && saveEditComment()}
-                      className="border-hairline bg-background text-ink focus:ring-brand-500 min-h-11 flex-1 rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="accent"
-                        className="min-h-11 flex-1 sm:flex-none"
-                        onClick={saveEditComment}
-                      >
-                        저장
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="min-h-11 flex-1 sm:flex-none"
-                        onClick={() => setEditingCommentId(null)}
-                      >
-                        취소
-                      </Button>
-                    </div>
+                {post.can_manage_reply && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={startReplyEdit}
+                      className="text-stone hover:text-ink min-h-11 px-2 text-xs font-semibold"
+                    >
+                      수정
+                    </button>
+                    <button
+                      onClick={handleReplyDelete}
+                      className="text-stone hover:text-error min-h-11 px-2 text-xs font-semibold"
+                    >
+                      삭제
+                    </button>
                   </div>
-                ) : (
-                  <p className="text-slate text-sm">{c.content}</p>
                 )}
               </div>
-            ))}
+              <p className="text-slate text-sm whitespace-pre-wrap">{post.reply.content}</p>
+            </div>
+          ) : post.can_manage_reply ? (
+            <div className="space-y-2">
+              <textarea
+                value={replyDraft}
+                onChange={(e) => setReplyDraft(e.target.value)}
+                placeholder="답변을 입력하세요"
+                rows={4}
+                className="focus:ring-brand-500 border-hairline bg-background text-ink w-full rounded-lg border px-4 py-3 text-sm focus:ring-2 focus:outline-none"
+              />
+              <div className="flex justify-end gap-2">
+                {replyEditing && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="min-h-11"
+                    onClick={() => {
+                      setReplyEditing(false);
+                      setReplyDraft("");
+                      setReplyError(null);
+                    }}
+                  >
+                    취소
+                  </Button>
+                )}
+                <Button
+                  variant="accent"
+                  size="sm"
+                  className="min-h-11"
+                  disabled={!replyDraft.trim() || replySubmitting}
+                  onClick={replyEditing ? handleReplyUpdate : handleReplyCreate}
+                >
+                  {replyEditing ? "저장" : "등록"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-stone text-sm">등록된 답변이 없습니다.</p>
+          )}
         </div>
+      )}
 
-        {post.comment_yn ? (
+      {/* Comments */}
+      {post.comment_yn && (
+        <div className="space-y-4">
+          <h3 className="text-ink font-semibold">댓글 {post.comment_cnt}</h3>
+
+          {commentError && (
+            <div className="border-error/30 text-error rounded-lg border bg-red-50 px-4 py-3 text-sm">
+              {commentError}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {commentsLoading && <p className="text-stone text-sm">불러오는 중…</p>}
+            {!commentsLoading && comments.length === 0 && (
+              <p className="text-stone text-sm">첫 댓글을 남겨보세요.</p>
+            )}
+            {!commentsLoading &&
+              comments.map((c) => (
+                <div key={c.id} className="bg-surface-soft rounded-lg p-4">
+                  <div className="mb-1.5 flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <CommunityLevelBadge
+                        level={c.author_community_level}
+                        size="sm"
+                        showLabel={false}
+                      />
+                      <span className="text-ink font-semibold">{c.author_nickname}</span>
+                      <span className="text-stone">{formatCommunityDate(c.created_at)}</span>
+                    </div>
+                    {editingCommentId !== c.id && (
+                      <div className="flex shrink-0 items-center gap-1">
+                        {c.can_edit ? (
+                          <>
+                            <button
+                              onClick={() => startEditComment(c)}
+                              className="text-stone hover:text-ink min-h-11 px-2 text-xs font-semibold"
+                            >
+                              수정
+                            </button>
+                            <button
+                              onClick={() => handleCommentDelete(c.id)}
+                              className="text-stone hover:text-error min-h-11 px-2 text-xs font-semibold"
+                            >
+                              삭제
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handleCommentReport(c.id)}
+                            className="text-stone hover:text-error min-h-11 px-2 text-xs font-semibold"
+                          >
+                            신고
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {editingCommentId === c.id ? (
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="text"
+                        value={editingContent}
+                        onChange={(e) => setEditingContent(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && saveEditComment()}
+                        className="border-hairline bg-background text-ink focus:ring-brand-500 min-h-11 flex-1 rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="accent"
+                          className="min-h-11 flex-1 sm:flex-none"
+                          onClick={saveEditComment}
+                        >
+                          저장
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="min-h-11 flex-1 sm:flex-none"
+                          onClick={() => setEditingCommentId(null)}
+                        >
+                          취소
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-slate text-sm">{c.content}</p>
+                  )}
+                </div>
+              ))}
+          </div>
+
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
@@ -1976,10 +2211,8 @@ function CommunityDetail({ id }: { id: string }) {
               등록
             </Button>
           </div>
-        ) : (
-          <p className="text-stone text-sm">댓글을 사용하지 않는 게시판입니다.</p>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* 이미지 라이트박스 */}
       {lightboxIndex !== null && (
@@ -2034,6 +2267,7 @@ function CommunityDetail({ id }: { id: string }) {
           )}
         </div>
       )}
+      {dialogNode}
     </div>
   );
 }

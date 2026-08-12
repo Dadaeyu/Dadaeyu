@@ -6,15 +6,21 @@ import { isAdminMember } from "@/lib/community/ownership";
 export const dynamic = "force-dynamic";
 
 const DETAIL_COLUMNS =
-  "post_id, board_id, title, content, writer_id, writer_nm, rating, course_rating, view_cnt, like_cnt, comment_cnt, notice_yn, created_at, content_id, course_id, tb_board(board_nm, comment_yn), tb_members!writer_id(community_level), tb_post_image(image_url, sort_order), tb_post_file(file_url, file_name, file_size, sort_order)";
+  "post_id, board_id, title, content, writer_id, writer_nm, rating, course_rating, view_cnt, like_cnt, comment_cnt, notice_yn, created_at, content_id, course_id, tb_board(board_nm, comment_yn, reply_yn), tb_members!writer_id(community_level), tb_post_image(image_url, sort_order), tb_post_file(file_url, file_name, file_size, sort_order)";
 
 type BoardRef =
-  { board_nm: string; comment_yn: boolean } | { board_nm: string; comment_yn: boolean }[] | null;
+  | { board_nm: string; comment_yn: boolean; reply_yn: boolean }
+  | { board_nm: string; comment_yn: boolean; reply_yn: boolean }[]
+  | null;
 type MemberLevelRef = { community_level?: number } | { community_level?: number }[] | null;
 
-function boardInfoOf(ref: BoardRef): { board_nm: string; comment_yn: boolean } {
+function boardInfoOf(ref: BoardRef): { board_nm: string; comment_yn: boolean; reply_yn: boolean } {
   const b = Array.isArray(ref) ? ref[0] : ref;
-  return { board_nm: b?.board_nm ?? "알 수 없음", comment_yn: b?.comment_yn ?? false };
+  return {
+    board_nm: b?.board_nm ?? "알 수 없음",
+    comment_yn: b?.comment_yn ?? false,
+    reply_yn: b?.reply_yn ?? false
+  };
 }
 
 function communityLevelOf(ref: MemberLevelRef): number {
@@ -103,11 +109,13 @@ export async function GET(_request: Request, { params }: Params) {
     let canEdit = false;
     let canDelete = false;
     let liked = false;
+    let isAdmin = false;
     if (user) {
       const owner = user.id === writer_id;
+      isAdmin = await isAdminMember(supabase, user.id);
       // 수정은 작성자 본인만. 삭제는 작성자 본인 또는 관리자(다른 사람 글도 삭제는 가능).
       canEdit = owner;
-      canDelete = owner || (await isAdminMember(supabase, user.id));
+      canDelete = owner || isAdmin;
       const { data: likeRow } = await supabase
         .from("tb_post_likes")
         .select("user_id")
@@ -119,12 +127,30 @@ export async function GET(_request: Request, { params }: Params) {
 
     const boardInfo = boardInfoOf(tb_board);
 
+    let reply: {
+      reply_id: number;
+      content: string;
+      writer_nm: string;
+      created_at: string;
+      updated_at: string;
+    } | null = null;
+    if (boardInfo.reply_yn) {
+      const { data: replyRow } = await supabase
+        .from("tb_post_reply")
+        .select("reply_id, content, writer_nm, created_at, updated_at")
+        .eq("post_id", postId)
+        .eq("use_yn", true)
+        .maybeSingle();
+      reply = replyRow ?? null;
+    }
+
     return NextResponse.json({
       post: {
         id: rest.post_id,
         ...rest,
         board_nm: boardInfo.board_nm,
         comment_yn: boardInfo.comment_yn,
+        reply_yn: boardInfo.reply_yn,
         writer_community_level: communityLevelOf(tb_members),
         attached_place: attachedPlace,
         attached_course: attachedCourse,
@@ -132,7 +158,9 @@ export async function GET(_request: Request, { params }: Params) {
         files,
         can_edit: canEdit,
         can_delete: canDelete,
-        liked
+        liked,
+        reply,
+        can_manage_reply: boardInfo.reply_yn && isAdmin
       }
     });
   } catch (e) {
