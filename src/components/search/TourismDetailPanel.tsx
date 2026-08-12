@@ -20,7 +20,6 @@ import {
   X,
   Loader2
 } from "lucide-react";
-import { PLACE_DETAILS } from "@/data/placesData";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import type { TourismDetail } from "@/hooks/usePlaceSearch";
 import AccessibilitySection from "./AccessibilitySection";
@@ -28,9 +27,6 @@ import { useAuth } from "@/context/AuthContext";
 import { isPlaceLiked } from "@/lib/supabase/placeLikes";
 import type { RouteMode } from "@/lib/kakao/directions";
 import { formatRouteDistance, formatRouteDuration } from "@/lib/kakao/directions";
-
-// 카카오 검색 결과(source="kakao")는 DB 상세가 없어 리뷰 대신 이 플레이스홀더를 보여준다.
-const PLACEHOLDER_DETAIL = PLACE_DETAILS[1];
 
 const REVIEW_PREVIEW_LENGTH = 60;
 // 리뷰로 취급하는 게시판("후기")의 board_id.
@@ -121,21 +117,10 @@ export default function TourismDetailPanel({
 
   useEffect(() => {
     if (isKakao) {
-      // DB 상세가 없으므로 실제 리뷰 대신 플레이스홀더 리뷰로 개수·평균을 보여준다.
-      const placeholder: PlaceReviewItem[] = PLACEHOLDER_DETAIL.reviews.map((r) => ({
-        id: r.id,
-        title: r.user,
-        content: r.content,
-        rating: r.rating,
-        created_at: r.date
-      }));
-      setReviewTotal(placeholder.length);
-      setAverageRating(
-        placeholder.length
-          ? placeholder.reduce((sum, r) => sum + (r.rating ?? 0), 0) / placeholder.length
-          : null
-      );
-      setReviews(placeholder);
+      // 카카오 출처는 DB 상세가 없어 리뷰를 아예 보여주지 않는다.
+      setReviewTotal(0);
+      setAverageRating(null);
+      setReviews([]);
       setReviewsLoading(false);
       return;
     }
@@ -197,11 +182,6 @@ export default function TourismDetailPanel({
   }, [user, placeId, isKakao]);
 
   const handleToggleFavorite = async () => {
-    if (isKakao) {
-      // 카카오 출처는 DB 저장 대상이 없어(임시) 화면 표시만 토글한다.
-      setFavorited((v) => !v);
-      return;
-    }
     if (!user) {
       setLoginNotice(true);
       setTimeout(() => setLoginNotice(false), 2000);
@@ -288,36 +268,41 @@ export default function TourismDetailPanel({
         </div>
       ) : (
         <div className="flex-1 space-y-5 p-4">
-          {/* 제목 + 평점 */}
+          {/* 제목 + 평점 — 카카오 출처는 리뷰가 없어 평점도 표시하지 않는다 */}
           <div>
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-base leading-snug font-bold text-gray-900">{title}</h3>
-              <div className="flex shrink-0 items-center gap-0.5">
-                <Star
-                  className={`h-4 w-4 ${averageRating != null ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
-                />
-                <span className="text-sm font-semibold text-gray-800">
-                  {averageRating != null ? averageRating.toFixed(1) : "0"}
-                </span>
-              </div>
+              {!isKakao && (
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <Star
+                    className={`h-4 w-4 ${averageRating != null ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
+                  />
+                  <span className="text-sm font-semibold text-gray-800">
+                    {averageRating != null ? averageRating.toFixed(1) : "0"}
+                  </span>
+                </div>
+              )}
             </div>
             {categoryLabel && <p className="mt-0.5 text-xs text-gray-500">{categoryLabel}</p>}
           </div>
 
-          {/* 액션 버튼 — "내 코스"는 지도 브라우징 중엔 대상 코스/Day 가 애매해 일단 숨김 */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={handleToggleFavorite}
-              className={`flex flex-col items-center gap-1 rounded-xl border py-2.5 text-xs font-medium transition-colors ${
-                favorited
-                  ? "border-red-300 bg-red-50 text-red-600"
-                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : ""}`} />
-              즐겨찾기
-            </button>
+          {/* 액션 버튼 — "내 코스"는 지도 브라우징 중엔 대상 코스/Day 가 애매해 일단 숨김.
+              즐겨찾기는 카카오 출처엔 저장 대상(DB row)이 없어 숨긴다. */}
+          <div className={`grid gap-2 ${isKakao ? "grid-cols-1" : "grid-cols-2"}`}>
+            {!isKakao && (
+              <button
+                type="button"
+                onClick={handleToggleFavorite}
+                className={`flex flex-col items-center gap-1 rounded-xl border py-2.5 text-xs font-medium transition-colors ${
+                  favorited
+                    ? "border-red-300 bg-red-50 text-red-600"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : ""}`} />
+                즐겨찾기
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -470,13 +455,13 @@ export default function TourismDetailPanel({
             </div>
           )}
 
-          {/* 리뷰 */}
-          <div>
-            <div className="mb-3 flex items-center gap-2">
-              <MessageCircle className="h-4 w-4 text-gray-500" />
-              <h4 className="text-sm font-semibold text-gray-800">리뷰</h4>
-              <span className="text-xs text-gray-400">{reviewTotal}개</span>
-              {!isKakao && (
+          {/* 리뷰 — 카카오 출처는 DB 상세가 없어 리뷰 자체를 보여주지 않는다 */}
+          {!isKakao && (
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <MessageCircle className="h-4 w-4 text-gray-500" />
+                <h4 className="text-sm font-semibold text-gray-800">리뷰</h4>
+                <span className="text-xs text-gray-400">{reviewTotal}개</span>
                 <div className="ml-auto flex items-center gap-2">
                   <button
                     onClick={goWriteReview}
@@ -494,35 +479,14 @@ export default function TourismDetailPanel({
                     </button>
                   )}
                 </div>
-              )}
-            </div>
-            {reviewsLoading ? (
-              <p className="py-4 text-center text-xs text-gray-400">불러오는 중…</p>
-            ) : reviews.length === 0 ? (
-              <p className="py-4 text-center text-xs text-gray-400">등록된 후기가 없습니다</p>
-            ) : (
-              <div className="space-y-3">
-                {reviews.map((r) =>
-                  isKakao ? (
-                    <div key={r.id} className="rounded-xl border border-gray-100 p-3">
-                      <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <span className="truncate text-xs font-semibold text-gray-800">
-                          {r.title}
-                        </span>
-                        {r.rating != null && (
-                          <div className="flex shrink-0 items-center gap-0.5">
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`h-3 w-3 ${i < r.rating! ? "fill-yellow-400 text-yellow-400" : "text-gray-200"}`}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-xs leading-relaxed text-gray-600">{r.content}</p>
-                    </div>
-                  ) : (
+              </div>
+              {reviewsLoading ? (
+                <p className="py-4 text-center text-xs text-gray-400">불러오는 중…</p>
+              ) : reviews.length === 0 ? (
+                <p className="py-4 text-center text-xs text-gray-400">등록된 후기가 없습니다</p>
+              ) : (
+                <div className="space-y-3">
+                  {reviews.map((r) => (
                     <button
                       key={r.id}
                       onClick={() => router.push(`/community/${r.id}`)}
@@ -549,11 +513,11 @@ export default function TourismDetailPanel({
                           : r.content}
                       </p>
                     </button>
-                  )
-                )}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 제보 */}
           <div>

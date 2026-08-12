@@ -770,11 +770,15 @@ export default function Course() {
   // 복원한다(readRecommendSession). 공유 코스 탭의 필터가 카드 클릭 시점의 courseListReturn에만
   // 의존하는 것과는 다른 범위 — 필터와 결과를 항상 같이 저장/복원해서 화면이 어긋나지 않게 한다.
   const restoredRecommendSession = !id ? readRecommendSession() : null;
-  const [showFilters, setShowFilters] = useState(() => restoredRecommendSession?.showFilters ?? false);
+  const [showFilters, setShowFilters] = useState(
+    () => restoredRecommendSession?.showFilters ?? false
+  );
   const [filters, setFilters] = useState<Filters>(
     () => restoredRecommendSession?.filters ?? DEFAULT_FILTERS
   );
-  const [showResults, setShowResults] = useState(() => restoredRecommendSession?.showResults ?? false);
+  const [showResults, setShowResults] = useState(
+    () => restoredRecommendSession?.showResults ?? false
+  );
   // 추천 코스 필터의 위치(구/동) 선택지 — 공유 코스와 같은 area-code 조회 결과(sharedAreaCodes)를
   // 그대로 재사용한다(탭과 무관한 공용 데이터라 따로 다시 조회할 필요가 없다).
   const recommendGuCode = sharedAreaCodes.find((a) => a.name === filters.gu)?.code ?? "";
@@ -824,7 +828,8 @@ export default function Course() {
   // 로그인돼 있는데 세션 확인이 끝나기 전 잠깐의 "user=null" 순간에 목록을 지워버리게 된다.
   useEffect(() => {
     if (authLoading || userId) return;
-    if (!showResults && recommendCourses.length === 0 && !recommendNotice && !recommendError) return;
+    if (!showResults && recommendCourses.length === 0 && !recommendNotice && !recommendError)
+      return;
     setShowResults(false);
     setRecommendCourses([]);
     setRecommendNotice("");
@@ -832,7 +837,7 @@ export default function Course() {
   }, [authLoading, userId, showResults, recommendCourses.length, recommendNotice, recommendError]);
 
   const handleRecommend = async () => {
-    if (!requireLoginOrRedirect(user, router, "/course?tab=recommend")) return;
+    if (!(await requireLoginOrRedirect(user, router, "/course?tab=recommend"))) return;
     setShowResults(true);
     setRecommendLoading(true);
     setRecommendError("");
@@ -863,14 +868,15 @@ export default function Course() {
       }
       const courses = json.courses ?? [];
       setRecommendCourses(courses);
-      setRecommendNotice(courses.length === 0 ? (json.message ?? "조건에 맞는 코스를 찾지 못했어요.") : "");
+      setRecommendNotice(
+        courses.length === 0 ? (json.message ?? "조건에 맞는 코스를 찾지 못했어요.") : ""
+      );
     } catch {
       setRecommendError("코스를 추천받는 중 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.");
     } finally {
       setRecommendLoading(false);
     }
   };
-
 
   // 코스 상세 → 뒤로가기로 돌아왔을 때, 클릭했던 코스 카드가 보이는 위치로 스크롤 복원.
   // 무한 스크롤이라 그 카드가 아직 로드 안 됐을 수 있어, 못 찾으면 다음 페이지를 더 불러와 재시도한다.
@@ -1256,8 +1262,8 @@ export default function Course() {
             ) : recommendCourses.length > 0 ? (
               <>
                 <p className="text-sm text-gray-500">
-                  <span className="font-semibold text-gray-800">{recommendCourses.length}개</span>
-                  의 코스를 설계했어요
+                  <span className="font-semibold text-gray-800">{recommendCourses.length}개</span>의
+                  코스를 설계했어요
                 </p>
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   이 목록은 필터를 초기화하거나 다시 추천받거나 로그아웃하면 사라져요. 마음에 드는
@@ -1897,7 +1903,7 @@ function CourseDetail({ id }: { id: string }) {
   // 같은 코스를 여러 번 추가하는 것도 허용한다 — 클릭할 때마다 새 코스로 복사된다.
   const [addingCourse, setAddingCourse] = useState(false);
   const handleAddToMyCourse = async () => {
-    if (!requireLoginOrRedirect(user, router, `/course/${id}`)) return;
+    if (!(await requireLoginOrRedirect(user, router, `/course/${id}`))) return;
     if (!user || !dbCourse || addingCourse) return;
     setAddingCourse(true);
     try {
@@ -2950,7 +2956,11 @@ function CourseDetail({ id }: { id: string }) {
                           style={
                             active
                               ? { background: dayColor, color: "white" }
-                              : { border: `1.5px solid ${dayColor}`, color: dayColor, background: "white" }
+                              : {
+                                  border: `1.5px solid ${dayColor}`,
+                                  color: dayColor,
+                                  background: "white"
+                                }
                           }
                         >
                           Day {day.day}

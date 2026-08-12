@@ -4,11 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, Filter, LocateFixed, X, ChevronDown } from "lucide-react";
 import { useFilters } from "@/components/PlaceFilters";
-import KakaoMap, {
-  type MapMarker,
-  type MapPathSegment,
-  type TooltipInfo
-} from "@/components/KakaoMap";
+import KakaoMap, { type MapMarker, type MapPathSegment } from "@/components/KakaoMap";
 import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
 import TourismDetailPanel, {
   type PlaceRouteGuideState
@@ -258,21 +254,6 @@ export default function Map() {
   // 검색 전에는 핫플레이스 5곳을 목록·지도 마커 모두에 바로 보여준다.
   const markerPlaces = searchPlaces.length > 0 ? searchPlaces : topRatedPlaces;
 
-  // 카카오 검색 마커를 선택했을 때만 지도 위에 미니 정보 카드를 띄운다.
-  // 카카오 검색 결과에는 썸네일/평점/배리어프리 데이터가 없으므로 해당 필드는 비워 두면 카드에서 자동으로 생략된다.
-  const selectedKakaoPlace = markerPlaces.find(
-    (sp) => sp.id === searchDetailId && sp.source === "kakao"
-  );
-  const kakaoTooltip: TooltipInfo | null = selectedKakaoPlace
-    ? {
-        lat: selectedKakaoPlace.lat,
-        lng: selectedKakaoPlace.lng,
-        name: selectedKakaoPlace.name,
-        category: selectedKakaoPlace.category?.split(" > ").pop(),
-        accentColor: "#2563EB"
-      }
-    : null;
-
   // 모바일/mapOnly: 상세 열리면 지도·시트를 실제 상·하 50%로 분할 (오버레이 아님)
   const splitMapForDetail = Boolean(searchDetail);
 
@@ -427,8 +408,6 @@ export default function Map() {
             onDeselect={() => {
               backFromDetail();
             }}
-            tooltip={kakaoTooltip}
-            onCloseTooltip={backFromDetail}
             myLocation={myLocation}
             focusMyLocationTrigger={focusMyLocationTrigger}
             resetViewTrigger={mapResetTrigger + myLocationResetTrigger}
