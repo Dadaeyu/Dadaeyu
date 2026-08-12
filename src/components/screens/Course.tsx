@@ -51,6 +51,7 @@ import {
   openKakaoMapRoute,
   type RouteMode
 } from "@/lib/kakao/directions";
+import { DaiyuCompactLoading } from "@/components/loading/DaiyuLoading";
 
 // Day(일정)별 마커·경로선 색상 — Day 순서대로 순환 배정. 마커와 경로선이 같은 팔레트를 써야
 // "이 색 마커들이 이 색 선으로 이어진 게 같은 Day"라는 게 지도에서 바로 보인다.
@@ -770,11 +771,15 @@ export default function Course() {
   // 복원한다(readRecommendSession). 공유 코스 탭의 필터가 카드 클릭 시점의 courseListReturn에만
   // 의존하는 것과는 다른 범위 — 필터와 결과를 항상 같이 저장/복원해서 화면이 어긋나지 않게 한다.
   const restoredRecommendSession = !id ? readRecommendSession() : null;
-  const [showFilters, setShowFilters] = useState(() => restoredRecommendSession?.showFilters ?? false);
+  const [showFilters, setShowFilters] = useState(
+    () => restoredRecommendSession?.showFilters ?? false
+  );
   const [filters, setFilters] = useState<Filters>(
     () => restoredRecommendSession?.filters ?? DEFAULT_FILTERS
   );
-  const [showResults, setShowResults] = useState(() => restoredRecommendSession?.showResults ?? false);
+  const [showResults, setShowResults] = useState(
+    () => restoredRecommendSession?.showResults ?? false
+  );
   // 추천 코스 필터의 위치(구/동) 선택지 — 공유 코스와 같은 area-code 조회 결과(sharedAreaCodes)를
   // 그대로 재사용한다(탭과 무관한 공용 데이터라 따로 다시 조회할 필요가 없다).
   const recommendGuCode = sharedAreaCodes.find((a) => a.name === filters.gu)?.code ?? "";
@@ -824,7 +829,8 @@ export default function Course() {
   // 로그인돼 있는데 세션 확인이 끝나기 전 잠깐의 "user=null" 순간에 목록을 지워버리게 된다.
   useEffect(() => {
     if (authLoading || userId) return;
-    if (!showResults && recommendCourses.length === 0 && !recommendNotice && !recommendError) return;
+    if (!showResults && recommendCourses.length === 0 && !recommendNotice && !recommendError)
+      return;
     setShowResults(false);
     setRecommendCourses([]);
     setRecommendNotice("");
@@ -863,14 +869,15 @@ export default function Course() {
       }
       const courses = json.courses ?? [];
       setRecommendCourses(courses);
-      setRecommendNotice(courses.length === 0 ? (json.message ?? "조건에 맞는 코스를 찾지 못했어요.") : "");
+      setRecommendNotice(
+        courses.length === 0 ? (json.message ?? "조건에 맞는 코스를 찾지 못했어요.") : ""
+      );
     } catch {
       setRecommendError("코스를 추천받는 중 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.");
     } finally {
       setRecommendLoading(false);
     }
   };
-
 
   // 코스 상세 → 뒤로가기로 돌아왔을 때, 클릭했던 코스 카드가 보이는 위치로 스크롤 복원.
   // 무한 스크롤이라 그 카드가 아직 로드 안 됐을 수 있어, 못 찾으면 다음 페이지를 더 불러와 재시도한다.
@@ -975,7 +982,6 @@ export default function Course() {
     filters.headcount > 1,
     filters.dateFrom || filters.dateTo
   ].filter(Boolean).length;
-
   return (
     <div className="space-y-6">
       {/* Tabs — 헤더(h-16) 바로 아래에 고정, 위쪽 여백은 살짝 줄임 */}
@@ -1238,9 +1244,12 @@ export default function Course() {
           {/* 결과 */}
           {showResults ? (
             recommendLoading ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-14 text-gray-400">
-                <span className="border-brand-500 h-6 w-6 animate-spin rounded-full border-[3px] border-gray-200 border-t-transparent" />
-                <p className="text-sm font-medium text-gray-500">AI가 코스를 설계하고 있어요...</p>
+              <div className="relative min-h-64 overflow-hidden rounded-xl" aria-busy="true">
+                <DaiyuCompactLoading
+                  title="다유가 코스를 설계하고 있어요"
+                  detail="선택한 조건과 이동 편의 정보를 맞춰 장소를 연결하는 중이에요."
+                  contained
+                />
               </div>
             ) : recommendError ? (
               <div className="py-12 text-center text-gray-400">
@@ -1256,8 +1265,8 @@ export default function Course() {
             ) : recommendCourses.length > 0 ? (
               <>
                 <p className="text-sm text-gray-500">
-                  <span className="font-semibold text-gray-800">{recommendCourses.length}개</span>
-                  의 코스를 설계했어요
+                  <span className="font-semibold text-gray-800">{recommendCourses.length}개</span>의
+                  코스를 설계했어요
                 </p>
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   이 목록은 필터를 초기화하거나 다시 추천받거나 로그아웃하면 사라져요. 마음에 드는
@@ -2950,7 +2959,11 @@ function CourseDetail({ id }: { id: string }) {
                           style={
                             active
                               ? { background: dayColor, color: "white" }
-                              : { border: `1.5px solid ${dayColor}`, color: dayColor, background: "white" }
+                              : {
+                                  border: `1.5px solid ${dayColor}`,
+                                  color: dayColor,
+                                  background: "white"
+                                }
                           }
                         >
                           Day {day.day}

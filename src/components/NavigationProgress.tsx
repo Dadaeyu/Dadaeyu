@@ -2,8 +2,10 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { DaiyuMiniLoading } from "@/components/loading/DaiyuMiniLoading";
 
 const FAILSAFE_MS = 8000;
+const MINI_REVEAL_MS = 450;
 
 function urlKey(pathname: string, search: string) {
   return `${pathname}${search}`;
@@ -16,7 +18,10 @@ function NavigationProgressInner() {
   const routeKey = urlKey(pathname, search ? `?${search}` : "");
 
   const [pending, setPending] = useState(false);
+  const [showMini, setShowMini] = useState(false);
+  const pendingStateRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failsafeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const miniRevealRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentKeyRef = useRef(routeKey);
   const pendingRef = useRef(false);
 
@@ -27,30 +32,59 @@ function NavigationProgressInner() {
     }
   }, []);
 
+  const clearPendingState = useCallback(() => {
+    if (pendingStateRef.current) {
+      clearTimeout(pendingStateRef.current);
+      pendingStateRef.current = null;
+    }
+  }, []);
+
+  const clearMiniReveal = useCallback(() => {
+    if (miniRevealRef.current) {
+      clearTimeout(miniRevealRef.current);
+      miniRevealRef.current = null;
+    }
+  }, []);
+
   const start = useCallback(() => {
     if (pendingRef.current) return;
     pendingRef.current = true;
+    clearPendingState();
     clearFailsafe();
+    clearMiniReveal();
     // history.push/replaceState 가 React useInsertionEffect 안에서 호출될 수 있어
     // setState는 다음 태스크로 미룬다.
-    setTimeout(() => {
+    pendingStateRef.current = setTimeout(() => {
+      pendingStateRef.current = null;
       if (!pendingRef.current) return;
       setPending(true);
     }, 0);
+    miniRevealRef.current = setTimeout(() => {
+      miniRevealRef.current = null;
+      if (!pendingRef.current) return;
+      setShowMini(true);
+    }, MINI_REVEAL_MS);
     failsafeRef.current = setTimeout(() => {
+      failsafeRef.current = null;
       pendingRef.current = false;
       setPending(false);
+      setShowMini(false);
     }, FAILSAFE_MS);
-  }, [clearFailsafe]);
+  }, [clearPendingState, clearFailsafe, clearMiniReveal]);
 
   // 라우트/쿼리 완료 시 해제 (키 변경만 구독)
   useEffect(() => {
     currentKeyRef.current = routeKey;
     if (!pendingRef.current) return;
     pendingRef.current = false;
+    clearPendingState();
     clearFailsafe();
-    queueMicrotask(() => setPending(false));
-  }, [routeKey, clearFailsafe]);
+    clearMiniReveal();
+    queueMicrotask(() => {
+      setPending(false);
+      setShowMini(false);
+    });
+  }, [routeKey, clearPendingState, clearFailsafe, clearMiniReveal]);
 
   useEffect(() => {
     const sameDocumentNav = (href: string) => {
@@ -114,28 +148,31 @@ function NavigationProgressInner() {
       window.removeEventListener("popstate", onPopState);
       history.pushState = origPush;
       history.replaceState = origReplace;
+      pendingRef.current = false;
+      clearPendingState();
       clearFailsafe();
+      clearMiniReveal();
     };
-  }, [start, clearFailsafe]);
+  }, [start, clearPendingState, clearFailsafe, clearMiniReveal]);
 
   if (!pending) return null;
 
   return (
-    <div
-      className="pointer-events-none fixed inset-x-0 top-0 bottom-20 z-[100] md:bottom-0"
-      aria-busy="true"
-      aria-live="polite"
-    >
+    <>
       <div
-        className="bg-ink/25 pointer-events-auto absolute inset-0 cursor-wait backdrop-blur-[1px]"
-        onClick={(e) => e.preventDefault()}
-        onPointerDown={(e) => e.preventDefault()}
-      />
-      <div className="bg-surface-soft pointer-events-none absolute inset-x-0 top-0 z-[1] h-1 overflow-hidden">
+        className="bg-surface-soft pointer-events-none fixed inset-x-0 top-0 z-[101] h-1 overflow-hidden"
+        aria-hidden="true"
+      >
         <div className="nav-progress-bar bg-brand-500 h-full w-1/3 rounded-r-full" />
       </div>
-      <span className="sr-only">페이지를 불러오는 중</span>
-    </div>
+      {showMini ? (
+        <DaiyuMiniLoading />
+      ) : (
+        <span className="sr-only" role="status">
+          페이지를 불러오는 중
+        </span>
+      )}
+    </>
   );
 }
 
