@@ -57,6 +57,7 @@ import {
 } from "@/lib/kakao/directions";
 import RouteOptionPicker from "@/components/search/RouteOptionPicker";
 import TrafficLegend from "@/components/search/TrafficLegend";
+import { DaiyuCompactLoading } from "@/components/loading/DaiyuLoading";
 
 // Day(일정)별 마커·경로선 색상 — Day 순서대로 순환 배정. 마커와 경로선이 같은 팔레트를 써야
 // "이 색 마커들이 이 색 선으로 이어진 게 같은 Day"라는 게 지도에서 바로 보인다.
@@ -987,7 +988,6 @@ export default function Course() {
     filters.headcount > 1,
     filters.dateFrom || filters.dateTo
   ].filter(Boolean).length;
-
   return (
     <div className="space-y-6">
       {/* Tabs — 헤더(h-16) 바로 아래에 고정, 위쪽 여백은 살짝 줄임 */}
@@ -1250,9 +1250,12 @@ export default function Course() {
           {/* 결과 */}
           {showResults ? (
             recommendLoading ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-14 text-gray-400">
-                <span className="border-brand-500 h-6 w-6 animate-spin rounded-full border-[3px] border-gray-200 border-t-transparent" />
-                <p className="text-sm font-medium text-gray-500">AI가 코스를 설계하고 있어요...</p>
+              <div className="relative min-h-64 overflow-hidden rounded-xl" aria-busy="true">
+                <DaiyuCompactLoading
+                  title="다유가 코스를 설계하고 있어요"
+                  detail="선택한 조건과 이동 편의 정보를 맞춰 장소를 연결하는 중이에요."
+                  contained
+                />
               </div>
             ) : recommendError ? (
               <div className="py-12 text-center text-gray-400">

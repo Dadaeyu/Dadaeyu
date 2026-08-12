@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Chatbot from "@/components/Chatbot";
 import { HomeHero, HomeNeedsPicker } from "@/features/home/HomeHero";
+import { HomeOfficialGuide } from "@/features/home/HomeOfficialGuide";
 import { HomePlaceDialog } from "@/features/home/HomePlaceDialog";
 import { HomeRecommendations } from "@/features/home/HomeRecommendations";
 import { homeNeedIdsToChatNeeds } from "@/features/home/homeData";
@@ -34,6 +35,8 @@ export default function Home() {
         <HomeNeedsPicker experience={experience} />
         <HomeRecommendations experience={experience} />
       </div>
+
+      <HomeOfficialGuide />
 
       {experience.selectedPlace ? (
         <HomePlaceDialog
