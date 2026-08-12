@@ -87,6 +87,8 @@ interface Props {
   fitPathKey?: string | number | null;
   /** 하단 시트 등 UI가 가리는 높이(px). 경로 맞춤 시 bottom padding으로 사용 */
   bottomOverlayPx?: number;
+  /** 확대/축소 컨트롤(데스크탑 전용) 표시 여부. 기본 true — false면 데스크탑에서도 숨긴다. */
+  showZoomControl?: boolean;
 }
 
 // ── 핀 렌더러 ──────────────────────────────────────────────
@@ -301,7 +303,8 @@ export default function KakaoMap({
   path = [],
   onPathClick,
   fitPathKey = null,
-  bottomOverlayPx = 0
+  bottomOverlayPx = 0,
+  showZoomControl = true
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
@@ -375,7 +378,8 @@ export default function KakaoMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapInitCount, selectedId, fitPathKey]);
 
-  // 확대/축소 +/- 컨트롤은 데스크탑에서만. 모바일은 핀치 줌으로 충분해서 화면을 가리지 않게 뺀다.
+  // 확대/축소 +/- 컨트롤은 데스크탑에서만(모바일은 핀치 줌으로 충분해서 화면을 가리지 않게 뺀다),
+  // 그리고 showZoomControl=false 면 데스크탑에서도 숨긴다(지도 기능 드롭다운의 표시/미표시 토글용).
   useEffect(() => {
     if (!mapRef.current || !window.kakao?.maps) return;
     const K = window.kakao.maps;
@@ -394,11 +398,11 @@ export default function KakaoMap({
       }
     };
 
-    sync(mql.matches);
-    const handleChange = (e: MediaQueryListEvent) => sync(e.matches);
+    sync(mql.matches && showZoomControl);
+    const handleChange = (e: MediaQueryListEvent) => sync(e.matches && showZoomControl);
     mql.addEventListener("change", handleChange);
     return () => mql.removeEventListener("change", handleChange);
-  }, [mapInitCount]);
+  }, [mapInitCount, showZoomControl]);
 
   // 마커 동기화
   useEffect(() => {

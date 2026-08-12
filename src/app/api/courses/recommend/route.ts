@@ -15,7 +15,7 @@ import {
   splitIntoDays,
   type RoutePoint
 } from "@/lib/courseRecommend/routePlanning";
-import { getBakeryPlaceIds, splitThemeSelection } from "@/lib/theme/bakeryTheme";
+import { getBakeryPlaceIds, splitThemeSelection, BAKERY_THEME_CODE } from "@/lib/theme/bakeryTheme";
 
 const DEEPSEEK_CHAT_URL = "https://api.deepseek.com/chat/completions";
 const DEFAULT_MODEL = "deepseek-v4-flash";
@@ -119,7 +119,18 @@ export async function POST(request: Request) {
         : Promise.resolve([])
     ]);
 
-    if (activityCandidates.length < MIN_CANDIDATES) {
+    // 빵지순례(BK)는 실제 lclssystm1 코드가 아니라 테마 필터를 켰을 때만 후보에 반영돼 있다
+    // (fetchPlaces 내부). 필터로 선택 안 했어도 결과 코스에 빵집이 우연히 섞이면 해시태그에
+    // "빵지순례"가 잡히게, 후보 전체에 대해 한 번 더 표시해둔다(지도 마커 색상용 categoryCode도 같이 맞춘다).
+    const bakeryPlaceIdSet = new Set(await getBakeryPlaceIds());
+    const markBakery = (p: CandidatePlace): CandidatePlace =>
+      bakeryPlaceIdSet.has(p.placeId)
+        ? { ...p, category: themeNames.get(BAKERY_THEME_CODE) ?? "빵지순례", categoryCode: BAKERY_THEME_CODE }
+        : p;
+    const markedActivityCandidates = activityCandidates.map(markBakery);
+    const markedRestaurantCandidates = restaurantCandidates.map(markBakery);
+
+    if (markedActivityCandidates.length < MIN_CANDIDATES) {
       return NextResponse.json({
         courses: [],
         message: "조건에 맞는 장소가 너무 적어서 코스를 만들지 못했어요. 필터를 조금 넓혀보세요."
@@ -138,7 +149,7 @@ export async function POST(request: Request) {
     const drafts = await requestCourseDrafts({
       apiKey,
       model,
-      candidates: activityCandidates,
+      candidates: markedActivityCandidates,
       forcedDayCount
     });
 
@@ -149,9 +160,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const candidateById = new Map(activityCandidates.map((c) => [c.placeId, c]));
+    const candidateById = new Map(markedActivityCandidates.map((c) => [c.placeId, c]));
     const courses = drafts
-      .map((draft) => buildCourseFromDraft(draft, candidateById, restaurantCandidates, forcedDayCount))
+      .map((draft) =>
+        buildCourseFromDraft(draft, candidateById, markedRestaurantCandidates, forcedDayCount)
+      )
       .filter((course): course is NonNullable<typeof course> => course != null)
       .slice(0, MAX_COURSES);
 
