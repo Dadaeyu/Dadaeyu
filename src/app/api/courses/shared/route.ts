@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { T } from "@/lib/supabase/tables";
 import type { TourismCoursePlace, TourismSharedCourse } from "@/lib/supabase/types";
-import { getBakeryPlaceIds, splitThemeSelection } from "@/lib/theme/bakeryTheme";
+import { getBakeryPlaceIds, splitThemeSelection, BAKERY_THEME_CODE } from "@/lib/theme/bakeryTheme";
 
 export const dynamic = "force-dynamic";
 
@@ -278,10 +278,87 @@ async function courseIdsExcludedBySchedule(
   return courseIdsContainingContentIds(admin, [...excludeContentIds]);
 }
 
+/** 평균 별점(tb_post.course_rating, board_id=1)이 minRating 이상인 코스 id 집합 */
+async function courseIdsMatchingMinRating(
+  admin: ReturnType<typeof createAdminClient>,
+  minRating: number
+): Promise<Set<number>> {
+  const { data, error } = await admin
+    .from(T.boardPosts)
+    .select("course_id, course_rating")
+    .eq("board_id", 1)
+    .eq("use_yn", true)
+    .not("course_rating", "is", null)
+    .not("course_id", "is", null);
+  if (error) throw error;
+  const sums = new Map<number, { sum: number; count: number }>();
+  for (const row of (data ?? []) as { course_id: number; course_rating: number }[]) {
+    const g = sums.get(row.course_id) ?? { sum: 0, count: 0 };
+    g.sum += row.course_rating;
+    g.count += 1;
+    sums.set(row.course_id, g);
+  }
+  const matched = new Set<number>();
+  for (const [courseId, g] of sums) {
+    if (g.sum / g.count >= minRating) matched.add(courseId);
+  }
+  return matched;
+}
+
+/** courseIds 각각의 평균 별점(tb_post.course_rating, board_id=1). 후기 없으면 0. */
+async function computeAverageRatings(
+  admin: ReturnType<typeof createAdminClient>,
+  courseIds: number[]
+): Promise<Map<number, number>> {
+  const averageRatings = new Map<number, number>();
+  if (courseIds.length === 0) return averageRatings;
+  const { data, error } = await admin
+    .from(T.boardPosts)
+    .select("course_id, course_rating")
+    .eq("board_id", 1)
+    .eq("use_yn", true)
+    .not("course_rating", "is", null)
+    .in("course_id", courseIds);
+  if (error) throw error;
+  const sums = new Map<number, { sum: number; count: number }>();
+  for (const row of (data ?? []) as { course_id: number; course_rating: number }[]) {
+    const g = sums.get(row.course_id) ?? { sum: 0, count: 0 };
+    g.sum += row.course_rating;
+    g.count += 1;
+    sums.set(row.course_id, g);
+  }
+  for (const [cid, g] of sums) {
+    averageRatings.set(cid, Math.round((g.sum / g.count) * 10) / 10);
+  }
+  return averageRatings;
+}
+
 function hourToTime(hour: number | null | undefined): string | null {
   if (hour == null || !Number.isFinite(Number(hour))) return null;
   const h = Math.max(0, Math.min(23, Math.floor(Number(hour))));
   return `${String(h).padStart(2, "0")}:00`;
+}
+
+type CourseSortField = "registtime" | "title" | "rating";
+
+// registtime(등록일)/title(제목)은 tb_course 컬럼이라 DB .order() 로 바로 정렬되지만, rating(별점)은
+// tb_post 집계값이라 별도 처리(resolveActiveCourses 참고)가 필요하다.
+function resolveSort(sortParam: string | null): { field: CourseSortField; ascending: boolean } {
+  switch (sortParam) {
+    case "registtime_asc":
+      return { field: "registtime", ascending: true };
+    case "title_asc":
+      return { field: "title", ascending: true };
+    case "title_desc":
+      return { field: "title", ascending: false };
+    case "rating_asc":
+      return { field: "rating", ascending: true };
+    case "rating_desc":
+      return { field: "rating", ascending: false };
+    case "registtime_desc":
+    default:
+      return { field: "registtime", ascending: false };
+  }
 }
 
 const DEFAULT_LIMIT = 10;
@@ -304,23 +381,35 @@ export async function GET(request: Request) {
     const headcount = Number(url.searchParams.get("headcount") ?? "0");
     const dateFrom = (url.searchParams.get("dateFrom") ?? "").trim();
     const dateTo = (url.searchParams.get("dateTo") ?? "").trim();
+    const minRating = Number(url.searchParams.get("minRating") ?? "0");
+    const mine = url.searchParams.get("mine") === "1";
+    const { field: sortField, ascending: sortAscending } = resolveSort(url.searchParams.get("sort"));
 
     const admin = createAdminClient();
 
-    // 즐겨찾기 필터 — 로그인 사용자의 좋아요 코스 id 집합. 비로그인이면 결과 없음.
-    let favoriteCourseIds: Set<number> | null = null;
-    if (favoritesOnly) {
+    // "내 코스" 모드는 로그인이 필수 — 즐겨찾기 필터와 마찬가지로 세션에서 사용자를 확인한다.
+    let authedUserId: string | null = null;
+    if (mine || favoritesOnly) {
       const supabaseAuth = await createClient();
       const {
         data: { user }
       } = await supabaseAuth.auth.getUser();
       if (!user) {
+        if (mine) {
+          return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+        }
         return NextResponse.json({ items: [] as TourismSharedCourse[], hasMore: false });
       }
+      authedUserId = user.id;
+    }
+
+    // 즐겨찾기 필터 — 로그인 사용자의 좋아요 코스 id 집합.
+    let favoriteCourseIds: Set<number> | null = null;
+    if (favoritesOnly) {
       const { data: likeRows, error: likeErr } = await admin
         .from(T.courseLikes)
         .select("course_id")
-        .eq("user_id", user.id);
+        .eq("user_id", authedUserId!);
       if (likeErr) throw likeErr;
       favoriteCourseIds = new Set((likeRows ?? []).map((r) => r.course_id as number));
       if (favoriteCourseIds.size === 0) {
@@ -331,13 +420,14 @@ export async function GET(request: Request) {
     // 접근성/테마/위치 필터 — 각각 매치되는 코스 id 집합을 구해서 교집합(여러 개 선택했으면 AND).
     // 접근성/테마는 "하나라도 매치"(OR)지만, 위치는 "포함된 모든 장소가 매치"(courseIdsWithAllPlacesInLocation 안에서 이미 AND 처리됨).
     let placeFilterCourseIds: Set<number> | null = null;
-    if (accessTypes.length > 0 || themeCodesFilter.length > 0 || gu) {
-      const [themeMatched, accessMatched, locationMatched] = await Promise.all([
+    if (accessTypes.length > 0 || themeCodesFilter.length > 0 || gu || minRating > 0) {
+      const [themeMatched, accessMatched, locationMatched, ratingMatched] = await Promise.all([
         themeCodesFilter.length > 0 ? courseIdsMatchingThemes(admin, themeCodesFilter) : null,
         accessTypes.length > 0 ? courseIdsMatchingAccessibility(admin, accessTypes) : null,
-        gu ? courseIdsWithAllPlacesInLocation(admin, gu, dong) : null
+        gu ? courseIdsWithAllPlacesInLocation(admin, gu, dong) : null,
+        minRating > 0 ? courseIdsMatchingMinRating(admin, minRating) : null
       ]);
-      const activeSets = [themeMatched, accessMatched, locationMatched].filter(
+      const activeSets = [themeMatched, accessMatched, locationMatched, ratingMatched].filter(
         (s): s is Set<number> => s !== null
       );
       placeFilterCourseIds = activeSets.reduce<Set<number> | null>(
@@ -373,35 +463,96 @@ export async function GET(request: Request) {
       ...(scheduleExcluded ?? [])
     ]);
 
-    let courseQuery = admin
-      .from(T.course)
-      .select(
-        "course_id, course_nm, open_yn, startdate, enddate, register, registtime, updatetime, delete_yn",
-        { count: "exact" }
-      )
-      .eq("open_yn", "Y")
-      .order("registtime", { ascending: false })
-      .range(offset, offset + limit - 1);
-    if (courseIdFilter) courseQuery = courseQuery.in("course_id", courseIdFilter);
-    if (excludedCourseIds.size > 0) {
-      courseQuery = courseQuery.not("course_id", "in", `(${[...excludedCourseIds].join(",")})`);
-    }
+    const courseColumns =
+      "course_id, course_nm, open_yn, startdate, enddate, register, registtime, updatetime, delete_yn";
 
-    const { data: courses, error: coursesError, count } = await courseQuery;
+    let activeCourses: CourseRow[];
+    let hasMore: boolean;
+    // rating 정렬일 때만 미리 채워둔다 — 아래에서 다시 계산하지 않고 이 맵을 그대로 쓴다.
+    let precomputedRatings: Map<number, number> | null = null;
 
-    // PGRST103(Requested range not satisfiable) — .range() 요청인데 조건에 맞는 행이 0건일 때
-    // PostgREST 가 던지는 에러. 예: 좋아요한 코스가 지금은 전부 비공개(open_yn≠'Y')로 바뀐 경우
-    // (courseIdFilter 자체는 비어있지 않았지만 .eq("open_yn","Y") 와 교집합이 0건). 정상적인
-    // "결과 없음"으로 처리한다.
-    if (coursesError) {
-      if (coursesError.code === "PGRST103") {
+    if (sortField === "rating") {
+      // 별점은 tb_course 컬럼이 아니라 tb_post 집계값이라 DB .order()/.range() 로 못 정렬·페이징한다.
+      // 필터에 맞는 코스 id 전체를 먼저 구하고, 별점을 계산해 JS에서 정렬한 뒤 그 결과를 offset/limit
+      // 으로 직접 잘라 페이지를 만든다.
+      let idQuery = admin
+        .from(T.course)
+        .select("course_id, delete_yn")
+        .or("delete_yn.is.null,delete_yn.eq.N");
+      idQuery = mine ? idQuery.eq("register", authedUserId!) : idQuery.eq("open_yn", "Y");
+      if (courseIdFilter) idQuery = idQuery.in("course_id", courseIdFilter);
+      if (excludedCourseIds.size > 0) {
+        idQuery = idQuery.not("course_id", "in", `(${[...excludedCourseIds].join(",")})`);
+      }
+      const { data: idRows, error: idErr } = await idQuery;
+      if (idErr) throw idErr;
+      const allIds = ((idRows ?? []) as { course_id: number }[]).map((r) => r.course_id);
+      if (allIds.length === 0) {
         return NextResponse.json({ items: [] as TourismSharedCourse[], hasMore: false });
       }
-      throw coursesError;
+
+      precomputedRatings = await computeAverageRatings(admin, allIds);
+      const ratingsForSort = precomputedRatings;
+      const sortedIds = [...allIds].sort((a, b) => {
+        const diff = (ratingsForSort.get(a) ?? 0) - (ratingsForSort.get(b) ?? 0);
+        return sortAscending ? diff : -diff;
+      });
+      hasMore = offset + limit < sortedIds.length;
+      const pageIds = sortedIds.slice(offset, offset + limit);
+      if (pageIds.length === 0) {
+        return NextResponse.json({ items: [] as TourismSharedCourse[], hasMore });
+      }
+
+      const { data: pageCourses, error: pageErr } = await admin
+        .from(T.course)
+        .select(courseColumns)
+        .in("course_id", pageIds);
+      if (pageErr) throw pageErr;
+      const courseById = new Map(
+        ((pageCourses ?? []) as CourseRow[]).map((c) => [c.course_id, c])
+      );
+      // pageIds 는 이미 정렬된 순서 — 그 순서를 그대로 유지해서 매핑한다.
+      activeCourses = pageIds
+        .map((id) => courseById.get(id))
+        .filter((c): c is CourseRow => c != null);
+    } else {
+      // delete_yn 은 반드시 SQL 에서 걸러야 한다 — count/range 로 페이지를 자르는데, 소프트 삭제된
+      // 행을 여기서 안 거르고 나중에 JS 에서 activeCourses 로 걸러내면 "가져온 원본 행 수"와
+      // "실제 보여줄 행 수"가 달라진다. 그러면 다음 페이지 offset(=화면에 보인 개수 기준)이 DB
+      // 원본 행 위치와 어긋나서, 페이지마다 20개보다 적게 보이거나 다음 페이지에서 이미 본 코스가
+      // 다시 겹쳐 나오는(중복 key) 문제가 생긴다.
+      const sortColumn = sortField === "title" ? "course_nm" : "registtime";
+      let courseQuery = admin
+        .from(T.course)
+        .select(courseColumns, { count: "exact" })
+        .or("delete_yn.is.null,delete_yn.eq.N")
+        .order(sortColumn, { ascending: sortAscending })
+        .range(offset, offset + limit - 1);
+      courseQuery = mine
+        ? courseQuery.eq("register", authedUserId!)
+        : courseQuery.eq("open_yn", "Y");
+      if (courseIdFilter) courseQuery = courseQuery.in("course_id", courseIdFilter);
+      if (excludedCourseIds.size > 0) {
+        courseQuery = courseQuery.not("course_id", "in", `(${[...excludedCourseIds].join(",")})`);
+      }
+
+      const { data: courses, error: coursesError, count } = await courseQuery;
+
+      // PGRST103(Requested range not satisfiable) — .range() 요청인데 조건에 맞는 행이 0건일 때
+      // PostgREST 가 던지는 에러. 예: 좋아요한 코스가 지금은 전부 비공개(open_yn≠'Y')로 바뀐 경우
+      // (courseIdFilter 자체는 비어있지 않았지만 .eq("open_yn","Y") 와 교집합이 0건). 정상적인
+      // "결과 없음"으로 처리한다.
+      if (coursesError) {
+        if (coursesError.code === "PGRST103") {
+          return NextResponse.json({ items: [] as TourismSharedCourse[], hasMore: false });
+        }
+        throw coursesError;
+      }
+
+      activeCourses = ((courses ?? []) as CourseRow[]).filter((c) => isActiveFlag(c.delete_yn));
+      hasMore = offset + limit < (count ?? 0);
     }
 
-    const activeCourses = ((courses ?? []) as CourseRow[]).filter((c) => isActiveFlag(c.delete_yn));
-    const hasMore = offset + limit < (count ?? 0);
     if (activeCourses.length === 0) {
       return NextResponse.json({ items: [] as TourismSharedCourse[], hasMore });
     }
@@ -437,6 +588,9 @@ export async function GET(request: Request) {
         placeMap.set(p.place_id, p);
       }
     }
+
+    // 빵지순례(BK) — lclssystm1엔 안 남는 자체 판정 테마라, 해시태그에 넣으려면 별도로 구해야 한다.
+    const bakeryPlaceIdSet = new Set(await getBakeryPlaceIds());
 
     const detailsByCourse = new Map<number, TourismCoursePlace[]>();
     const themesByCourse = new Map<number, Set<string>>();
@@ -481,7 +635,13 @@ export async function GET(request: Request) {
       likeCounts.set(row.course_id, (likeCounts.get(row.course_id) ?? 0) + 1);
     }
 
+    // 코스 별점 — 후기 게시판(board_id=1)의 course_rating 평균. 후기가 없으면 0.0.
+    // rating 정렬일 때는 이미 전체 후보를 대상으로 계산해둔 값(precomputedRatings)을 그대로 쓴다.
+    const averageRatings = precomputedRatings ?? (await computeAverageRatings(admin, courseIds));
+
     const themeCodes = [...new Set([...themesByCourse.values()].flatMap((s) => [...s]))];
+    // 이 결과 안에 빵집으로 판정된 장소가 하나라도 있으면 "빵지순례" 라벨도 같이 조회해둔다.
+    if (placeIds.some((pid) => bakeryPlaceIdSet.has(pid))) themeCodes.push(BAKERY_THEME_CODE);
     const themeLabelByCode = new Map<string, string>();
     if (themeCodes.length > 0) {
       const { data: codeRows, error: codeErr } = await admin
@@ -549,6 +709,7 @@ export async function GET(request: Request) {
         const place = placeMap.get(pid);
         if (!place) continue;
         if (place.lclssystm1) bump(themeLabelByCode.get(place.lclssystm1));
+        if (bakeryPlaceIdSet.has(pid)) bump(themeLabelByCode.get(BAKERY_THEME_CODE));
         const contentId =
           place.contentid != null && place.contentid !== "" ? Number(place.contentid) : null;
         const flags = contentId != null ? bfFlagsByContentId.get(contentId) : undefined;
@@ -575,6 +736,7 @@ export async function GET(request: Request) {
         day_count: days.size > 0 ? days.size : 0,
         place_count: places.length,
         like_count: likeCounts.get(c.course_id) ?? 0,
+        average_rating: averageRatings.get(c.course_id) ?? 0,
         themes: [...(themesByCourse.get(c.course_id) ?? [])]
           .map((code) => themeLabelByCode.get(code))
           .filter((v): v is string => !!v),

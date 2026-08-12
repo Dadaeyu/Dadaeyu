@@ -20,6 +20,21 @@ export const LCLSSYSTM1_COLORS: Record<string, string> = {
 // 위 목록에 없는 카테고리(또는 미분류)용 중립 회색.
 export const DEFAULT_CATEGORY_COLOR = "#64748b";
 
+// LCLSSYSTM1_COLORS 와 같은 순서 — tb_code(code_group='LCLSSYSTM1') code_nm 과 동일한 표시 텍스트.
+// 범례처럼 매번 DB를 조회하기 부담스러운 곳에서 쓰는 정적 사본이라, tb_code 쪽 라벨이 바뀌면 같이 맞춰야 한다.
+export const LCLSSYSTM1_LABELS: Record<string, string> = {
+  AC: "숙박",
+  EV: "축제/공연/행사",
+  EX: "체험관광",
+  FD: "음식",
+  HS: "역사관광",
+  LS: "레저스포츠",
+  NA: "자연관광",
+  SH: "쇼핑",
+  VE: "문화관광",
+  BK: "빵지순례"
+};
+
 export function getCategoryColor(categoryCode?: string | null): string {
   if (!categoryCode) return DEFAULT_CATEGORY_COLOR;
   return LCLSSYSTM1_COLORS[categoryCode] ?? DEFAULT_CATEGORY_COLOR;

@@ -33,16 +33,37 @@ import {
   Calendar,
   Navigation,
   Footprints,
-  Car
+  Car,
+  MoreVertical,
+  Palette,
+  LocateFixed,
+  ZoomIn
 } from "lucide-react";
 import { Filters, DEFAULT_FILTERS, FilterFields, useFilters } from "@/components/PlaceFilters";
 import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
 import TourismDetailPanel from "@/components/search/TourismDetailPanel";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import { usePlaceSearch, type TourismDetail } from "@/hooks/usePlaceSearch";
+import {
+  getCategoryColor,
+  LCLSSYSTM1_COLORS,
+  LCLSSYSTM1_LABELS
+} from "@/lib/search/categoryColors";
+import { useMyLocation } from "@/hooks/useMyLocation";
 import { shareToKakaoTalk } from "@/lib/kakao/loadKakaoShare";
-import { fetchSharedCourses } from "@/lib/supabase/courses";
+import { fetchSharedCourses, type CourseSort } from "@/lib/supabase/courses";
 import type { TourismSharedCourse } from "@/lib/supabase/types";
+
+// 공유/내 코스 목록 정렬 — 등록일/제목/별점 각각 오름·내림차순.
+const COURSE_SORT_OPTIONS: { value: CourseSort; label: string }[] = [
+  { value: "registtime_desc", label: "등록일 최신순" },
+  { value: "registtime_asc", label: "등록일 오래된순" },
+  { value: "title_asc", label: "제목 오름차순" },
+  { value: "title_desc", label: "제목 내림차순" },
+  { value: "rating_desc", label: "별점 높은순" },
+  { value: "rating_asc", label: "별점 낮은순" }
+];
+const DEFAULT_COURSE_SORT: CourseSort = "registtime_desc";
 import { requireLoginOrRedirect } from "@/lib/auth/require-login-redirect";
 import {
   fetchDirectionsForStops,
@@ -86,6 +107,7 @@ interface CoursePlace {
   lat?: number; // 장소 검색으로 추가된 경우의 좌표 (지도 마커·경로선 표시용)
   lng?: number;
   contentId?: number; // tb_place.contentid (TourAPI id) — /api/tourism/detail 조회용. placeId(내부 PK)와는 다른 값.
+  categoryCode?: string | null; // tb_place.lclssystm1 — 지도/장소목록의 테마별 색상에 쓴다.
 }
 
 interface CourseDay {
@@ -114,7 +136,6 @@ function formatDateOnly(value?: string | null): string {
   if (!value) return "-";
   return value.slice(0, 10);
 }
-import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 
@@ -187,7 +208,17 @@ function saveAiCoursePreview(draft: RecommendedCourseDraft) {
 // 없던 시절 저장분) — 그대로 쓰면 course.hashtags.map() 같은 데서 런타임 에러가 난다. 읽을 때마다
 // 최신 필드를 기본값으로 채워 넣어 방어한다.
 function normalizeRecommendedCourseDraft(draft: RecommendedCourseDraft): RecommendedCourseDraft {
-  return { ...draft, hashtags: Array.isArray(draft.hashtags) ? draft.hashtags : [] };
+  return {
+    ...draft,
+    hashtags: Array.isArray(draft.hashtags) ? draft.hashtags : [],
+    days: draft.days.map((day) => ({
+      ...day,
+      places: day.places.map((place) => ({
+        ...place,
+        categoryCode: place.categoryCode ?? null
+      }))
+    }))
+  };
 }
 
 function readAiCoursePreview(): RecommendedCourseDraft | null {
@@ -283,6 +314,7 @@ interface RecommendedCoursePlace {
   lng: number;
   startHour: number;
   endHour: number;
+  categoryCode: string | null;
 }
 interface RecommendedCourseDay {
   day: number;
@@ -301,17 +333,6 @@ function formatDotDate(value?: string | null): string {
   if (!value) return "-";
   return value.slice(0, 10).replaceAll("-", ".");
 }
-
-// 내 코스 목록(tb_course)에서 조회할 컬럼
-type DbCourse = {
-  course_id: number;
-  course_nm: string;
-  open_yn: string;
-  startdate: string | null;
-  enddate: string | null;
-  registtime: string | null;
-  updatetime: string | null;
-};
 
 export default function Course() {
   const params = useParams();
@@ -336,157 +357,123 @@ export default function Course() {
     router.push("/course/new");
   };
 
-  // 내 코스 — tb_course 중 register=로그인 사용자 id 인 행만 조회 (삭제 제외), 페이지 단위로 로드
+  // 공유/추천/내 코스 필터 공통 — 위치(구/동) 선택지. tb_place.ldongsigngucd 는 이름이 아니라
+  // 코드로 저장돼 있어서, 필터 UI(이름 기준)와 서버 조회(코드 기준) 사이를 변환해줘야 한다.
+  const [sharedAreaCodes, setSharedAreaCodes] = useState<{ code: string; name: string }[]>([]);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/area-code")
+      .then((r) => r.json())
+      .then((data) => {
+        if (active) setSharedAreaCodes(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // 내 코스 — tb_course 중 register=로그인 사용자 id 인 행만, 공유 코스와 동일한 필터를
+  // 서버(/api/courses/shared?mine=1)에 적용해 페이지 단위로 로드한다.
   const MY_COURSES_PAGE_SIZE = 20;
-  const [myDbCourses, setMyDbCourses] = useState<DbCourse[]>([]);
+  const [myDbCourses, setMyDbCourses] = useState<TourismSharedCourse[]>([]);
   const [myCoursesError, setMyCoursesError] = useState("");
+  const [myCoursesLoading, setMyCoursesLoading] = useState(true);
   const [myCoursesLoadingMore, setMyCoursesLoadingMore] = useState(false);
   const [myHasMore, setMyHasMore] = useState(false);
   // course_id -> tb_course_like 행 개수 (즐겨찾기 수)
   const [courseLikeCounts, setCourseLikeCounts] = useState<Record<number, number>>({});
-  // course_id -> 일정 요약(며칠 일정인지, 장소 몇 곳인지) — tb_course_detail 집계
+  // course_id -> 일정 요약(며칠 일정인지, 장소 몇 곳인지)
   const [courseMeta, setCourseMeta] = useState<
     Record<number, { duration: string; places: number }>
   >({});
   // course_id -> 해시태그(포함된 장소들의 대분류+접근성 종합 상위 3개)
   const [courseHashtags, setCourseHashtags] = useState<Record<number, string[]>>({});
+  // course_id -> 별점 평균(tb_post.course_rating, 소수 1자리). 후기 없으면 0.
+  const [courseRatings, setCourseRatings] = useState<Record<number, number>>({});
 
-  // (offset, limit) 구간의 내 코스 + 좋아요수/일정요약/해시태그를 조회한다. 초기 로드/더보기 양쪽에서 재사용.
-  const loadMyCoursesPage = useCallback(async (userId: string, offset: number, limit: number) => {
-    const { createClient } = await import("@/utils/supabase/client");
-    const supabase = createClient();
-    // count: "exact" 는 Content-Range 응답 헤더에 담겨 오는데, 브라우저(RLS 경유) 요청에선
-    // CORS 로 그 헤더가 노출 안 돼 항상 null 로 잡혀 hasMore 가 절대 true 가 안 되는 문제가 있었다.
-    // (서버 API 로 호출하는 공유 코스 쪽은 Node 환경이라 CORS 제약이 없어 정상 동작함.)
-    // 그래서 count 대신 "받아온 개수가 요청한 limit 와 같으면 다음 페이지가 더 있다"로 판단한다.
-    const { data, error } = await supabase
-      .from("tb_course")
-      .select("course_id, course_nm, open_yn, startdate, enddate, registtime, updatetime")
-      .eq("register", userId)
-      .neq("delete_yn", "Y")
-      .order("registtime", { ascending: false })
-      .range(offset, offset + limit - 1);
-    if (error) throw error;
-    const courses = (data ?? []) as DbCourse[];
-    const hasMore = courses.length === limit;
-
-    const courseIds = courses.map((c) => c.course_id);
-    if (courseIds.length === 0) {
-      return { courses, hasMore, likeCounts: {}, meta: {}, hashtags: {} } as const;
+  // 내 코스 필터 — 공유 코스와 동일한 필터 UI/서버 로직(mine=1)을 그대로 재사용한다.
+  // 코스 상세 → 뒤로가기로 돌아왔을 때 카드 클릭 당시의 필터를 그대로 복원한다.
+  const [showMyFilters, setShowMyFilters] = useState(() => {
+    const saved = !id ? readCourseListReturn() : null;
+    return saved?.tab === "my" ? !!saved.showFilters : false;
+  });
+  const [myFilters, setMyFilters] = useState<Filters>(() => {
+    const saved = !id ? readCourseListReturn() : null;
+    return saved?.tab === "my" && saved.filters ? saved.filters : DEFAULT_FILTERS;
+  });
+  // "검색" 버튼을 눌러야 draft 가 실제 조회에 쓰이는 myFilters 로 반영된다.
+  const [myFilterDraft, setMyFilterDraft] = useState<Filters>(myFilters);
+  // 정렬은 필터와 달리 고르는 즉시 바로 반영된다(검색 버튼 없이).
+  const [mySort, setMySort] = useState<CourseSort>(DEFAULT_COURSE_SORT);
+  const myGuCode = sharedAreaCodes.find((a) => a.name === myFilters.gu)?.code ?? "";
+  const myDraftGuCode = sharedAreaCodes.find((a) => a.name === myFilterDraft.gu)?.code ?? "";
+  const [myDongOptions, setMyDongOptions] = useState<string[]>([]);
+  useEffect(() => {
+    if (!myDraftGuCode) {
+      setMyDongOptions([]);
+      return;
     }
+    let active = true;
+    fetch(`/api/area-code/dong?gu=${encodeURIComponent(myDraftGuCode)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (active) setMyDongOptions(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [myDraftGuCode]);
 
-    const { data: likeRows, error: likeErr } = await supabase
-      .from("tb_course_like")
-      .select("course_id")
-      .in("course_id", courseIds);
-    if (likeErr) throw likeErr;
-    const likeCounts: Record<number, number> = {};
-    for (const row of likeRows ?? []) {
-      likeCounts[row.course_id] = (likeCounts[row.course_id] ?? 0) + 1;
-    }
+  // 필터가 바뀔 때만 재조회하도록, 배열은 정렬 후 문자열 키로 비교한다 (공유 코스와 동일 패턴).
+  const myFilterKey = JSON.stringify({
+    accessibility: [...myFilters.accessibility].sort(),
+    themes: [...myFilters.themes].sort(),
+    favoritesOnly: myFilters.favoritesOnly,
+    gu: myGuCode,
+    dong: myFilters.dong,
+    headcount: myFilters.headcount,
+    dateFrom: myFilters.dateFrom,
+    dateTo: myFilters.dateTo,
+    minRating: myFilters.minRating,
+    sort: mySort
+  });
 
-    const { data: detailRows, error: detailErr } = await supabase
-      .from("tb_course_detail")
-      .select("course_id, day, place_id")
-      .in("course_id", courseIds);
-    if (detailErr) throw detailErr;
-    const daysByCourse = new Map<number, Set<number>>();
-    const placesByCourse = new Map<number, number>();
-    const placeIdsByCourse = new Map<number, Set<number>>();
-    for (const row of detailRows ?? []) {
-      const days = daysByCourse.get(row.course_id) ?? new Set<number>();
-      days.add(row.day);
-      daysByCourse.set(row.course_id, days);
-      placesByCourse.set(row.course_id, (placesByCourse.get(row.course_id) ?? 0) + 1);
-      const placeIds = placeIdsByCourse.get(row.course_id) ?? new Set<number>();
-      placeIds.add(row.place_id);
-      placeIdsByCourse.set(row.course_id, placeIds);
-    }
-    const meta: Record<number, { duration: string; places: number }> = {};
-    for (const cid of courseIds) {
-      const dayCount = daysByCourse.get(cid)?.size ?? 0;
-      meta[cid] = {
-        duration: dayCount > 1 ? `${dayCount}일` : "반일",
-        places: placesByCourse.get(cid) ?? 0
-      };
-    }
-
-    // 해시태그 — 코스별 포함 장소들의 대분류(lclssystm1)+접근성 요약플래그를 종합해 상위 3개.
-    const allPlaceIds = [...new Set((detailRows ?? []).map((r) => r.place_id))];
-    const placesById = new Map<
-      number,
-      { contentid: string | number | null; lclssystm1: string | null }
-    >();
-    if (allPlaceIds.length > 0) {
-      const { data: placeRows, error: placeErr } = await supabase
-        .from("tb_place")
-        .select("place_id, contentid, lclssystm1")
-        .in("place_id", allPlaceIds);
-      if (placeErr) throw placeErr;
-      for (const p of placeRows ?? []) placesById.set(p.place_id, p);
-    }
-
-    const themeCodes = [...new Set([...placesById.values()].map((p) => p.lclssystm1))].filter(
-      (v): v is string => v != null
-    );
-    const themeLabelByCode = new Map<string, string>();
-    if (themeCodes.length > 0) {
-      const { data: codeRows, error: codeErr } = await supabase
-        .from("tb_code")
-        .select("code_id, code_nm")
-        .eq("code_group", "LCLSSYSTM1")
-        .in("code_id", themeCodes);
-      if (codeErr) throw codeErr;
-      for (const c of codeRows ?? []) themeLabelByCode.set(c.code_id, c.code_nm);
-    }
-
-    const allContentIds = [
-      ...new Set(
-        [...placesById.values()]
-          .map((p) => (p.contentid != null && p.contentid !== "" ? Number(p.contentid) : null))
-          .filter((v): v is number => v != null)
-      )
-    ];
-    const bfFlagsByContentId = new Map<
-      number,
-      { has_blind: boolean; has_deaf: boolean; has_gait: boolean; has_infant: boolean }
-    >();
-    if (allContentIds.length > 0) {
-      const { data: bfRows, error: bfErr } = await supabase
-        .from("tb_place_barrierfree")
-        .select("contentid, has_blind, has_deaf, has_gait, has_infant")
-        .in("contentid", allContentIds);
-      if (bfErr) throw bfErr;
-      for (const b of bfRows ?? []) bfFlagsByContentId.set(Number(b.contentid), b);
-    }
-
-    const hashtags: Record<number, string[]> = {};
-    for (const cid of courseIds) {
-      const badgeCounts = new Map<string, number>();
-      const bump = (label: string | null | undefined) => {
-        if (!label) return;
-        badgeCounts.set(label, (badgeCounts.get(label) ?? 0) + 1);
-      };
-      for (const pid of placeIdsByCourse.get(cid) ?? []) {
-        const place = placesById.get(pid);
-        if (!place) continue;
-        if (place.lclssystm1) bump(themeLabelByCode.get(place.lclssystm1));
-        const contentId =
-          place.contentid != null && place.contentid !== "" ? Number(place.contentid) : null;
-        const flags = contentId != null ? bfFlagsByContentId.get(contentId) : undefined;
-        if (flags?.has_blind) bump("시각장애");
-        if (flags?.has_deaf) bump("청각장애");
-        if (flags?.has_gait) bump("보행장애");
-        if (flags?.has_infant) bump("영유아");
+  // (offset, limit) 구간의 내 코스를 공유 코스와 동일한 필터로 조회한다. 초기 로드/더보기 양쪽에서 재사용.
+  const loadMyCoursesPage = useCallback(
+    async (offset: number, limit: number) => {
+      const { items, hasMore } = await fetchSharedCourses(offset, limit, {
+        accessibility: myFilters.accessibility,
+        themes: myFilters.themes,
+        favoritesOnly: myFilters.favoritesOnly,
+        gu: myGuCode,
+        dong: myFilters.dong,
+        headcount: myFilters.headcount,
+        dateFrom: myFilters.dateFrom,
+        dateTo: myFilters.dateTo,
+        minRating: myFilters.minRating,
+        mine: true,
+        sort: mySort
+      });
+      const likeCounts: Record<number, number> = {};
+      const meta: Record<number, { duration: string; places: number }> = {};
+      const hashtags: Record<number, string[]> = {};
+      const ratings: Record<number, number> = {};
+      for (const c of items) {
+        likeCounts[c.course_id] = c.like_count;
+        hashtags[c.course_id] = c.hashtags;
+        ratings[c.course_id] = c.average_rating;
+        meta[c.course_id] = {
+          duration: c.day_count > 1 ? `${c.day_count}일` : "반일",
+          places: c.place_count
+        };
       }
-      hashtags[cid] = [...badgeCounts.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([label]) => label);
-    }
-
-    return { courses, hasMore, likeCounts, meta, hashtags } as const;
-  }, []);
+      return { courses: items, hasMore, likeCounts, meta, hashtags, ratings } as const;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [myFilterKey]
+  );
 
   // user 는 Supabase 의 onAuthStateChange(토큰 자동 리프레시, 탭 포커스 복귀 시 세션 재검증 등)가
   // 일어날 때마다 "내용은 같아도 매번 새 객체 참조"로 갱신된다. 이 effect의 deps 에 user 객체
@@ -494,6 +481,13 @@ export default function Course() {
   // (그래서 "스크롤해도 안 늘어나는 것처럼" 보임) — 실제로 로그인 사용자가 바뀔 때만 반응하도록
   // user?.id (문자열 값)만 deps 로 쓴다.
   const userId = user?.id;
+  // 필터 "세대" — 공유 코스와 동일하게, 필터가 바뀔 때(=처음부터 다시 조회할 때)만 증가한다.
+  const myGenerationRef = useRef(0);
+  // sentinel 의 IntersectionObserver 콜백과 "뒤로가기 복원" 효과가 거의 동시에 loadMore 를
+  // 부를 수 있는데, 그 둘 사이 간격이 setState 커밋보다 짧으면 myCoursesLoadingMore 상태값이
+  // 아직 갱신 전이라 가드를 통과해 같은 offset 으로 중복 요청 → 같은 코스가 두 번 붙어 React key
+  // 중복 경고가 난다. ref 는 동기적으로 즉시 반영되므로 이 레이스를 막는다.
+  const myLoadingMoreInFlightRef = useRef(false);
   useEffect(() => {
     if (!userId) {
       // 비로그인 상태에선 "내 코스" 목록을 비운다.
@@ -502,44 +496,70 @@ export default function Course() {
       setCourseLikeCounts({});
       setCourseMeta({});
       setCourseHashtags({});
+      setCourseRatings({});
       setMyHasMore(false);
+      setMyCoursesLoading(false);
       return;
     }
-    let active = true;
+    const generation = ++myGenerationRef.current;
+    myLoadingMoreInFlightRef.current = false;
+    setMyCoursesLoading(true);
+    setMyCoursesLoadingMore(false);
     (async () => {
       try {
-        const page = await loadMyCoursesPage(userId, 0, MY_COURSES_PAGE_SIZE);
-        if (!active) return;
+        const page = await loadMyCoursesPage(0, MY_COURSES_PAGE_SIZE);
+        if (myGenerationRef.current !== generation) return;
         setMyDbCourses(page.courses);
         setCourseLikeCounts(page.likeCounts);
         setCourseMeta(page.meta);
         setCourseHashtags(page.hashtags);
+        setCourseRatings(page.ratings);
         setMyHasMore(page.hasMore);
       } catch (e) {
-        if (active) setMyCoursesError(e instanceof Error ? e.message : String(e));
+        if (myGenerationRef.current !== generation) return;
+        setMyCoursesError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (myGenerationRef.current === generation) setMyCoursesLoading(false);
       }
     })();
-    return () => {
-      active = false;
-    };
-  }, [userId, loadMyCoursesPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, myFilterKey]);
 
   const loadMoreMyCourses = useCallback(async () => {
-    if (!userId || myCoursesLoadingMore || !myHasMore) return;
+    if (!userId || myCoursesLoading || myCoursesLoadingMore || !myHasMore) return;
+    if (myLoadingMoreInFlightRef.current) return;
+    myLoadingMoreInFlightRef.current = true;
+    const generation = myGenerationRef.current;
+    const offset = myDbCourses.length;
     setMyCoursesLoadingMore(true);
     try {
-      const page = await loadMyCoursesPage(userId, myDbCourses.length, MY_COURSES_PAGE_SIZE);
-      setMyDbCourses((prev) => [...prev, ...page.courses]);
+      const page = await loadMyCoursesPage(offset, MY_COURSES_PAGE_SIZE);
+      if (myGenerationRef.current !== generation) return;
+      // 방어적 중복 제거 — 레이스로 같은 페이지가 두 번 붙는 경우에도 React key 중복이 나지 않게.
+      setMyDbCourses((prev) => {
+        const existingIds = new Set(prev.map((c) => c.course_id));
+        return [...prev, ...page.courses.filter((c) => !existingIds.has(c.course_id))];
+      });
       setCourseLikeCounts((prev) => ({ ...prev, ...page.likeCounts }));
       setCourseMeta((prev) => ({ ...prev, ...page.meta }));
       setCourseHashtags((prev) => ({ ...prev, ...page.hashtags }));
+      setCourseRatings((prev) => ({ ...prev, ...page.ratings }));
       setMyHasMore(page.hasMore);
     } catch (e) {
+      if (myGenerationRef.current !== generation) return;
       setMyCoursesError(e instanceof Error ? e.message : String(e));
     } finally {
-      setMyCoursesLoadingMore(false);
+      myLoadingMoreInFlightRef.current = false;
+      if (myGenerationRef.current === generation) setMyCoursesLoadingMore(false);
     }
-  }, [userId, myCoursesLoadingMore, myHasMore, myDbCourses.length, loadMyCoursesPage]);
+  }, [
+    userId,
+    myCoursesLoading,
+    myCoursesLoadingMore,
+    myHasMore,
+    myDbCourses.length,
+    loadMyCoursesPage
+  ]);
 
   // 무한 스크롤 — 목록 하단 sentinel 이 보이면 자동으로 다음 페이지 로드.
   // sentinel 은 탭 전환(activeTab)·hasMore 변화에 따라 DOM 에 붙었다 떨어졌다 하므로,
@@ -611,21 +631,8 @@ export default function Course() {
   // 필터 패널에서 만지는 건 "초안(draft)" — 검색 버튼을 눌러야 실제 조회에 쓰이는 sharedFilters
   // 로 반영된다(선택할 때마다 바로 검색되지 않도록).
   const [sharedFilterDraft, setSharedFilterDraft] = useState<Filters>(sharedFilters);
-  // 공유 코스 필터의 위치(구/동) 선택지 — tb_place.ldongsigngucd 는 이름이 아니라 코드로
-  // 저장돼 있어서, 필터 UI(이름 기준)와 서버 조회(코드 기준) 사이를 변환해줘야 한다.
-  const [sharedAreaCodes, setSharedAreaCodes] = useState<{ code: string; name: string }[]>([]);
-  useEffect(() => {
-    let active = true;
-    fetch("/api/area-code")
-      .then((r) => r.json())
-      .then((data) => {
-        if (active) setSharedAreaCodes(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+  // 정렬은 필터와 달리 고르는 즉시 바로 반영된다(검색 버튼 없이).
+  const [sharedSort, setSharedSort] = useState<CourseSort>(DEFAULT_COURSE_SORT);
   // 조회에 실제로 쓰이는 건 "적용된" 필터(sharedFilters) 기준 코드.
   const sharedGuCode = sharedAreaCodes.find((a) => a.name === sharedFilters.gu)?.code ?? "";
   // 반면 동 선택지는 필터 패널에서 "구"를 고르는 즉시(검색 누르기 전이라도) 바뀌어야 하므로
@@ -663,7 +670,9 @@ export default function Course() {
     dong: sharedFilters.dong,
     headcount: sharedFilters.headcount,
     dateFrom: sharedFilters.dateFrom,
-    dateTo: sharedFilters.dateTo
+    dateTo: sharedFilters.dateTo,
+    minRating: sharedFilters.minRating,
+    sort: sharedSort
   });
 
   // 공유 코스 — tb_course.open_yn='Y' 를 필터 조건에 맞춰 DB에서 페이지 단위로 조회
@@ -679,9 +688,15 @@ export default function Course() {
   // 초기 조회가 stale 로 판정돼 응답이 통째로 버려지고 로딩 플래그도 못 내려 스피너가 고착된다.
   // 응답 도착 시 자기 세대가 아직 유효한지 확인한 뒤에만 상태를 반영한다.
   const sharedGenerationRef = useRef(0);
+  // sentinel 의 IntersectionObserver 콜백과 "뒤로가기 복원" 효과가 거의 동시에 loadMore 를
+  // 부를 수 있는데, 그 간격이 setState 커밋보다 짧으면 sharedCoursesLoadingMore 상태값이 아직
+  // 갱신 전이라 가드를 통과해 같은 offset 으로 중복 요청 → 같은 코스가 두 번 붙어 React key 중복
+  // 경고가 난다. ref 는 동기적으로 즉시 반영되므로 이 레이스를 막는다.
+  const sharedLoadingMoreInFlightRef = useRef(false);
 
   useEffect(() => {
     const generation = ++sharedGenerationRef.current;
+    sharedLoadingMoreInFlightRef.current = false;
     setSharedCoursesLoading(true);
     // 진행 중이던 "더보기"는 이 세대에서 무효 — 응답이 와도 stale 가드에 걸려 finally 가
     // 스킵되므로 여기서 미리 꺼두지 않으면 더보기 스피너가 켜진 채 남는다.
@@ -696,7 +711,9 @@ export default function Course() {
           dong: sharedFilters.dong,
           headcount: sharedFilters.headcount,
           dateFrom: sharedFilters.dateFrom,
-          dateTo: sharedFilters.dateTo
+          dateTo: sharedFilters.dateTo,
+          minRating: sharedFilters.minRating,
+          sort: sharedSort
         });
         if (sharedGenerationRef.current !== generation) return;
         setSharedDbCourses(items);
@@ -715,30 +732,36 @@ export default function Course() {
     // 초기 조회(필터 변경 등)가 진행 중이면 더보기는 건너뛴다 — 목록이 스피너로 바뀌며 페이지가
     // 짧아진 순간 sentinel 이 뷰포트에 들어와 발화하는 것을 막는다.
     if (sharedCoursesLoading || sharedCoursesLoadingMore || !sharedHasMore) return;
+    if (sharedLoadingMoreInFlightRef.current) return;
+    sharedLoadingMoreInFlightRef.current = true;
     const generation = sharedGenerationRef.current; // 세대를 올리지 않고 현재 세대에 속한다
+    const offset = sharedDbCourses.length;
     setSharedCoursesLoadingMore(true);
     try {
-      const { items, hasMore } = await fetchSharedCourses(
-        sharedDbCourses.length,
-        SHARED_PAGE_SIZE,
-        {
-          accessibility: sharedFilters.accessibility,
-          themes: sharedFilters.themes,
-          favoritesOnly: sharedFilters.favoritesOnly,
-          gu: sharedGuCode,
-          dong: sharedFilters.dong,
-          headcount: sharedFilters.headcount,
-          dateFrom: sharedFilters.dateFrom,
-          dateTo: sharedFilters.dateTo
-        }
-      );
+      const { items, hasMore } = await fetchSharedCourses(offset, SHARED_PAGE_SIZE, {
+        accessibility: sharedFilters.accessibility,
+        themes: sharedFilters.themes,
+        favoritesOnly: sharedFilters.favoritesOnly,
+        gu: sharedGuCode,
+        dong: sharedFilters.dong,
+        headcount: sharedFilters.headcount,
+        dateFrom: sharedFilters.dateFrom,
+        dateTo: sharedFilters.dateTo,
+        minRating: sharedFilters.minRating,
+        sort: sharedSort
+      });
       if (sharedGenerationRef.current !== generation) return;
-      setSharedDbCourses((prev) => [...prev, ...items]);
+      // 방어적 중복 제거 — 레이스로 같은 페이지가 두 번 붙는 경우에도 React key 중복이 나지 않게.
+      setSharedDbCourses((prev) => {
+        const existingIds = new Set(prev.map((c) => c.course_id));
+        return [...prev, ...items.filter((c) => !existingIds.has(c.course_id))];
+      });
       setSharedHasMore(hasMore);
     } catch (e) {
       if (sharedGenerationRef.current !== generation) return;
       setSharedCoursesError(e instanceof Error ? e.message : String(e));
     } finally {
+      sharedLoadingMoreInFlightRef.current = false;
       if (sharedGenerationRef.current === generation) setSharedCoursesLoadingMore(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -897,6 +920,7 @@ export default function Course() {
     if (id) return;
     if (!pendingRestore || pendingRestore.tab !== activeTab) return;
     if (pendingRestore.tab === "shared" && sharedCoursesLoading) return;
+    if (pendingRestore.tab === "my" && myCoursesLoading) return;
 
     const el = document.querySelector(`[data-course-id="${pendingRestore.courseId}"]`);
     if (el) {
@@ -920,6 +944,7 @@ export default function Course() {
     pendingRestore,
     activeTab,
     sharedCoursesLoading,
+    myCoursesLoading,
     sharedDbCourses,
     myDbCourses,
     sharedHasMore,
@@ -958,9 +983,36 @@ export default function Course() {
     sharedFilters.minRating > 0,
     sharedFilters.favoritesOnly
   ].filter(Boolean).length;
-  // 접근성/테마/즐겨찾기는 서버에서 이미 필터링해 내려온다 — 여기선 아직 서버 반영 전인
-  // 별점만 클라이언트에서 처리한다. 코스 단위 별점 데이터가 아직 없어 켜지면 결과 없음으로 처리.
-  const filteredShared = sharedFilters.minRating > 0 ? [] : sharedDbCourses;
+  // 접근성/테마/위치/인원/일정/별점/즐겨찾기 모두 서버에서 이미 필터링해 내려온다.
+  const filteredShared = sharedDbCourses;
+
+  // 내 코스 helpers — 공유 코스와 동일한 패턴.
+  const setMy = <K extends keyof Filters>(key: K, val: Filters[K]) =>
+    setMyFilterDraft((prev) => ({ ...prev, [key]: val }));
+  const toggleMyList = (key: "themes" | "accessibility", item: string) =>
+    setMyFilterDraft((prev) => {
+      const list = prev[key] as string[];
+      return {
+        ...prev,
+        [key]: list.includes(item) ? list.filter((x) => x !== item) : [...list, item]
+      };
+    });
+  const applyMyFilters = () => {
+    setMyFilters(myFilterDraft);
+  };
+  const resetMy = () => {
+    setMyFilterDraft(DEFAULT_FILTERS);
+    setMyFilters(DEFAULT_FILTERS);
+  };
+  const myFilterCount = [
+    myFilters.accessibility.length > 0,
+    myFilters.gu,
+    myFilters.themes.length > 0,
+    myFilters.headcount > 1,
+    myFilters.dateFrom || myFilters.dateTo,
+    myFilters.minRating > 0,
+    myFilters.favoritesOnly
+  ].filter(Boolean).length;
 
   // 추천 코스 helpers
   const set = <K extends keyof Filters>(key: K, val: Filters[K]) =>
@@ -1013,38 +1065,55 @@ export default function Course() {
       {/* Shared Courses Tab */}
       {activeTab === "shared" && (
         <div className="space-y-4">
-          {/* 필터 토글 헤더 */}
-          <div className="flex items-center overflow-hidden rounded-xl border border-gray-200 bg-white">
-            <button
-              onClick={() => {
-                // 열 때는 draft 를 현재 적용된 값으로 다시 맞춰서, 이전에 검색 없이 만지다 만
-                // 값이 남아있지 않게 한다.
-                if (!showSharedFilters) setSharedFilterDraft(sharedFilters);
-                setShowSharedFilters(!showSharedFilters);
-              }}
-              className="flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="h-4 w-4 text-gray-500" />
-                <span>필터</span>
-                {sharedFilterCount > 0 && (
-                  <span className="bg-brand-600 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white">
-                    {sharedFilterCount}
-                  </span>
-                )}
-              </div>
-              <ChevronDown
-                className={`h-4 w-4 text-gray-400 transition-transform ${showSharedFilters ? "rotate-180" : ""}`}
-              />
-            </button>
-            {sharedFilterCount > 0 && (
+          {/* 필터 토글 헤더 + 정렬 */}
+          <div className="flex items-center gap-2">
+            <div className="flex flex-1 items-center overflow-hidden rounded-xl border border-gray-200 bg-white">
               <button
-                onClick={resetShared}
-                className="shrink-0 border-l border-gray-200 px-3 py-2.5 text-xs text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                onClick={() => {
+                  // 열 때는 draft 를 현재 적용된 값으로 다시 맞춰서, 이전에 검색 없이 만지다 만
+                  // 값이 남아있지 않게 한다.
+                  if (!showSharedFilters) setSharedFilterDraft(sharedFilters);
+                  setShowSharedFilters(!showSharedFilters);
+                }}
+                className="flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors outline-none hover:bg-gray-50 focus:outline-none focus-visible:outline-none"
               >
-                초기화
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="h-4 w-4 text-gray-500" />
+                  <span>필터</span>
+                  {sharedFilterCount > 0 && (
+                    <span className="bg-brand-600 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white">
+                      {sharedFilterCount}
+                    </span>
+                  )}
+                </div>
+                <ChevronDown
+                  className={`h-4 w-4 text-gray-400 transition-transform ${showSharedFilters ? "rotate-180" : ""}`}
+                />
               </button>
-            )}
+              {sharedFilterCount > 0 && (
+                <button
+                  onClick={resetShared}
+                  className="shrink-0 border-l border-gray-200 px-3 py-2.5 text-xs text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+            <div className="relative shrink-0">
+              <select
+                value={sharedSort}
+                onChange={(e) => setSharedSort(e.target.value as CourseSort)}
+                aria-label="정렬 기준"
+                className="appearance-none rounded-xl border border-gray-200 bg-white py-2.5 pr-9 pl-3 text-sm font-semibold text-gray-700 outline-none"
+              >
+                {COURSE_SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute top-1/2 right-4 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            </div>
           </div>
 
           {/* 필터 패널 */}
@@ -1106,7 +1175,7 @@ export default function Course() {
                       <div className="flex shrink-0 items-center gap-3">
                         <div className="flex items-center gap-1 text-sm">
                           <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                          <span className="text-gray-700">0</span>
+                          <span className="text-gray-700">{course.average_rating.toFixed(1)}</span>
                         </div>
                         <div className="flex items-center gap-1 text-sm text-gray-400">
                           <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" />
@@ -1360,88 +1429,187 @@ export default function Course() {
               로그인하면 내가 만든 코스를 볼 수 있어요
             </p>
           )}
+
+          {user && (
+            <>
+              {/* 필터 토글 헤더 + 정렬 — 공유 코스와 동일한 필터, 내 코스만 대상으로 적용 */}
+              <div className="flex items-center gap-2">
+                <div className="flex flex-1 items-center overflow-hidden rounded-xl border border-gray-200 bg-white">
+                  <button
+                    onClick={() => {
+                      if (!showMyFilters) setMyFilterDraft(myFilters);
+                      setShowMyFilters(!showMyFilters);
+                    }}
+                    className="flex flex-1 items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors outline-none hover:bg-gray-50 focus:outline-none focus-visible:outline-none"
+                  >
+                    <div className="flex items-center gap-2">
+                      <SlidersHorizontal className="h-4 w-4 text-gray-500" />
+                      <span>필터</span>
+                      {myFilterCount > 0 && (
+                        <span className="bg-brand-600 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white">
+                          {myFilterCount}
+                        </span>
+                      )}
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 text-gray-400 transition-transform ${showMyFilters ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                  {myFilterCount > 0 && (
+                    <button
+                      onClick={resetMy}
+                      className="shrink-0 border-l border-gray-200 px-3 py-2.5 text-xs text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                    >
+                      초기화
+                    </button>
+                  )}
+                </div>
+                <div className="relative shrink-0">
+                  <select
+                    value={mySort}
+                    onChange={(e) => setMySort(e.target.value as CourseSort)}
+                    aria-label="정렬 기준"
+                    className="appearance-none rounded-xl border border-gray-200 bg-white py-2.5 pr-9 pl-3 text-sm font-semibold text-gray-700 outline-none"
+                  >
+                    {COURSE_SORT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute top-1/2 right-4 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                </div>
+              </div>
+
+              {showMyFilters && (
+                <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
+                  <FilterFields
+                    filters={myFilterDraft}
+                    set={setMy}
+                    toggleList={toggleMyList}
+                    guOptions={sharedAreaCodes.map((a) => a.name)}
+                    dongOptions={myDongOptions}
+                  />
+                  <button
+                    onClick={applyMyFilters}
+                    className="bg-brand-600 hover:bg-brand-700 w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-colors"
+                  >
+                    검색
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
           {user && myCoursesError && (
             <p className="text-sm text-red-500">목록 조회 실패: {myCoursesError}</p>
           )}
-          {user && !myCoursesError && myDbCourses.length > 0 && (
+          {user && !myCoursesError && !myCoursesLoading && myDbCourses.length > 0 && (
             <p className="text-sm text-gray-500">
               <span className="font-semibold text-gray-800">{myDbCourses.length}개</span>의 코스
+              {myFilterCount > 0 && "를 찾았어요"}
             </p>
           )}
-          {user && !myCoursesError && myDbCourses.length === 0 && (
-            <p className="text-stone py-8 text-center text-sm">아직 만든 코스가 없어요</p>
+          {user && myCoursesLoading && (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-400">
+              <span className="border-brand-500 h-4 w-4 animate-spin rounded-full border-2 border-gray-200 border-t-transparent" />
+              불러오는 중...
+            </div>
+          )}
+          {user && !myCoursesError && !myCoursesLoading && myDbCourses.length === 0 && (
+            <div className="py-12 text-center text-gray-400">
+              {myFilterCount > 0 ? (
+                <>
+                  <X className="mx-auto mb-2 h-10 w-10 opacity-30" />
+                  <p className="text-sm">조건에 맞는 코스가 없어요</p>
+                  <button
+                    onClick={resetMy}
+                    className="text-brand-600 hover:text-brand-700 mt-2 text-sm underline underline-offset-2"
+                  >
+                    필터 초기화
+                  </button>
+                </>
+              ) : (
+                <p className="text-sm">아직 만든 코스가 없어요</p>
+              )}
+            </div>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {myDbCourses.map((course) => (
-              <Card key={course.course_id} asChild variant="interactive">
-                <Link
-                  href={`/course/${course.course_id}`}
-                  data-course-id={course.course_id}
-                  onClick={() => saveCourseListReturn("my", course.course_id)}
-                  className="block"
-                >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <h3 className="text-ink truncate font-semibold">{course.course_nm}</h3>
-                      <Badge tone={course.open_yn === "N" ? "neutral" : "brand"} shape="tag">
-                        {course.open_yn === "N" ? "비공개" : "공개"}
-                      </Badge>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <div className="flex items-center gap-1 text-sm">
-                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                        <span className="text-gray-700">0</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-sm text-gray-400">
-                        <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" />
-                        <span>{courseLikeCounts[course.course_id] ?? 0}</span>
-                      </div>
-                      <button
-                        onClick={(e) => handleDeleteCourse(e, course.course_id)}
-                        disabled={deletingCourseId === course.course_id}
-                        className="rounded-lg p-1 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-60"
-                        aria-label="코스 삭제"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                  <CourseAuthorRow
-                    authorType={member?.role === "admin" ? "admin" : "user"}
-                    author={member?.nickname ?? "나"}
-                    badgeAfter
-                  />
-                  {(courseHashtags[course.course_id]?.length ?? 0) > 0 && (
-                    <div className="mb-2 flex flex-wrap gap-1.5">
-                      {courseHashtags[course.course_id].map((label) => (
-                        <Badge key={label} tone="brand" shape="pill">
-                          #{label}
+            {!myCoursesLoading &&
+              myDbCourses.map((course) => (
+                <Card key={course.course_id} asChild variant="interactive">
+                  <Link
+                    href={`/course/${course.course_id}`}
+                    data-course-id={course.course_id}
+                    onClick={() =>
+                      saveCourseListReturn("my", course.course_id, myFilters, showMyFilters)
+                    }
+                    className="block"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <h3 className="text-ink truncate font-semibold">{course.course_nm}</h3>
+                        <Badge tone={course.open_yn === "N" ? "neutral" : "brand"} shape="tag">
+                          {course.open_yn === "N" ? "비공개" : "공개"}
                         </Badge>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm text-gray-500">
-                    <div className="flex shrink-0 gap-2 whitespace-nowrap">
-                      {(course.startdate || course.enddate) && (
-                        <>
-                          <span className="text-steel">
-                            {course.startdate?.slice(0, 10) ?? ""}
-                            {" ~ "}
-                            {course.enddate?.slice(0, 10) ?? ""}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <div className="flex items-center gap-1 text-sm">
+                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                          <span className="text-gray-700">
+                            {(courseRatings[course.course_id] ?? 0).toFixed(1)}
                           </span>
-                          <span>•</span>
-                        </>
-                      )}
-                      <span>{courseMeta[course.course_id]?.places ?? 0}곳</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-sm text-gray-400">
+                          <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" />
+                          <span>{courseLikeCounts[course.course_id] ?? 0}</span>
+                        </div>
+                        <button
+                          onClick={(e) => handleDeleteCourse(e, course.course_id)}
+                          disabled={deletingCourseId === course.course_id}
+                          className="rounded-lg p-1 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-60"
+                          aria-label="코스 삭제"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-steel shrink-0 text-xs whitespace-nowrap">
-                      등록 {formatDotDate(course.registtime)}
-                      {course.updatetime && ` · 수정 ${formatDotDate(course.updatetime)}`}
-                    </span>
-                  </div>
-                </Link>
-              </Card>
-            ))}
+                    <CourseAuthorRow
+                      authorType={member?.role === "admin" ? "admin" : "user"}
+                      author={member?.nickname ?? "나"}
+                      badgeAfter
+                    />
+                    {(courseHashtags[course.course_id]?.length ?? 0) > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {courseHashtags[course.course_id].map((label) => (
+                          <Badge key={label} tone="brand" shape="pill">
+                            #{label}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm text-gray-500">
+                      <div className="flex shrink-0 gap-2 whitespace-nowrap">
+                        {(course.startdate || course.enddate) && (
+                          <>
+                            <span className="text-steel">
+                              {course.startdate?.slice(0, 10) ?? ""}
+                              {" ~ "}
+                              {course.enddate?.slice(0, 10) ?? ""}
+                            </span>
+                            <span>•</span>
+                          </>
+                        )}
+                        <span>{courseMeta[course.course_id]?.places ?? 0}곳</span>
+                      </div>
+                      <span className="text-steel shrink-0 text-xs whitespace-nowrap">
+                        등록 {formatDotDate(course.registtime)}
+                        {course.updatetime && ` · 수정 ${formatDotDate(course.updatetime)}`}
+                      </span>
+                    </div>
+                  </Link>
+                </Card>
+              ))}
           </div>
 
           {/* 무한 스크롤 sentinel — 화면에 보이면 자동으로 다음 페이지 로드 */}
@@ -1567,9 +1735,20 @@ function CourseDetail({ id }: { id: string }) {
 
         // 코스 배지 — 코스에 포함된(중복 없는) 장소들의 대분류(lclssystm1)와 접근성 요약플래그를
         // 종합해서 개수를 세고, 가장 많은 3개만 배지로 보여준다.
+        // 빵지순례(BK)는 lclssystm1엔 안 남는 자체 판정 테마라, getBakeryPlaceIds() 를 쓰는
+        // /api/theme/bakery-place-ids 를 거쳐 따로 받아와야 한다(그 함수는 server-only 모듈이라
+        // 클라이언트 컴포넌트에서 직접 못 부른다).
+        const BAKERY_THEME_CODE = "BK";
+        const bakeryPlaceIdSet = new Set<number>(
+          await fetch("/api/theme/bakery-place-ids")
+            .then((r) => r.json())
+            .then((d: { placeIds?: number[] }) => d.placeIds ?? [])
+            .catch(() => [])
+        );
         const themeCodes = [...new Set([...placesById.values()].map((p) => p.lclssystm1))].filter(
           (v): v is string => v != null
         );
+        if (placeIds.some((pid) => bakeryPlaceIdSet.has(pid))) themeCodes.push(BAKERY_THEME_CODE);
         const themeLabelByCode = new Map<string, string>();
         if (themeCodes.length > 0) {
           const { data: codeRows, error: codeErr } = await supabase
@@ -1606,8 +1785,9 @@ function CourseDetail({ id }: { id: string }) {
           if (!label) return;
           badgeCounts.set(label, (badgeCounts.get(label) ?? 0) + 1);
         };
-        for (const p of placesById.values()) {
+        for (const [pid, p] of placesById.entries()) {
           if (p.lclssystm1) bumpBadge(themeLabelByCode.get(p.lclssystm1));
+          if (bakeryPlaceIdSet.has(pid)) bumpBadge(themeLabelByCode.get(BAKERY_THEME_CODE));
           const contentId = p.contentid != null && p.contentid !== "" ? Number(p.contentid) : null;
           const flags = contentId != null ? bfFlagsByContentId.get(contentId) : undefined;
           if (flags?.has_blind) bumpBadge("시각장애");
@@ -1637,7 +1817,8 @@ function CourseDetail({ id }: { id: string }) {
             contentId:
               place?.contentid != null && place.contentid !== ""
                 ? Number(place.contentid)
-                : undefined
+                : undefined,
+            categoryCode: place?.lclssystm1 ?? null
           });
           dayMap.set(r.day, list);
         }
@@ -1648,13 +1829,30 @@ function CourseDetail({ id }: { id: string }) {
                 .map(([day, places]) => ({ day, places }))
             : [{ day: 1, places: [] }];
 
+        // 코스 별점 — 후기 게시판(board_id=1)의 course_rating 평균. 후기가 없으면 0.0.
+        const { data: ratingRows, error: ratingErr } = await supabase
+          .from("tb_post")
+          .select("course_rating")
+          .eq("course_id", numId)
+          .eq("board_id", 1)
+          .eq("use_yn", true)
+          .not("course_rating", "is", null);
+        if (ratingErr) throw ratingErr;
+        const ratedRows = (ratingRows ?? []) as { course_rating: number }[];
+        const averageRating =
+          ratedRows.length > 0
+            ? Math.round(
+                (ratedRows.reduce((sum, r) => sum + r.course_rating, 0) / ratedRows.length) * 10
+              ) / 10
+            : 0;
+
         if (!active()) return;
         setDbCourse({
           id: courseRow.course_id,
           title: courseRow.course_nm,
           duration: days.length > 1 ? `${days.length}일` : "반일",
           isPrivate: courseRow.open_yn !== "Y",
-          rating: 0,
+          rating: averageRating,
           likes: 0,
           tags: [],
           days,
@@ -1721,7 +1919,8 @@ function CourseDetail({ id }: { id: string }) {
           placeId: place.placeId,
           lat: place.lat,
           lng: place.lng,
-          contentId: place.contentId
+          contentId: place.contentId,
+          categoryCode: place.categoryCode
         }))
       }))
     });
@@ -1805,6 +2004,55 @@ function CourseDetail({ id }: { id: string }) {
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   };
+
+  // 모바일에선 바텀시트가 화면 하단 mobileSheetHeight%를 덮어서, 지도 초기 위치를 맞출 때
+  // 그만큼을 가려진 영역으로 쳐줘야 경로가 시트 위(보이는 영역)에 들어온다. 데스크톱(md 이상)은
+  // 시트가 옆 사이드바라 지도를 안 가리므로 0.
+  const [mapBottomOverlayPx, setMapBottomOverlayPx] = useState(0);
+  // 지도 확대/축소·위치를 초기 상태로 되돌리는 버튼용 — 값을 바꿀 때마다 fitPathKey 가 달라져서
+  // (다른 조건이 그대로여도) 강제로 다시 fit 되게 한다.
+  const [mapResetNonce, setMapResetNonce] = useState(0);
+  // 지도 오른쪽 하단 "기능 목록" 드롭다운 — 지도 초기화/테마 색상 범례/내 위치.
+  const [mapMenuOpen, setMapMenuOpen] = useState(false);
+  const mapMenuRef = useRef<HTMLDivElement>(null);
+  // 예전엔 전체 화면을 덮는 배경 버튼으로 바깥 클릭을 감지했는데, 그 배경이 지도 위 마우스휠/
+  // 터치 이벤트까지 가로채서 드롭다운이 열려 있는 동안 지도 확대/축소가 안 됐다. document 클릭을
+  // 직접 듣고 메뉴 영역 바깥인지만 판정하면 지도 위에 아무 오버레이도 없어 확대/축소가 그대로 된다.
+  useEffect(() => {
+    if (!mapMenuOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (mapMenuRef.current && !mapMenuRef.current.contains(e.target as Node)) {
+        setMapMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [mapMenuOpen]);
+  const [showThemeLegend, setShowThemeLegend] = useState(false);
+  const [showZoomControl, setShowZoomControl] = useState(true);
+  const {
+    location: myLocation,
+    status: myLocationStatus,
+    errorReason: myLocationError,
+    start: startMyLocation,
+    reset: resetMyLocation,
+    focusTrigger: focusMyLocationTrigger
+  } = useMyLocation();
+  // 지도 영역 자체의 높이를 재야 한다 — window.innerHeight 로 계산하면 헤더 등 지도 위쪽 UI
+  // 만큼 실제 지도 컨테이너보다 커서, 시트가 차지하는 비율(%)을 곱했을 때 실제 시트 높이보다
+  // 과대 추정된다(버튼을 시트 바로 위가 아니라 그보다 훨씬 위에 띄우는 원인이었음).
+  const mapAreaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const updateOverlay = () => {
+      const isMobile = window.innerWidth < 768; // Tailwind md 기준
+      const containerHeight = mapAreaRef.current?.clientHeight ?? window.innerHeight;
+      setMapBottomOverlayPx(isMobile ? Math.round(containerHeight * (mobileSheetHeight / 100)) : 0);
+    };
+    updateOverlay();
+    window.addEventListener("resize", updateOverlay);
+    return () => window.removeEventListener("resize", updateOverlay);
+  }, [mobileSheetHeight]);
+
   const [editTitle, setEditTitle] = useState(baseCourseData.title);
   const [editIsPrivate, setEditIsPrivate] = useState(baseCourseData.isPrivate);
   const [editStartDate, setEditStartDate] = useState(baseCourseData.startDate ?? "");
@@ -1827,6 +2075,19 @@ function CourseDetail({ id }: { id: string }) {
   const [favorited, setFavorited] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [favoriteNotice, setFavoriteNotice] = useState("");
+
+  useEffect(() => {
+    if (myLocationStatus !== "error") return;
+    const message =
+      myLocationError === "denied"
+        ? "위치 접근 권한이 꺼져 있어요"
+        : myLocationError === "outside_daejeon"
+          ? "대전 지역 밖에서는 내 위치를 표시할 수 없어요"
+          : "내 위치를 확인하지 못했어요";
+    setFavoriteNotice(message);
+    setTimeout(() => setFavoriteNotice(""), 2000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myLocationStatus, myLocationError]);
 
   useEffect(() => {
     if (isNew || !user || Number.isNaN(numId)) {
@@ -2015,7 +2276,9 @@ function CourseDetail({ id }: { id: string }) {
               lng: sp.lng,
               // sp.id 는 DB 출처일 때만 contentid(숫자 문자열)다 — /api/tourism/detail 조회용.
               contentId:
-                sp.source === "db" && !Number.isNaN(Number(sp.id)) ? Number(sp.id) : undefined
+                sp.source === "db" && !Number.isNaN(Number(sp.id)) ? Number(sp.id) : undefined,
+              // 지금 상세 패널에 열려있는 장소의 테마 코드 — 노드/순서아이콘 색이 바로 반영되게.
+              categoryCode: ps.tourismDetail?.categoryCode ?? null
             }
           ]
         };
@@ -2167,6 +2430,8 @@ function CourseDetail({ id }: { id: string }) {
   // KakaoMap 마커·경로선 — 특정 Day 만이 아니라 "모든 일정"을 Day 순서 → 각 Day 내 장소 순서로
   // 이어서 한 번에 보여준다(Day1 마지막 장소 → Day2 첫 장소 순으로 연결).
   // 좌표(p.lat/lng)가 있는 항목(장소 검색으로 추가된 실제 장소)만 지도에 표시한다.
+  // 색은 "지금 보고 있는 Day"에만 쓴다 — 그 Day 노드는 테마색 + 원래 크기, 경로선은 원래 초록.
+  // 다른 Day는 노드·선 전부 회색 + 노드 크기도 살짝 작게 줄여서 덜 눈에 띄게 한다.
   type MarkerSource = {
     kind: "real";
     item: CoursePlace;
@@ -2176,15 +2441,16 @@ function CourseDetail({ id }: { id: string }) {
     color: string;
     day: number;
     orderInDay: number;
+    isActiveDay: boolean;
   };
+
+  const INACTIVE_DAY_COLOR = "#9ca3af";
+  const ACTIVE_DAY_LINE_COLOR = "#16a34a";
 
   const markerSources: MarkerSource[] = [];
   const sortedDays = [...courseData.days].sort((a, b) => a.day - b.day);
-  // Day 탭 배지도 이 색으로 맞춰서, 지도의 경로선 색 = 패널의 Day 배지 색이 되게 한다.
-  const dayColorByDay = new Map<number, string>();
-  sortedDays.forEach((d, dayIdx) => {
-    const dayColor = DAY_LINE_COLORS[dayIdx % DAY_LINE_COLORS.length];
-    dayColorByDay.set(d.day, dayColor);
+  sortedDays.forEach((d) => {
+    const isActiveDay = d.day === activeDay;
     let orderInDay = 0;
     for (const p of d.places) {
       if (p.lat == null || p.lng == null) continue;
@@ -2193,47 +2459,54 @@ function CourseDetail({ id }: { id: string }) {
         markerId: `real:${d.day}:${p.id}`,
         lat: p.lat,
         lng: p.lng,
-        color: dayColor,
+        color: isActiveDay ? getCategoryColor(p.categoryCode) : INACTIVE_DAY_COLOR,
         kind: "real",
         item: p,
         day: d.day,
-        orderInDay
+        orderInDay,
+        isActiveDay
       });
     }
   });
 
-  // 마커에 Day 색상 + "그 Day 안에서 몇 번째 장소인지" 번호를 같이 표시해서, 지도만 보고도
-  // 일정별 방문 순서를 바로 알 수 있게 한다.
+  // 지금 보는 Day의 마커는 장소 테마별 색 + 원래 크기, 다른 Day는 회색 + 살짝 작게.
+  // 방문 순서 번호는 두 경우 다 표시한다.
   const mapMarkers: MapMarker[] = markerSources.map((m) => ({
     id: m.markerId,
     lat: m.lat,
     lng: m.lng,
     color: m.color,
-    label: String(m.orderInDay)
+    label: String(m.orderInDay),
+    size: m.isActiveDay ? "md" : "sm",
+    // 회색(다른 Day) 노드와 겹칠 때 색 있는(지금 보는 Day) 노드가 항상 위로 오게 한다.
+    zIndex: m.isActiveDay ? 4 : 2
   }));
 
-  // 경로선 — Day 별로 색을 다르게 준다. 같은 Day 안의 장소끼리는 그 Day 색의 실선으로 잇고,
-  // Day 가 바뀌는 경계(Day1 마지막 장소 → Day2 첫 장소)는 별도 회색 점선으로 표시한다.
-  // 색은 markerSources 에 이미 정해둔 걸 그대로 써서, 마커 색과 절대 어긋나지 않게 한다.
+  // 경로선 — 지금 보는 Day만 원래 초록색 실선, 나머지 Day는 회색 실선으로 죽여둔다.
+  // Day 가 바뀌는 경계(Day1 마지막 장소 → Day2 첫 장소)는 항상 옅은 회색 점선.
+  // 어느 Day의 선을 클릭해도 그 Day로 전환되니, 회색 선을 눌러서 바로 확인할 수 있다.
   const coursePath: MapPathSegment[] = [];
   let prevDayLastPoint: { lat: number; lng: number } | null = null;
   for (const d of sortedDays) {
     const dayMarkers = markerSources.filter((m) => m.day === d.day);
     if (dayMarkers.length === 0) continue;
     const dayPoints = dayMarkers.map((m) => ({ lat: m.lat, lng: m.lng }));
+    const isActiveDay = d.day === activeDay;
 
     if (prevDayLastPoint) {
       coursePath.push({
         points: [prevDayLastPoint, dayPoints[0]],
-        color: "#9ca3af",
+        color: "#d1d5db",
         dashed: true
       });
     }
     coursePath.push({
       points: dayPoints,
-      color: dayMarkers[0].color,
+      color: isActiveDay ? ACTIVE_DAY_LINE_COLOR : INACTIVE_DAY_COLOR,
       label: `Day ${d.day}`,
-      day: d.day
+      day: d.day,
+      // 회색(다른 Day) 선과 겹칠 때 색 있는(지금 보는 Day) 선이 항상 위로 오게 한다.
+      zIndex: isActiveDay ? 3 : 2
     });
 
     prevDayLastPoint = dayPoints[dayPoints.length - 1];
@@ -2574,45 +2847,14 @@ function CourseDetail({ id }: { id: string }) {
         ) : isEditing ? (
           /* ── 편집 패널 ── */
           <>
-            {/* Edit header — 타이틀 + 취소·초기화·저장 */}
-            <div className="border-hairline-soft bg-gold-50 shrink-0 space-y-2 border-b px-3 py-2.5">
-              <p className="text-gold-700 text-sm font-bold">{isNew ? "코스 추가" : "코스 편집"}</p>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCancel}
-                  disabled={saving}
-                  className="flex-1 gap-1 text-xs"
-                >
-                  <X className="h-3 w-3" />
-                  취소
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleReset}
-                  disabled={saving}
-                  className="flex-1 gap-1 text-xs hover:border-red-300 hover:bg-red-50 hover:text-red-500"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  초기화
-                </Button>
-                <Button
-                  variant="accent"
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex-1 gap-1 text-xs"
-                >
-                  <Check className="h-3 w-3" />
-                  {saving ? "저장 중..." : "저장"}
-                </Button>
-              </div>
-              {saveError && <p className="mt-2 text-xs text-red-500">저장 실패: {saveError}</p>}
+            {/* Edit header — 코스 상세 패널과 동일한 스타일(제목만, 버튼은 하단 Actions로) */}
+            <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2.5">
+              <h2 className="flex-1 truncate text-sm font-bold text-gray-800">
+                {isNew ? "코스 추가" : "코스 편집"}
+              </h2>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto pb-16 md:pb-0">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
               {/* Title edit */}
               <div className="border-hairline-soft border-b px-4 py-3">
                 <p className="text-steel mb-1.5 text-xs font-semibold">
@@ -2761,9 +3003,9 @@ function CourseDetail({ id }: { id: string }) {
                             )
                           }
                           aria-label="위로 이동"
-                          className="hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 rounded-md border border-gray-300 bg-white p-1 text-gray-600 shadow-sm transition-colors disabled:opacity-30 disabled:shadow-none disabled:hover:border-gray-300 disabled:hover:bg-white disabled:hover:text-gray-600"
+                          className="hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 rounded-md border border-gray-300 bg-white p-0.5 text-gray-600 shadow-sm transition-colors disabled:opacity-30 disabled:shadow-none disabled:hover:border-gray-300 disabled:hover:bg-white disabled:hover:text-gray-600"
                         >
-                          <ChevronUp className="h-4 w-4" />
+                          <ChevronUp className="h-3 w-3" />
                         </button>
                         <button
                           disabled={idx === arr.length - 1}
@@ -2778,15 +3020,15 @@ function CourseDetail({ id }: { id: string }) {
                             )
                           }
                           aria-label="아래로 이동"
-                          className="hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 rounded-md border border-gray-300 bg-white p-1 text-gray-600 shadow-sm transition-colors disabled:opacity-30 disabled:shadow-none disabled:hover:border-gray-300 disabled:hover:bg-white disabled:hover:text-gray-600"
+                          className="hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 rounded-md border border-gray-300 bg-white p-0.5 text-gray-600 shadow-sm transition-colors disabled:opacity-30 disabled:shadow-none disabled:hover:border-gray-300 disabled:hover:bg-white disabled:hover:text-gray-600"
                         >
-                          <ChevronDown className="h-4 w-4" />
+                          <ChevronDown className="h-3 w-3" />
                         </button>
                       </div>
                       {/* Number badge */}
                       <div
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                        style={{ background: "#16a34a" }}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                        style={{ background: getCategoryColor(place.categoryCode) }}
                       >
                         {idx + 1}
                       </div>
@@ -2858,6 +3100,39 @@ function CourseDetail({ id }: { id: string }) {
                 )}
               </div>
             </div>
+
+            {/* Actions — 코스 상세 패널의 Actions 바와 같은 위치·스타일로 하단에 고정. */}
+            {saveError && (
+              <p className="shrink-0 border-t border-gray-100 px-4 pt-2 text-xs text-red-500">
+                저장 실패: {saveError}
+              </p>
+            )}
+            <div className="mb-16 flex shrink-0 gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
+              <button
+                onClick={handleCancel}
+                disabled={saving}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-2 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60"
+              >
+                <X className="h-4 w-4" />
+                취소
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={saving}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-2 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-60"
+              >
+                <RotateCcw className="h-4 w-4" />
+                초기화
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="bg-brand-600 hover:bg-brand-700 flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+              >
+                <Check className="h-4 w-4" />
+                {saving ? "저장 중..." : "저장"}
+              </button>
+            </div>
           </>
         ) : (
           /* ── 보기 패널 ── */
@@ -2923,7 +3198,7 @@ function CourseDetail({ id }: { id: string }) {
                 </div>
               )}
 
-              {/* 별점 · 즐겨찾기(별점은 0점 고정 — 추후 실제 집계, 즐겨찾기는 tb_course_like 실집계) */}
+              {/* 별점 · 즐겨찾기(별점은 후기 게시판의 course_rating 평균, 즐겨찾기는 tb_course_like 실집계) */}
               {/* AI 추천 미리보기는 아직 저장 전이라 별점/즐겨찾기 개념이 없다 */}
               {!isNew && !isAiPreview && (
                 <div className="border-b border-gray-100 px-4 py-3">
@@ -2931,7 +3206,9 @@ function CourseDetail({ id }: { id: string }) {
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1" title="별점">
                       <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm font-semibold text-gray-800">0</span>
+                      <span className="text-sm font-semibold text-gray-800">
+                        {courseData.rating.toFixed(1)}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1 text-sm text-gray-600" title="즐겨찾기">
                       <Heart className="h-4 w-4 fill-red-400 text-red-400" />
@@ -2990,7 +3267,9 @@ function CourseDetail({ id }: { id: string }) {
                       <div className="mb-2 flex items-center gap-3 text-sm text-gray-600">
                         <div className="flex items-center gap-1">
                           <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                          <span className="font-semibold text-gray-800">{courseData.rating}</span>
+                          <span className="font-semibold text-gray-800">
+                            {courseData.rating.toFixed(1)}
+                          </span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Heart className="h-3.5 w-3.5" />
@@ -3010,30 +3289,24 @@ function CourseDetail({ id }: { id: string }) {
                     </div>
                   )}
 
-                  {/* Day tabs — 지도 경로선과 같은 Day 색을 배지에도 써서 서로 매칭되게 한다. */}
-                  <div className="flex shrink-0 flex-wrap gap-2 border-b border-gray-100 px-4 py-3">
-                    {courseData.days.map((day) => {
-                      const dayColor = dayColorByDay.get(day.day) ?? "#16a34a";
-                      const active = activeDay === day.day;
-                      return (
+                  {/* Day tabs — 코스 편집 폼의 "일정" 섹션과 라벨·버튼 스타일을 맞췄다. */}
+                  <div className="border-b border-gray-100 px-4 py-3">
+                    <p className="text-steel mb-1.5 text-xs font-semibold">일정</p>
+                    <div className="flex shrink-0 flex-wrap gap-1.5">
+                      {courseData.days.map((day) => (
                         <button
                           key={day.day}
                           onClick={() => setActiveDay(day.day)}
-                          className="rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors"
-                          style={
-                            active
-                              ? { background: dayColor, color: "white" }
-                              : {
-                                  border: `1.5px solid ${dayColor}`,
-                                  color: dayColor,
-                                  background: "white"
-                                }
-                          }
+                          className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+                            activeDay === day.day
+                              ? "bg-brand-600 text-white"
+                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          }`}
                         >
                           Day {day.day}
                         </button>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
 
                   {/* Place list */}
@@ -3048,7 +3321,7 @@ function CourseDetail({ id }: { id: string }) {
                       >
                         <div
                           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                          style={{ background: "#16a34a" }}
+                          style={{ background: getCategoryColor(place.categoryCode) }}
                         >
                           {index + 1}
                         </div>
@@ -3170,7 +3443,7 @@ function CourseDetail({ id }: { id: string }) {
                         clearDayGuide();
                         setIsEditing(true);
                       }}
-                      className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-2 py-2.5 text-sm font-semibold whitespace-nowrap text-white transition-colors hover:bg-amber-600"
+                      className="bg-brand-600 hover:bg-brand-700 flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-sm font-semibold whitespace-nowrap text-white transition-colors"
                     >
                       <Pencil className="h-4 w-4 shrink-0" />
                       코스 편집
@@ -3232,7 +3505,7 @@ function CourseDetail({ id }: { id: string }) {
       </aside>
 
       {/* ── MAP AREA ── (모바일 편집 시 지도는 그대로 보이고 편집 패널이 하단 시트로 뜸) */}
-      <div className="relative flex-1 overflow-hidden">
+      <div ref={mapAreaRef} className="relative flex-1 overflow-hidden">
         <KakaoMap
           markers={mapMarkers}
           selectedId={selectedMarkerId}
@@ -3246,10 +3519,16 @@ function CourseDetail({ id }: { id: string }) {
           }}
           path={dayGuidePath ?? coursePath}
           onPathClick={(day) => setActiveDay(day)}
+          // 안내 모드가 아니면 처음 코스를 볼 때도 경로 전체가 (바텀시트에 안 가려진 영역 안에)
+          // 보이도록 한 번 맞춘다 — 안 그러면 기본 지도 중심에서 시작해 경로가 시트에 가려지거나
+          // 화면 밖에 있을 수 있다. mapResetNonce 를 키에 포함해서, 다른 조건이 그대로여도
+          // "초기 상태로" 버튼을 누르면 강제로 다시 fit 되게 한다.
           fitPathKey={
             dayGuideMode && dayGuidePath && !dayGuideLoading
-              ? `${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}-${dayGuideSelectedRouteId}`
-              : null
+              ? `guide-${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}-${dayGuideSelectedRouteId}`
+              : mapMarkers.length > 0
+                ? `course-${id}-${mapMarkers.length}-${mapResetNonce}`
+                : null
           }
           pathSummary={
             dayGuideMode &&
@@ -3264,7 +3543,116 @@ function CourseDetail({ id }: { id: string }) {
                 }
               : null
           }
+          bottomOverlayPx={mapBottomOverlayPx}
+          myLocation={myLocation}
+          focusMyLocationTrigger={focusMyLocationTrigger}
+          showZoomControl={showZoomControl}
         />
+
+        {/* 테마 색상 범례 — 확대/축소 컨트롤(카카오 기본 줌 컨트롤, 데스크톱에서만 오른쪽 위에 뜸)이
+            켜져 있을 땐 윗변을 맞추고 바로 왼쪽에, 꺼져 있으면(모바일도 마찬가지) 오른쪽 끝에 붙인다. */}
+        {showThemeLegend && (
+          <div
+            className={`border-hairline absolute top-0.5 right-3 z-[55] rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "md:right-11" : ""}`}
+          >
+            <p className="text-steel mb-1.5 text-[11px] font-semibold">테마 색상</p>
+            <div className="space-y-1">
+              {Object.entries(LCLSSYSTM1_COLORS).map(([code, color]) => (
+                <div key={code} className="flex items-center gap-1.5 text-xs text-gray-700">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: color }}
+                  />
+                  {LCLSSYSTM1_LABELS[code] ?? code}
+                </div>
+              ))}
+              {/* 카카오 검색 결과 마커(장소 추가 검색 시)는 카카오 브랜드 옐로우(#FEE500)로 표시된다 */}
+              <div className="flex items-center gap-1.5 text-xs text-gray-700">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: "#FEE500" }}
+                />
+                카카오
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 지도 기능 드롭다운 — 지도 초기화 / 테마 색상 범례 / 내 위치.
+            모바일에선 코스 패널이 하단 시트로 뜨므로, 그 시트 바로 위에 버튼이 오도록
+            mapBottomOverlayPx(시트가 가리는 높이)만큼 띄운다. 데스크톱은 overlay가 0이라
+            기존 bottom-4(16px)와 동일하게 유지된다. */}
+        <div
+          ref={mapMenuRef}
+          className="absolute right-4 z-[61]"
+          style={{ bottom: mapBottomOverlayPx + 16 }}
+        >
+          {mapMenuOpen && (
+            <div className="border-hairline absolute right-0 bottom-14 w-32 overflow-hidden rounded-xl border bg-white py-1 shadow-lg">
+              <button
+                type="button"
+                onClick={() => {
+                  if (dayGuideMode) clearDayGuide();
+                  setSelectedSearchPlace(null);
+                  setMapResetNonce((n) => n + 1);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <RotateCcw className="h-4 w-4 shrink-0 text-gray-500" />
+                초기화
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (myLocationStatus === "active") resetMyLocation();
+                  else startMyLocation();
+                }}
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <span className="flex items-center gap-2">
+                  <LocateFixed
+                    className={`h-4 w-4 shrink-0 text-gray-500 ${myLocationStatus === "locating" ? "animate-pulse" : ""}`}
+                  />
+                  내 위치
+                </span>
+                {myLocationStatus === "active" && (
+                  <Check className="text-brand-600 h-4 w-4 shrink-0" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowZoomControl((v) => !v)}
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <span className="flex items-center gap-2">
+                  <ZoomIn className="h-4 w-4 shrink-0 text-gray-500" />
+                  확대/축소
+                </span>
+                {showZoomControl && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowThemeLegend((v) => !v)}
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <span className="flex items-center gap-2">
+                  <Palette className="h-4 w-4 shrink-0 text-gray-500" />
+                  테마 범례
+                </span>
+                {showThemeLegend && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setMapMenuOpen((v) => !v)}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-600 shadow-lg transition-colors hover:bg-gray-50"
+            aria-label="지도 기능 목록"
+            aria-expanded={mapMenuOpen}
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {favoriteNotice && (

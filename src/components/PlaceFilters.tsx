@@ -138,7 +138,7 @@ export function FilterFields({
         {/* 인원수 */}
         <div>
           <p className={`${xs} text-steel mb-1.5 font-semibold`}>인원수</p>
-          <div className="border-hairline flex w-fit items-center gap-1 rounded-lg border px-1.5 py-0.5">
+          <div className="border-hairline flex h-10 w-fit items-center gap-1 rounded-lg border px-1.5">
             <button
               onClick={() => set("headcount", Math.max(1, filters.headcount - 1))}
               className="hover:bg-surface rounded p-0.5"
@@ -176,7 +176,7 @@ export function FilterFields({
                   set("gu", e.target.value);
                   set("dong", "");
                 }}
-                className={`border-hairline w-full appearance-none rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 bg-white pr-6 focus:ring-2 focus:outline-none`}
+                className={`border-hairline h-10 w-full appearance-none rounded-lg border px-2 ${xs} focus:ring-brand-500 bg-white pr-6 focus:ring-2 focus:outline-none`}
               >
                 <option value="">구 전체</option>
                 {guOptions.map((d) => (
@@ -192,7 +192,7 @@ export function FilterFields({
                 value={filters.dong}
                 onChange={(e) => set("dong", e.target.value)}
                 disabled={!filters.gu || dongOptions.length === 0}
-                className={`border-hairline w-full appearance-none rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 bg-white pr-6 focus:ring-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50`}
+                className={`border-hairline h-10 w-full appearance-none rounded-lg border px-2 ${xs} focus:ring-brand-500 bg-white pr-6 focus:ring-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 <option value="">동 전체</option>
                 {dongOptions.map((d) => (
@@ -220,7 +220,7 @@ export function FilterFields({
                 const nextTo = resolveEndAfterStartChange(dateFrom, filters.dateTo, true);
                 if (nextTo !== filters.dateTo) set("dateTo", nextTo);
               }}
-              className={`border-hairline flex-1 rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 min-w-0 focus:ring-2 focus:outline-none`}
+              className={`border-hairline h-10 flex-1 rounded-lg border px-2 ${xs} focus:ring-brand-500 min-w-0 focus:ring-2 focus:outline-none`}
             />
             <span className="text-stone shrink-0 text-xs">~</span>
             <input
@@ -232,7 +232,7 @@ export function FilterFields({
                 if (filters.dateFrom && dateTo && dateTo < filters.dateFrom) return;
                 set("dateTo", dateTo);
               }}
-              className={`border-hairline flex-1 rounded-lg border px-2 py-1.5 ${xs} focus:ring-brand-500 min-w-0 focus:ring-2 focus:outline-none`}
+              className={`border-hairline h-10 flex-1 rounded-lg border px-2 ${xs} focus:ring-brand-500 min-w-0 focus:ring-2 focus:outline-none`}
             />
           </div>
         </div>
@@ -241,7 +241,7 @@ export function FilterFields({
         {!hideRating && (
           <div>
             <p className={`${xs} text-steel mb-1.5 font-semibold`}>별점</p>
-            <div className="flex items-center gap-0.5">
+            <div className="flex h-10 items-center gap-0.5">
               {[1, 2, 3, 4, 5].map((s) => (
                 <button key={s} onClick={() => set("minRating", filters.minRating === s ? 0 : s)}>
                   <Star
@@ -262,7 +262,7 @@ export function FilterFields({
             <p className={`${xs} text-steel mb-1.5 font-semibold`}>즐겨찾기</p>
             <button
               onClick={() => set("favoritesOnly", !filters.favoritesOnly)}
-              className={`flex items-center gap-1 rounded-full border px-2 py-1.5 text-xs transition-colors ${
+              className={`flex h-10 items-center gap-1 rounded-full border px-2 text-xs transition-colors ${
                 filters.favoritesOnly
                   ? "border-red-400 bg-red-50 text-red-600"
                   : "border-hairline text-steel bg-white hover:border-red-300 hover:text-red-500"

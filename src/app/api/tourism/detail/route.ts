@@ -94,6 +94,7 @@ export async function GET(request: Request) {
   return Response.json({
     title: place.title,
     category: category?.code_nm ?? null,
+    categoryCode: place.lclssystm1 ?? null,
     image: place.firstimage ?? "",
     addr1: place.addr1 ?? "",
     overview: detail?.overview ?? null,
