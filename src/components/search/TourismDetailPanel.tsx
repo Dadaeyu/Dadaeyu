@@ -25,8 +25,14 @@ import type { TourismDetail } from "@/hooks/usePlaceSearch";
 import AccessibilitySection from "./AccessibilitySection";
 import { useAuth } from "@/context/AuthContext";
 import { isPlaceLiked } from "@/lib/supabase/placeLikes";
-import type { RouteMode } from "@/lib/kakao/directions";
-import { formatRouteDistance, formatRouteDuration } from "@/lib/kakao/directions";
+import type { RouteMode, RouteOption } from "@/lib/kakao/directions";
+import {
+  formatRouteDistance,
+  formatRouteDuration,
+  formatRouteTollFare
+} from "@/lib/kakao/directions";
+import RouteOptionPicker from "./RouteOptionPicker";
+import TrafficLegend from "./TrafficLegend";
 
 const REVIEW_PREVIEW_LENGTH = 60;
 // 리뷰로 취급하는 게시판("후기")의 board_id.
@@ -76,6 +82,12 @@ export type PlaceRouteGuideState = {
   error: string | null;
   distanceM: number | null;
   durationSec: number | null;
+  tollFare?: number | null;
+  routeOptions?: RouteOption[] | null;
+  selectedRouteId?: string;
+  onSelectRoute?: (id: string) => void;
+  /** 자동차 + API 교통 데이터 있을 때 혼잡도 범례 */
+  showTrafficLegend?: boolean;
   onOpenKakao: () => void;
   onClear: () => void;
 };
@@ -364,6 +376,9 @@ export default function TourismDetailPanel({
                     <p className="text-stone mt-0.5 text-xs">
                       {formatRouteDistance(routeGuide.distanceM)} ·{" "}
                       {formatRouteDuration(routeGuide.durationSec)}
+                      {routeGuide.tollFare != null && routeGuide.tollFare > 0
+                        ? ` · ${formatRouteTollFare(routeGuide.tollFare)}`
+                        : ""}
                     </p>
                   ) : null}
                   {routeGuide.error ? (
@@ -379,6 +394,18 @@ export default function TourismDetailPanel({
                   <X className="h-4 w-4" />
                 </button>
               </div>
+              {routeGuide.mode === "car" &&
+              routeGuide.routeOptions &&
+              routeGuide.routeOptions.length > 1 &&
+              routeGuide.onSelectRoute ? (
+                <RouteOptionPicker
+                  options={routeGuide.routeOptions}
+                  selectedId={routeGuide.selectedRouteId ?? routeGuide.routeOptions[0]?.id ?? "0"}
+                  onSelect={routeGuide.onSelectRoute}
+                  disabled={routeGuide.loading}
+                />
+              ) : null}
+              {routeGuide.showTrafficLegend ? <TrafficLegend /> : null}
               <button
                 type="button"
                 disabled={routeGuide.loading}

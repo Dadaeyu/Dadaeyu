@@ -8,10 +8,33 @@ export type RoutePoint = {
   name?: string;
 };
 
+/** 카카오 traffic_state: 0 정보없음, 1 정체, 2 지체, 3 서행, 4 원활, 6 사고 */
+export type TrafficState = 0 | 1 | 2 | 3 | 4 | 6;
+
+export type TrafficPathChunk = {
+  points: RoutePoint[];
+  trafficState: TrafficState;
+};
+
+export type RouteOption = {
+  id: string;
+  label: string;
+  distanceM: number;
+  durationSec: number;
+  tollFare: number;
+  points: RoutePoint[];
+  /** 자동차 API — 도로별 실시간 교통 상태 */
+  trafficChunks?: TrafficPathChunk[];
+  fallback?: boolean;
+};
+
 export type DirectionsResult = {
+  /** car 모드 + API 성공 시 2개 이상일 수 있음 */
+  routes?: RouteOption[];
   distanceM: number;
   durationSec: number;
   points: RoutePoint[];
+  tollFare?: number;
   /** 카카오 API 대신 직선 추정인 경우 */
   fallback?: boolean;
 };
@@ -33,6 +56,76 @@ export function formatRouteDuration(seconds: number): string {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
+}
+
+export function formatRouteTollFare(won: number): string {
+  if (!Number.isFinite(won) || won <= 0) return "";
+  return `통행료 ${won.toLocaleString("ko-KR")}원`;
+}
+
+/** 네이버 지도 유사 교통 혼잡도 색상 (0 정보없음 → 원활과 동일) */
+export function trafficStateToColor(state: number): string {
+  switch (state) {
+    case 1:
+      return "#ef4444";
+    case 2:
+      return "#f97316";
+    case 3:
+      return "#f59e0b";
+    case 4:
+    case 0:
+      return "#22c55e";
+    case 6:
+      return "#991b1b";
+    default:
+      return "#22c55e";
+  }
+}
+
+export function normalizeTrafficState(value: unknown): TrafficState {
+  if (value === 1 || value === 2 || value === 3 || value === 4 || value === 6) return value;
+  return 0;
+}
+
+/** 경로 옵션 → 지도 path segment (자동차만 trafficChunks 포함) */
+export function buildRoutePathFromOption(
+  opt: RouteOption,
+  mode: RouteMode,
+  color: string
+): {
+  points: RoutePoint[];
+  color: string;
+  dashed: boolean;
+  trafficChunks?: TrafficPathChunk[];
+} {
+  const trafficChunks =
+    mode === "car" && !opt.fallback && opt.trafficChunks && opt.trafficChunks.length > 0
+      ? opt.trafficChunks
+      : undefined;
+  return {
+    points: opt.points,
+    color,
+    dashed: Boolean(opt.fallback),
+    trafficChunks
+  };
+}
+
+/** routes[] 또는 단일 필드에서 선택된 경로 반환 */
+export function pickRouteOption(result: DirectionsResult, routeId?: string | null): RouteOption {
+  const routes = result.routes;
+  if (routes?.length) {
+    const found = routeId ? routes.find((r) => r.id === routeId) : undefined;
+    return found ?? routes[0];
+  }
+  return {
+    id: "0",
+    label: "추천",
+    distanceM: result.distanceM,
+    durationSec: result.durationSec,
+    tollFare: result.tollFare ?? 0,
+    points: result.points,
+    fallback: result.fallback
+  };
 }
 
 export function haversineMeters(a: RoutePoint, b: RoutePoint): number {
@@ -65,7 +158,23 @@ export function buildStraightRoute(
   }
   const speedKmh = mode === "walk" ? 4 : 30;
   const durationSec = Math.round((distanceM / 1000 / speedKmh) * 3600);
-  return { distanceM, durationSec, points: pts };
+  const option: RouteOption = {
+    id: "0",
+    label: "직선",
+    distanceM,
+    durationSec,
+    tollFare: 0,
+    points: pts,
+    fallback: true
+  };
+  return {
+    routes: [option],
+    distanceM,
+    durationSec,
+    points: pts,
+    tollFare: 0,
+    fallback: true
+  };
 }
 
 /** 카카오맵 앱 URL (sp/ep = lat,lng) */
@@ -153,13 +262,17 @@ export async function fetchDirections(input: {
   if (!res.ok) {
     throw new Error(json.error ?? "경로를 불러오지 못했습니다.");
   }
-  if (!json.points?.length) {
+  if (!json.points?.length && !json.routes?.length) {
     throw new Error("경로 좌표가 없습니다.");
   }
+  const routes = json.routes;
+  const primary = pickRouteOption(json);
   return {
-    distanceM: json.distanceM,
-    durationSec: json.durationSec,
-    points: json.points,
+    routes,
+    distanceM: primary.distanceM,
+    durationSec: primary.durationSec,
+    points: primary.points,
+    tollFare: primary.tollFare,
     fallback: Boolean(json.fallback)
   };
 }

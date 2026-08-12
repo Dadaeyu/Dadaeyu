@@ -3,6 +3,12 @@
 // 카카오맵 SDK 래퍼: 마커/경로선/내 위치 표시를 관리하는 지도 컴포넌트.
 import { useEffect, useRef, useState } from "react";
 import { loadKakaoMap } from "@/lib/kakao/loadKakaoMap";
+import {
+  formatRouteDistance,
+  formatRouteDuration,
+  formatRouteTollFare,
+  trafficStateToColor
+} from "@/lib/kakao/directions";
 
 export interface KakaoPlaceResult {
   id: string;
@@ -38,6 +44,8 @@ export interface MapPathSegment {
   points: { lat: number; lng: number }[];
   color?: string; // 기본 초록
   dashed?: boolean; // true 면 점선(Day 간 연결 구간 표시용)
+  /** 자동차 안내 — 도로별 교통 혼잡도 (있으면 color 대신 구간별 색) */
+  trafficChunks?: { points: { lat: number; lng: number }[]; trafficState: number }[];
   /** 이 구간에 마우스를 올렸을 때 커서 위치에 보여줄 라벨(예: "Day 1"). 없으면 호버해도 안 뜬다. */
   label?: string;
   /** 이 구간을 클릭했을 때 onPathClick 으로 전달할 값(예: Day 번호). label 이 있어야 클릭도 반응한다. */
@@ -65,6 +73,8 @@ interface Props {
   fitPathKey?: string | number | null;
   /** 하단 시트 등 UI가 가리는 높이(px). 경로 맞춤 시 bottom padding으로 사용 */
   bottomOverlayPx?: number;
+  /** 경로 중간점에 고정 표시할 거리·시간 요약 (네이버 지도 스타일 칩) */
+  pathSummary?: { distanceM: number; durationSec: number; tollFare?: number } | null;
 }
 
 // ── 핀 렌더러 ──────────────────────────────────────────────
@@ -184,7 +194,8 @@ export default function KakaoMap({
   path = [],
   onPathClick,
   fitPathKey = null,
-  bottomOverlayPx = 0
+  bottomOverlayPx = 0,
+  pathSummary = null
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
@@ -196,6 +207,7 @@ export default function KakaoMap({
   // 경로선 호버 시 커서 위치에 뜨는 라벨 — 한 번에 하나만 필요해서 배열이 아니라 단일 참조.
   const pathHoverOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const pathHoverElRef = useRef<HTMLDivElement | null>(null);
+  const pathSummaryOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const myLocationOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const zoomControlRef = useRef<kakao.maps.ZoomControl | null>(null);
   const [mapInitCount, setMapInitCount] = useState(0);
@@ -405,32 +417,48 @@ export default function KakaoMap({
     };
 
     for (const segment of path) {
-      if (segment.points.length < 2) continue;
-      const color = segment.color ?? "#16a34a";
-      const line = new K.Polyline({
-        path: segment.points.map((p) => new K.LatLng(p.lat, p.lng)),
-        strokeWeight: 4,
-        strokeColor: color,
-        strokeOpacity: 0.8,
-        strokeStyle: segment.dashed ? "shortdash" : "solid"
-      });
-      line.setMap(mapRef.current);
-      pathPolylinesRef.current.push(line);
+      const defaultColor = segment.color ?? "#16a34a";
+      const drawPolyline = (
+        pts: { lat: number; lng: number }[],
+        strokeColor: string,
+        dashed: boolean
+      ) => {
+        if (pts.length < 2) return;
+        const line = new K.Polyline({
+          path: pts.map((p) => new K.LatLng(p.lat, p.lng)),
+          strokeWeight: 4,
+          strokeColor,
+          strokeOpacity: 0.85,
+          strokeStyle: dashed ? "shortdash" : "solid"
+        });
+        line.setMap(mapRef.current);
+        pathPolylinesRef.current.push(line);
 
-      if (segment.label) {
-        const label = segment.label;
-        K.event.addListener(line, "mouseover", (e: kakao.maps.MouseEvent) =>
-          showHoverLabel(label, color, e.latLng)
-        );
-        K.event.addListener(line, "mousemove", (e: kakao.maps.MouseEvent) =>
-          showHoverLabel(label, color, e.latLng)
-        );
-        K.event.addListener(line, "mouseout", hideHoverLabel);
-        if (segment.day != null) {
-          const day = segment.day;
-          K.event.addListener(line, "click", () => onPathClick?.(day));
+        if (segment.label) {
+          const label = segment.label;
+          K.event.addListener(line, "mouseover", (e: kakao.maps.MouseEvent) =>
+            showHoverLabel(label, defaultColor, e.latLng)
+          );
+          K.event.addListener(line, "mousemove", (e: kakao.maps.MouseEvent) =>
+            showHoverLabel(label, defaultColor, e.latLng)
+          );
+          K.event.addListener(line, "mouseout", hideHoverLabel);
+          if (segment.day != null) {
+            const day = segment.day;
+            K.event.addListener(line, "click", () => onPathClick?.(day));
+          }
         }
+      };
+
+      if (segment.trafficChunks?.length && !segment.dashed) {
+        for (const chunk of segment.trafficChunks) {
+          drawPolyline(chunk.points, trafficStateToColor(chunk.trafficState), false);
+        }
+        continue;
       }
+
+      if (segment.points.length < 2) continue;
+      drawPolyline(segment.points, defaultColor, Boolean(segment.dashed));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(path), mapInitCount]);
@@ -470,6 +498,63 @@ export default function KakaoMap({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitPathKey, mapInitCount, bottomOverlayPx, JSON.stringify(path)]);
+
+  // 경로 안내 요약 칩 — 경로 중간점에 거리·시간 고정 표시
+  const pathSummaryKey = pathSummary
+    ? `${pathSummary.distanceM}-${pathSummary.durationSec}-${pathSummary.tollFare ?? 0}`
+    : "";
+  const pathPointsKey = JSON.stringify(path);
+
+  useEffect(() => {
+    if (!mapRef.current || !window.kakao?.maps) return;
+    const K = window.kakao.maps;
+
+    pathSummaryOverlayRef.current?.setMap(null);
+    pathSummaryOverlayRef.current = null;
+
+    if (
+      !pathSummary ||
+      !Number.isFinite(pathSummary.distanceM) ||
+      !Number.isFinite(pathSummary.durationSec)
+    ) {
+      return;
+    }
+
+    const points = path.flatMap((segment) => segment.points);
+    const routable = points.filter(
+      (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && !(p.lat === 0 && p.lng === 0)
+    );
+    if (routable.length < 2) return;
+
+    const mid = routable[Math.floor((routable.length - 1) / 2)];
+    const tollPart = formatRouteTollFare(pathSummary.tollFare ?? 0);
+    const label = tollPart
+      ? `${formatRouteDistance(pathSummary.distanceM)} · ${formatRouteDuration(pathSummary.durationSec)} · ${tollPart}`
+      : `${formatRouteDistance(pathSummary.distanceM)} · ${formatRouteDuration(pathSummary.durationSec)}`;
+
+    const el = document.createElement("div");
+    el.textContent = label;
+    el.style.cssText =
+      "background:#fff;color:#0f172a;font-size:12px;font-weight:700;line-height:1.2;padding:6px 10px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 10px rgba(15,23,42,0.18);border:1px solid rgba(15,23,42,0.08);pointer-events:none;";
+
+    const overlay = new K.CustomOverlay({
+      content: el,
+      position: new K.LatLng(mid.lat, mid.lng),
+      yAnchor: 0.5,
+      xAnchor: 0.5,
+      zIndex: 8
+    });
+    overlay.setMap(mapRef.current);
+    pathSummaryOverlayRef.current = overlay;
+
+    return () => {
+      overlay.setMap(null);
+      if (pathSummaryOverlayRef.current === overlay) {
+        pathSummaryOverlayRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapInitCount, pathSummaryKey, pathPointsKey]);
 
   // 내 위치 마커 — myLocation이 바뀔 때마다 다시 그리고, null이면 제거
   useEffect(() => {

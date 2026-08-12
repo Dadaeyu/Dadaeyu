@@ -14,7 +14,21 @@ import { FilterOverlayPanel } from "@/components/search/FilterPanel";
 import { getCategoryColor } from "@/lib/search/categoryColors";
 import { usePlaceSearch } from "@/hooks/usePlaceSearch";
 import { useMyLocation, type MyLocationErrorReason } from "@/hooks/useMyLocation";
-import { fetchDirections, openKakaoMapRoute, type RouteMode } from "@/lib/kakao/directions";
+import {
+  fetchDirections,
+  openKakaoMapRoute,
+  pickRouteOption,
+  buildRoutePathFromOption,
+  type RouteMode,
+  type RouteOption
+} from "@/lib/kakao/directions";
+import RouteOptionPicker from "@/components/search/RouteOptionPicker";
+import TrafficLegend from "@/components/search/TrafficLegend";
+import {
+  formatRouteDistance,
+  formatRouteDuration,
+  formatRouteTollFare
+} from "@/lib/kakao/directions";
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────
 // 지도 화면: 사이드바(검색/필터/목록) + KakaoMap. usePlaceSearch·useMyLocation 훅으로
@@ -107,16 +121,80 @@ export default function Map() {
   const [routeStops, setRouteStops] = useState<
     { lat: number; lng: number; name?: string }[] | null
   >(null);
+  const routeOptionsRef = useRef<RouteOption[] | null>(null);
+  const [selectedRouteId, setSelectedRouteId] = useState("0");
   const routeRequestIdRef = useRef(0);
   const pendingRouteModeRef = useRef<RouteMode | null>(null);
   const handleStartRouteRef = useRef<(mode: RouteMode) => Promise<void>>(async () => {});
 
+  const handleSelectRoute = (id: string) => {
+    const options = routeOptionsRef.current;
+    if (!options) return;
+    const opt = options.find((r) => r.id === id);
+    if (!opt) return;
+    setSelectedRouteId(id);
+    setRoutePath([
+      buildRoutePathFromOption(
+        opt,
+        routeGuide?.mode ?? "car",
+        routeGuide?.mode === "walk" ? "#0d9488" : "#2563eb"
+      )
+    ]);
+    setRouteGuide((prev) =>
+      prev
+        ? {
+            ...prev,
+            distanceM: opt.distanceM,
+            durationSec: opt.durationSec,
+            tollFare: opt.tollFare,
+            selectedRouteId: id,
+            showTrafficLegend:
+              prev.mode === "car" && !opt.fallback && Boolean(opt.trafficChunks?.length)
+          }
+        : prev
+    );
+  };
+
   const clearRouteGuide = () => {
     routeRequestIdRef.current += 1;
     pendingRouteModeRef.current = null;
+    routeOptionsRef.current = null;
+    setSelectedRouteId("0");
     setRouteGuide(null);
     setRoutePath([]);
     setRouteStops(null);
+  };
+
+  const applyDirectionsResult = (
+    result: Awaited<ReturnType<typeof fetchDirections>>,
+    mode: RouteMode,
+    stops: { lat: number; lng: number; name?: string }[],
+    onOpenKakao: () => void
+  ) => {
+    const options = result.routes?.length ? result.routes : [pickRouteOption(result)];
+    const multi = options.length > 1 ? options : null;
+    routeOptionsRef.current = multi;
+    const primary = pickRouteOption(result, "0");
+    setSelectedRouteId(primary.id);
+    setRoutePath([
+      buildRoutePathFromOption(primary, mode, mode === "walk" ? "#0d9488" : "#2563eb")
+    ]);
+    const showTrafficLegend =
+      mode === "car" && !result.fallback && Boolean(primary.trafficChunks?.length);
+    setRouteGuide({
+      mode,
+      loading: false,
+      error: result.fallback ? "대략 경로예요. 정확한 안내는 카카오맵에서 시작하세요." : null,
+      distanceM: primary.distanceM,
+      durationSec: primary.durationSec,
+      tollFare: primary.tollFare,
+      routeOptions: multi,
+      selectedRouteId: primary.id,
+      onSelectRoute: handleSelectRoute,
+      showTrafficLegend,
+      onOpenKakao,
+      onClear: clearRouteGuide
+    });
   };
 
   const handleStartRoute = async (mode: RouteMode) => {
@@ -167,24 +245,11 @@ export default function Map() {
     try {
       const result = await fetchDirections({ origin, destination, mode });
       if (requestId !== routeRequestIdRef.current) return;
-      setRoutePath([
-        {
-          points: result.points,
-          color: mode === "walk" ? "#0d9488" : "#2563eb",
-          dashed: Boolean(result.fallback)
-        }
-      ]);
-      setRouteGuide({
-        mode,
-        loading: false,
-        error: result.fallback ? "대략 경로예요. 정확한 안내는 카카오맵에서 시작하세요." : null,
-        distanceM: result.distanceM,
-        durationSec: result.durationSec,
-        onOpenKakao: () => openKakaoMapRoute(stops, mode),
-        onClear: clearRouteGuide
-      });
+      applyDirectionsResult(result, mode, stops, () => openKakaoMapRoute(stops, mode));
     } catch (e) {
       if (requestId !== routeRequestIdRef.current) return;
+      routeOptionsRef.current = null;
+      setSelectedRouteId("0");
       setRoutePath([{ points: stops, color: "#94a3b8", dashed: true }]);
       setRouteGuide({
         mode,
@@ -414,7 +479,19 @@ export default function Map() {
             path={routePath}
             fitPathKey={
               routeGuide && !routeGuide.loading
-                ? `${routeGuide.mode}-${routeGuide.distanceM ?? "x"}-${routePath.length}`
+                ? `${routeGuide.mode}-${routeGuide.distanceM ?? "x"}-${selectedRouteId}-${routePath.length}`
+                : null
+            }
+            pathSummary={
+              routeGuide &&
+              !routeGuide.loading &&
+              routeGuide.distanceM != null &&
+              routeGuide.durationSec != null
+                ? {
+                    distanceM: routeGuide.distanceM,
+                    durationSec: routeGuide.durationSec,
+                    tollFare: routeGuide.tollFare ?? 0
+                  }
                 : null
             }
           />
@@ -426,7 +503,31 @@ export default function Map() {
                 {routeGuide.loading ? " 불러오는 중…" : ""}
               </p>
               {routeGuide.distanceM != null && routeGuide.durationSec != null ? (
-                <p className="text-stone mt-1 text-xs">지도에 경로를 표시했어요</p>
+                <p className="text-stone mt-1 text-xs">
+                  {formatRouteDistance(routeGuide.distanceM)} ·{" "}
+                  {formatRouteDuration(routeGuide.durationSec)}
+                  {routeGuide.tollFare != null && routeGuide.tollFare > 0
+                    ? ` · ${formatRouteTollFare(routeGuide.tollFare)}`
+                    : ""}
+                </p>
+              ) : null}
+              {routeGuide.mode === "car" &&
+              routeGuide.routeOptions &&
+              routeGuide.routeOptions.length > 1 &&
+              routeGuide.onSelectRoute ? (
+                <div className="mt-2">
+                  <RouteOptionPicker
+                    options={routeGuide.routeOptions}
+                    selectedId={routeGuide.selectedRouteId ?? "0"}
+                    onSelect={routeGuide.onSelectRoute}
+                    disabled={routeGuide.loading}
+                  />
+                </div>
+              ) : null}
+              {routeGuide.showTrafficLegend ? (
+                <div className="mt-2">
+                  <TrafficLegend />
+                </div>
               ) : null}
               <button
                 type="button"

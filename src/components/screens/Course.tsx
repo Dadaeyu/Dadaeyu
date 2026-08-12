@@ -48,9 +48,15 @@ import {
   fetchDirectionsForStops,
   formatRouteDistance,
   formatRouteDuration,
+  formatRouteTollFare,
   openKakaoMapRoute,
-  type RouteMode
+  pickRouteOption,
+  buildRoutePathFromOption,
+  type RouteMode,
+  type RouteOption
 } from "@/lib/kakao/directions";
+import RouteOptionPicker from "@/components/search/RouteOptionPicker";
+import TrafficLegend from "@/components/search/TrafficLegend";
 
 // Day(일정)별 마커·경로선 색상 — Day 순서대로 순환 배정. 마커와 경로선이 같은 팔레트를 써야
 // "이 색 마커들이 이 색 선으로 이어진 게 같은 Day"라는 게 지도에서 바로 보인다.
@@ -1757,6 +1763,11 @@ function CourseDetail({ id }: { id: string }) {
   const [dayGuideError, setDayGuideError] = useState<string | null>(null);
   const [dayGuideDistanceM, setDayGuideDistanceM] = useState<number | null>(null);
   const [dayGuideDurationSec, setDayGuideDurationSec] = useState<number | null>(null);
+  const [dayGuideTollFare, setDayGuideTollFare] = useState<number | null>(null);
+  const [dayGuideRouteOptions, setDayGuideRouteOptions] = useState<RouteOption[] | null>(null);
+  const [dayGuideSelectedRouteId, setDayGuideSelectedRouteId] = useState("0");
+  const [dayGuideShowTrafficLegend, setDayGuideShowTrafficLegend] = useState(false);
+  const dayGuideRouteOptionsRef = useRef<RouteOption[] | null>(null);
   const [dayGuidePath, setDayGuidePath] = useState<MapPathSegment[] | null>(null);
   const dayGuideRequestIdRef = useRef(0);
 
@@ -2030,8 +2041,62 @@ function CourseDetail({ id }: { id: string }) {
     setDayGuideError(null);
     setDayGuideDistanceM(null);
     setDayGuideDurationSec(null);
+    setDayGuideTollFare(null);
+    dayGuideRouteOptionsRef.current = null;
+    setDayGuideRouteOptions(null);
+    setDayGuideSelectedRouteId("0");
+    setDayGuideShowTrafficLegend(false);
     setDayGuidePath(null);
     setDayGuidePickerOpen(false);
+  };
+
+  const handleDayGuideSelectRoute = (id: string) => {
+    const options = dayGuideRouteOptionsRef.current;
+    if (!options) return;
+    const opt = options.find((r) => r.id === id);
+    if (!opt) return;
+    setDayGuideSelectedRouteId(id);
+    setDayGuidePath([
+      buildRoutePathFromOption(
+        opt,
+        dayGuideMode ?? "car",
+        DAY_LINE_COLORS[(activeDay - 1) % DAY_LINE_COLORS.length]
+      )
+    ]);
+    setDayGuideDistanceM(opt.distanceM);
+    setDayGuideDurationSec(opt.durationSec);
+    setDayGuideTollFare(opt.tollFare);
+    setDayGuideShowTrafficLegend(
+      dayGuideMode === "car" && !opt.fallback && Boolean(opt.trafficChunks?.length)
+    );
+  };
+
+  const applyDayGuideResult = (
+    result: Awaited<ReturnType<typeof fetchDirectionsForStops>>,
+    mode: RouteMode
+  ) => {
+    const options = result.routes?.length ? result.routes : [pickRouteOption(result)];
+    const multi = options.length > 1 ? options : null;
+    dayGuideRouteOptionsRef.current = multi;
+    setDayGuideRouteOptions(multi);
+    const primary = pickRouteOption(result, "0");
+    setDayGuideSelectedRouteId(primary.id);
+    setDayGuidePath([
+      buildRoutePathFromOption(
+        primary,
+        mode,
+        DAY_LINE_COLORS[(activeDay - 1) % DAY_LINE_COLORS.length]
+      )
+    ]);
+    setDayGuideDistanceM(primary.distanceM);
+    setDayGuideDurationSec(primary.durationSec);
+    setDayGuideTollFare(primary.tollFare);
+    setDayGuideShowTrafficLegend(
+      mode === "car" && !result.fallback && Boolean(primary.trafficChunks?.length)
+    );
+    setDayGuideError(
+      result.fallback ? "대략 경로예요. 정확한 안내는 카카오맵에서 시작하세요." : null
+    );
   };
 
   const startDayGuide = async (mode: RouteMode) => {
@@ -2041,6 +2106,11 @@ function CourseDetail({ id }: { id: string }) {
     setDayGuideError(null);
     setDayGuideDistanceM(null);
     setDayGuideDurationSec(null);
+    setDayGuideTollFare(null);
+    dayGuideRouteOptionsRef.current = null;
+    setDayGuideRouteOptions(null);
+    setDayGuideSelectedRouteId("0");
+    setDayGuideShowTrafficLegend(false);
     const requestId = ++dayGuideRequestIdRef.current;
 
     if (dayGuideStops.length < 2) {
@@ -2053,20 +2123,14 @@ function CourseDetail({ id }: { id: string }) {
     try {
       const result = await fetchDirectionsForStops(dayGuideStops, mode);
       if (requestId !== dayGuideRequestIdRef.current) return;
-      setDayGuidePath([
-        {
-          points: result.points,
-          color: DAY_LINE_COLORS[(activeDay - 1) % DAY_LINE_COLORS.length],
-          dashed: Boolean(result.fallback)
-        }
-      ]);
-      setDayGuideDistanceM(result.distanceM);
-      setDayGuideDurationSec(result.durationSec);
-      setDayGuideError(
-        result.fallback ? "대략 경로예요. 정확한 안내는 카카오맵에서 시작하세요." : null
-      );
+      applyDayGuideResult(result, mode);
     } catch (e) {
       if (requestId !== dayGuideRequestIdRef.current) return;
+      dayGuideRouteOptionsRef.current = null;
+      setDayGuideRouteOptions(null);
+      setDayGuideSelectedRouteId("0");
+      setDayGuideShowTrafficLegend(false);
+      setDayGuideTollFare(null);
       setDayGuidePath([
         {
           points: dayGuideStops,
@@ -3056,6 +3120,9 @@ function CourseDetail({ id }: { id: string }) {
                           <p className="text-stone mt-0.5 text-xs">
                             {dayGuideStops.length}곳 · {formatRouteDistance(dayGuideDistanceM)} ·{" "}
                             {formatRouteDuration(dayGuideDurationSec)}
+                            {dayGuideTollFare != null && dayGuideTollFare > 0
+                              ? ` · ${formatRouteTollFare(dayGuideTollFare)}`
+                              : ""}
                           </p>
                         ) : null}
                         {dayGuideError ? (
@@ -3071,6 +3138,17 @@ function CourseDetail({ id }: { id: string }) {
                         <X className="h-4 w-4" />
                       </button>
                     </div>
+                    {dayGuideMode === "car" &&
+                    dayGuideRouteOptions &&
+                    dayGuideRouteOptions.length > 1 ? (
+                      <RouteOptionPicker
+                        options={dayGuideRouteOptions}
+                        selectedId={dayGuideSelectedRouteId}
+                        onSelect={handleDayGuideSelectRoute}
+                        disabled={dayGuideLoading}
+                      />
+                    ) : null}
+                    {dayGuideShowTrafficLegend ? <TrafficLegend /> : null}
                     <button
                       type="button"
                       disabled={dayGuideStops.length < 2}
@@ -3167,7 +3245,20 @@ function CourseDetail({ id }: { id: string }) {
           onPathClick={(day) => setActiveDay(day)}
           fitPathKey={
             dayGuideMode && dayGuidePath && !dayGuideLoading
-              ? `${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}`
+              ? `${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}-${dayGuideSelectedRouteId}`
+              : null
+          }
+          pathSummary={
+            dayGuideMode &&
+            dayGuidePath &&
+            !dayGuideLoading &&
+            dayGuideDistanceM != null &&
+            dayGuideDurationSec != null
+              ? {
+                  distanceM: dayGuideDistanceM,
+                  durationSec: dayGuideDurationSec,
+                  tollFare: dayGuideTollFare ?? 0
+                }
               : null
           }
         />
