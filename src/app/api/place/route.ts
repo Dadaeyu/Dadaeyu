@@ -4,22 +4,33 @@ import { brfrTourInfoApi, korTourInfoApi, bakeryInfoApi } from "@/utils/api/exte
 import { requireAdmin } from "@/lib/supabase/require-admin";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+// Vercel Hobby 플랜의 함수 실행 시간 상한(60초)에 맞춘다. 이보다 크게 잡으면 Hobby에서
+// 배포가 거부되거나 더 낮은 값으로 캡된다. 전체 동기화는 한 번에 안 끝나는 게 정상이고,
+// 스케줄러(/api/cron/place)가 남은 작업을 스스로 이어서 호출(체이닝)해 마저 처리한다.
+export const maxDuration = 60;
 
 // tb_place / tb_place_detail / tb_place_barrierfree / tb_place_bakery 동기화 엔드포인트 + 엔진.
 // 아래 sync 함수들이 실제 동기화 로직이고, POST 핸들러가 target 파라미터로 이를 호출한다.
 // 스케줄러(/api/cron/place)는 이 파일에서 runFullSync / getSyncConfig 를 import 해서 쓴다.
+//
+// 시간 예산(deadline) 방식: 각 sync 함수는 밀리초 타임스탬프인 deadline 을 받아서, 그 시각을
+// 넘기기 직전에 처리 중이던 항목까지만 끝내고 나머지는 남겨둔 채 반환한다(result.notDone=true).
+// "어디까지 했는지"는 별도 커서 테이블 없이, 대상 테이블의 updatetime 이 가장 오래된 것부터
+// 처리하는 순서로 자연스럽게 추적한다 — 이번에 못 하면 다음 호출 때도 여전히 "가장 오래된 것"
+// 이라 맨 앞으로 오고, 이번에 처리한 것들은 updatetime 이 갱신돼 뒤로 밀린다.
+// maxDuration(60초) 대비 응답 전송·콜드스타트·네트워크 왕복 여유를 넉넉히 둔 실작업 예산.
+export const TIME_BUDGET_MS = 40_000;
 
 // ── 공통 상수 ───────────────────────────────────────────────
 const UPSERT_CHUNK = 100;
 const MAX_RETRIES = 2; // 일시적 throttling/타임아웃 대비 재시도 횟수
-const RETRY_BASE_DELAY = 400; // ms (재시도마다 점증)
+const RETRY_BASE_DELAY = 1500; // ms (재시도마다 점증) — 공공데이터 API 429/403 회피를 위해 늘림
+// detailCommon2/detailIntro2/detailWithTour2/coord2regioncode 는 동시 호출 없이 하나씩만 보내고,
+// 요청 사이에 이 만큼(ms) 쉰다 — 공공데이터 API 가 요청 폭주로 429/403을 반환하는 걸 피하기 위함.
+const REQUEST_DELAY = 300;
 
 const DAEJEON_REGN_CD = "30"; // 대전 지역 코드 (lDongRegnCd)
 const ROWS_PER_PAGE = 1000; // areaBasedList2 페이지 크기 (넉넉히 잡아 호출 수 최소화; 초과분은 자동 페이지네이션)
-const BF_FETCH_CONCURRENCY = 8; // detailWithTour2 동시 호출 수
-const DETAIL_FETCH_CONCURRENCY = 6; // detailCommon2/detailIntro2 동시 호출 수
-const DONG_FETCH_CONCURRENCY = 8; // coord2regioncode 동시 호출 수
 
 const COORD2REGIONCODE_URL = "https://dapi.kakao.com/v2/local/geo/coord2regioncode.json";
 
@@ -266,6 +277,8 @@ type SyncResult = {
   dongFilled?: number;
   dongSkipped?: number;
   dongErrorCount?: number;
+  // true 면 시간 예산(deadline)을 넘겨서 중간에 멈췄다는 뜻 — 남은 대상은 다음 호출이 이어서 처리한다.
+  notDone?: boolean;
 };
 
 type SyncOutcome =
@@ -287,6 +300,39 @@ async function fetchKnownIds(
       .filter((v) => v != null)
       .map((v) => key(v))
   );
+}
+
+// 대상 테이블(tb_place_detail / tb_place_barrierfree, 둘 다 PK=place_id)의 place_id → updatetime
+// 맵을 조회한다. syncDetail/syncBarrierfree 가 "가장 오래전에 갱신된 것부터" 순서로 처리해 시간
+// 예산이 부족해도 다음 호출 때 자연스럽게 이어서 처리되도록(별도 커서 테이블 없이) 하는 데 쓴다.
+async function fetchUpdateTimes(
+  supabase: SupabaseClient,
+  table: string
+): Promise<Map<string, string | null> | { error: string }> {
+  const { data, error } = await supabase.from(table).select("place_id, updatetime");
+  if (error) return { error: `${table} updatetime 조회 실패: ${error.message}` };
+  const map = new Map<string, string | null>();
+  for (const row of (data ?? []) as { place_id: unknown; updatetime: string | null }[]) {
+    if (row.place_id == null) continue;
+    map.set(key(row.place_id), row.updatetime ?? null);
+  }
+  return map;
+}
+
+// targets 를 "가장 오래전에 갱신된(또는 한 번도 갱신 안 된) 것부터" 순서로 정렬한다.
+function sortByStaleness<T extends Record<string, unknown>>(
+  targets: T[],
+  keyOf: (t: T) => unknown,
+  updateTimes: Map<string, string | null>
+): T[] {
+  return [...targets].sort((a, b) => {
+    const ta = updateTimes.get(key(keyOf(a)));
+    const tb = updateTimes.get(key(keyOf(b)));
+    if (!ta && !tb) return 0;
+    if (!ta) return -1; // 한 번도 갱신 안 된 쪽이 최우선
+    if (!tb) return 1;
+    return ta.localeCompare(tb); // 오래된(작은) updatetime 이 앞으로
+  });
 }
 
 // 신규(knownIds 에 없는 키)는 insert, 기존은 update 한다.
@@ -316,30 +362,36 @@ async function insertOrUpdate(
     .filter((r) => knownIds.has(key(r[conflictKey])))
     .map((r) => ({ ...r, updatetime: now, ...updateExtra }));
 
+  // 청크 하나가 실패해도(예: 특정 행의 데이터 문제) 나머지 insert/update 청크는 계속 진행한다.
+  // 예전엔 첫 실패에서 바로 return 해버려서, 새 행 하나가 계속 insert 에 실패하면 이미 존재하는
+  // 나머지 행들의 update(예: updatetime 갱신)까지 매번 통째로 안 도는 문제가 있었다.
   let upserted = 0;
+  const errors: string[] = [];
   for (let i = 0; i < toInsert.length; i += UPSERT_CHUNK) {
     const chunk = toInsert.slice(i, i + UPSERT_CHUNK);
     const { error } = await supabase.from(table).insert(chunk);
-    if (error) return { upserted, error: `insert 실패: ${error.message}` };
-    upserted += chunk.length;
+    if (error) errors.push(`insert 실패(${i}~${i + chunk.length}): ${error.message}`);
+    else upserted += chunk.length;
   }
   for (let i = 0; i < toUpdate.length; i += UPSERT_CHUNK) {
     const chunk = toUpdate.slice(i, i + UPSERT_CHUNK);
     const { error } = await supabase.from(table).upsert(chunk, { onConflict: conflictKey });
-    if (error) return { upserted, error: `upsert 실패: ${error.message}` };
-    upserted += chunk.length;
+    if (error) errors.push(`upsert 실패(${i}~${i + chunk.length}): ${error.message}`);
+    else upserted += chunk.length;
   }
-  return { upserted };
+  return errors.length > 0 ? { upserted, error: errors.join(" / ") } : { upserted };
 }
 
-type DongFillResult = { filled: number; skipped: number; errorCount: number };
+type DongFillResult = { filled: number; skipped: number; errorCount: number; notDone?: boolean };
 
 // dong 이 비어있고 좌표가 있는 활성 행을 카카오 좌표→행정구역 API 로 채운다. syncPlace 내부에서만 호출.
-// 건별 실패는 skipped/errorCount 로만 집계하고 계속 진행한다.
+// 건별 실패는 skipped/errorCount 로만 집계하고 계속 진행한다. dong 이 채워진 행은 다음부터
+// WHERE dong is null 에서 자동으로 빠지므로, 이 작업은 별도 정렬 없이도 자연히 수렴한다.
 // dong 은 카카오發 파생값이라, 채울 때 updatetime 은 건드리지 않는다(TourAPI 콘텐츠 갱신과 구분).
 async function fillMissingDong(
   supabase: SupabaseClient,
-  kakaoKey: string
+  kakaoKey: string,
+  deadline: number
 ): Promise<DongFillResult> {
   const { data, error } = await supabase
     .from("tb_place")
@@ -357,48 +409,48 @@ async function fillMissingDong(
   let filled = 0;
   let skipped = 0;
   let errorCount = 0;
+  let notDone = false;
 
-  for (let i = 0; i < targets.length; i += DONG_FETCH_CONCURRENCY) {
-    const batch = targets.slice(i, i + DONG_FETCH_CONCURRENCY);
-    await Promise.all(
-      batch.map(async ({ place_id, mapx, mapy }) => {
-        if (!mapx || !mapy) {
-          skipped += 1; // 좌표가 빈 문자열인 행 방어 (헛 API 콜 방지)
-          return;
-        }
-        try {
-          const dong = await withRetry(() => fetchDong(kakaoKey, str(mapx), str(mapy)));
-          if (!dong) {
-            skipped += 1; // 법정동을 못 찾은 좌표는 건너뜀
-            return;
-          }
-          const { error: upErr } = await supabase
-            .from("tb_place")
-            .update({ dong }) // updatetime 미포함 (의도)
-            .eq("place_id", place_id);
-          if (upErr) {
-            errorCount += 1;
-            console.error(
-              `[fillMissingDong] dong 업데이트 실패 (place_id=${place_id}): ${upErr.message}`
-            );
-            return;
-          }
-          filled += 1;
-        } catch (e) {
-          errorCount += 1;
-          const message = e instanceof Error ? e.message : String(e);
-          console.error(
-            `[fillMissingDong] coord2regioncode 실패 (place_id=${place_id}): ${message}`
-          );
-        }
-      })
-    );
+  for (const { place_id, mapx, mapy } of targets) {
+    if (Date.now() >= deadline) {
+      notDone = true;
+      break;
+    }
+    if (!mapx || !mapy) {
+      skipped += 1; // 좌표가 빈 문자열인 행 방어 (헛 API 콜 방지)
+      continue;
+    }
+    try {
+      const dong = await withRetry(() => fetchDong(kakaoKey, str(mapx), str(mapy)));
+      if (!dong) {
+        skipped += 1; // 법정동을 못 찾은 좌표는 건너뜀
+        await sleep(REQUEST_DELAY);
+        continue;
+      }
+      const { error: upErr } = await supabase
+        .from("tb_place")
+        .update({ dong }) // updatetime 미포함 (의도)
+        .eq("place_id", place_id);
+      if (upErr) {
+        errorCount += 1;
+        console.error(
+          `[fillMissingDong] dong 업데이트 실패 (place_id=${place_id}): ${upErr.message}`
+        );
+      } else {
+        filled += 1;
+      }
+    } catch (e) {
+      errorCount += 1;
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`[fillMissingDong] coord2regioncode 실패 (place_id=${place_id}): ${message}`);
+    }
+    await sleep(REQUEST_DELAY);
   }
-  return { filled, skipped, errorCount };
+  return { filled, skipped, errorCount, notDone };
 }
 
 // ── 1. tb_place 동기화 (areaBasedList2 → tb_place) ──────────
-async function syncPlace(supabase: SupabaseClient): Promise<SyncOutcome> {
+async function syncPlace(supabase: SupabaseClient, deadline: number): Promise<SyncOutcome> {
   // tb_place 매핑 컬럼은 하드코딩된 PLACE_FIELD 사용 (DB 컬럼 조회 안 함).
   // PLACE_FIELD 는 contentid / updatetime 을 포함하지 않으므로 그대로 매핑 컬럼으로 쓴다.
   const mapFields = [...PLACE_FIELD];
@@ -448,8 +500,13 @@ async function syncPlace(supabase: SupabaseClient): Promise<SyncOutcome> {
   let pageNo = 1;
   let fetched = 0;
   let skipped = 0;
+  let placeNotDone = false;
 
   while ((pageNo - 1) * ROWS_PER_PAGE < totalCount) {
+    if (Date.now() >= deadline) {
+      placeNotDone = true;
+      break;
+    }
     try {
       const res = await withRetry(() =>
         korTourInfoApi.areaBasedList<TourResponse>({
@@ -488,6 +545,7 @@ async function syncPlace(supabase: SupabaseClient): Promise<SyncOutcome> {
       errors.push({ page: pageNo, message });
     }
     pageNo += 1;
+    await sleep(REQUEST_DELAY);
   }
 
   // 신규는 insert(updatetime 미설정), 기존은 update(updatetime 갱신).
@@ -537,15 +595,17 @@ async function syncPlace(supabase: SupabaseClient): Promise<SyncOutcome> {
   let dongSkipped: number | undefined;
   let dongErrorCount: number | undefined;
   const kakaoKey = process.env.KAKAO_REST_API_KEY;
-  if (kakaoKey) {
-    const dong = await fillMissingDong(supabase, kakaoKey);
+  let dongNotDone = false;
+  if (kakaoKey && Date.now() < deadline) {
+    const dong = await fillMissingDong(supabase, kakaoKey, deadline);
     dongFilled = dong.filled;
     dongSkipped = dong.skipped;
     dongErrorCount = dong.errorCount;
+    dongNotDone = Boolean(dong.notDone);
     console.log(
       `[syncPlace] dong 백필: filled=${dong.filled} skipped=${dong.skipped} errors=${dong.errorCount}`
     );
-  } else {
+  } else if (!kakaoKey) {
     console.error("[syncPlace] KAKAO_REST_API_KEY 미설정으로 dong 백필 건너뜀");
   }
 
@@ -559,7 +619,8 @@ async function syncPlace(supabase: SupabaseClient): Promise<SyncOutcome> {
       skipped,
       errorCount: errors.length,
       errors: errors.slice(0, 20),
-      ...(dongFilled !== undefined ? { dongFilled, dongSkipped, dongErrorCount } : {})
+      ...(dongFilled !== undefined ? { dongFilled, dongSkipped, dongErrorCount } : {}),
+      notDone: placeNotDone || dongNotDone
     }
   };
 }
@@ -579,7 +640,7 @@ async function fetchActivePlaces<T>(
 }
 
 // ── 2. tb_place_detail 동기화 (detailCommon2 + detailIntro2) ─
-async function syncDetail(supabase: SupabaseClient): Promise<SyncOutcome> {
+async function syncDetail(supabase: SupabaseClient, deadline: number): Promise<SyncOutcome> {
   // place_id 는 tb_place 에서 가져와 그대로 tb_place_detail 에 넣는다(detail 의 PK).
   const places = await fetchActivePlaces<{
     place_id: number | null;
@@ -587,60 +648,70 @@ async function syncDetail(supabase: SupabaseClient): Promise<SyncOutcome> {
     contenttypeid: string | null;
   }>(supabase, "place_id, contentid, contenttypeid", true);
   if ("error" in places) return { ok: false, status: 502, error: places.error };
-  const targets = places.data.filter(
+  const unsortedTargets = places.data.filter(
     (p): p is { place_id: number; contentid: number; contenttypeid: string | null } =>
       p.contentid != null && p.place_id != null
   );
 
+  // 가장 오래전에 갱신된(또는 한 번도 안 된) 것부터 처리 — 시간 예산이 부족해 중간에 멈춰도
+  // 다음 호출에서 자연스럽게 이어서 처리된다(별도 진행 커서 불필요).
+  const updateTimes = await fetchUpdateTimes(supabase, "tb_place_detail");
+  const targets = "error" in updateTimes
+    ? unsortedTargets
+    : sortByStaleness(unsortedTargets, (t) => t.place_id, updateTimes);
+
   let fetched = 0;
   let skipped = 0;
+  let notDone = false;
   const errors: { contentid: number; message: string }[] = [];
   const rows: Record<string, unknown>[] = [];
   const now = new Date().toISOString();
 
-  for (let i = 0; i < targets.length; i += DETAIL_FETCH_CONCURRENCY) {
-    const batch = targets.slice(i, i + DETAIL_FETCH_CONCURRENCY);
-    await Promise.all(
-      batch.map(async ({ place_id, contentid, contenttypeid }) => {
-        try {
-          const commonRes = await withRetry(() =>
-            korTourInfoApi.detailCommon<TourResponse>({
-              MobileOS: "WEB",
-              contentId: String(contentid)
-            })
-          );
-          const common = pickItem(commonRes);
-          if (!common) {
-            skipped += 1; // 공통정보가 없으면 건너뜀
-            return;
-          }
+  for (const { place_id, contentid, contenttypeid } of targets) {
+    if (Date.now() >= deadline) {
+      notDone = true;
+      break;
+    }
+    try {
+      const commonRes = await withRetry(() =>
+        korTourInfoApi.detailCommon<TourResponse>({
+          MobileOS: "WEB",
+          contentId: String(contentid)
+        })
+      );
+      const common = pickItem(commonRes);
+      if (!common) {
+        skipped += 1; // 공통정보가 없으면 건너뜀
+        await sleep(REQUEST_DELAY);
+        continue;
+      }
 
-          let intro: Record<string, unknown> | null = null;
-          if (contenttypeid) {
-            const introRes = await withRetry(() =>
-              korTourInfoApi.detailIntro<TourResponse>({
-                MobileOS: "WEB",
-                contentId: String(contentid),
-                contentTypeId: String(contenttypeid)
-              })
-            );
-            intro = pickItem(introRes);
-          }
+      let intro: Record<string, unknown> | null = null;
+      if (contenttypeid) {
+        await sleep(REQUEST_DELAY);
+        const introRes = await withRetry(() =>
+          korTourInfoApi.detailIntro<TourResponse>({
+            MobileOS: "WEB",
+            contentId: String(contentid),
+            contentTypeId: String(contenttypeid)
+          })
+        );
+        intro = pickItem(introRes);
+      }
 
-          fetched += 1;
-          const row: Record<string, unknown> = { place_id, contentid };
-          for (const f of COMMON_FIELDS) row[f] = str(common[f]);
-          for (const f of INTRO_FIELDS) row[f] = str(intro?.[f]);
-          rows.push(row);
-        } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
-          console.error(
-            `[syncDetail] detailCommon2/detailIntro2 실패 (contentid=${contentid}): ${message}`
-          );
-          errors.push({ contentid, message });
-        }
-      })
-    );
+      fetched += 1;
+      const row: Record<string, unknown> = { place_id, contentid };
+      for (const f of COMMON_FIELDS) row[f] = str(common[f]);
+      for (const f of INTRO_FIELDS) row[f] = str(intro?.[f]);
+      rows.push(row);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(
+        `[syncDetail] detailCommon2/detailIntro2 실패 (contentid=${contentid}): ${message}`
+      );
+      errors.push({ contentid, message });
+    }
+    await sleep(REQUEST_DELAY);
   }
 
   // detail 은 PK(place_id) 기준으로 분류·upsert 한다(contentid 에 unique 제약이 없음).
@@ -676,7 +747,8 @@ async function syncDetail(supabase: SupabaseClient): Promise<SyncOutcome> {
       deleted: 0,
       skipped,
       errorCount: errors.length,
-      errors: errors.slice(0, 20)
+      errors: errors.slice(0, 20),
+      notDone
     }
   };
 }
@@ -934,7 +1006,27 @@ function parseRestdate(text: string): {
   };
 }
 
-async function syncDetailNormalized(supabase: SupabaseClient): Promise<SyncOutcome> {
+async function syncDetailNormalized(
+  supabase: SupabaseClient,
+  deadline: number
+): Promise<SyncOutcome> {
+  // 외부 API 호출이 없는 순수 DB 읽기/변환/쓰기라 원래도 빠르다(861건 기준). 다만 앞선 단계들이
+  // 시간 예산을 이미 다 썼으면 이번 호출에선 아예 건너뛰고 다음 체이닝 호출에 맡긴다.
+  if (Date.now() >= deadline) {
+    return {
+      ok: true,
+      result: {
+        totalPlaces: 0,
+        fetched: 0,
+        upserted: 0,
+        deleted: 0,
+        skipped: 0,
+        errorCount: 0,
+        errors: [],
+        notDone: true
+      }
+    };
+  }
   // tb_place_detail 전체를 동일 컬럼 + 병합용 변형 컬럼(수용인원·연령)까지 골라 조회 (페이지네이션)
   const cols = [
     ...NORMALIZED_COPY_COLUMNS,
@@ -1073,59 +1165,64 @@ async function syncDetailNormalized(supabase: SupabaseClient): Promise<SyncOutco
 }
 
 // ── 3. tb_place_barrierfree 동기화 (detailWithTour2) ────────
-async function syncBarrierfree(supabase: SupabaseClient): Promise<SyncOutcome> {
+async function syncBarrierfree(supabase: SupabaseClient, deadline: number): Promise<SyncOutcome> {
   // place_id 는 tb_place 에서 가져와 그대로 tb_place_barrierfree 에 넣는다(barrierfree 의 PK).
   const places = await fetchActivePlaces<{
     place_id: number | null;
     contentid: number | null;
   }>(supabase, "place_id, contentid", true);
   if ("error" in places) return { ok: false, status: 502, error: places.error };
-  const targets = places.data.filter(
+  const unsortedTargets = places.data.filter(
     (p): p is { place_id: number; contentid: number } => p.contentid != null && p.place_id != null
   );
 
+  // 가장 오래전에 갱신된(또는 한 번도 안 된) 것부터 처리 — syncDetail 과 동일한 이유.
+  const updateTimes = await fetchUpdateTimes(supabase, "tb_place_barrierfree");
+  const targets = "error" in updateTimes
+    ? unsortedTargets
+    : sortByStaleness(unsortedTargets, (t) => t.place_id, updateTimes);
+
   let fetched = 0;
   let skipped = 0;
+  let notDone = false;
   const errors: { contentid: number; message: string }[] = [];
   const rows: Record<string, unknown>[] = [];
   const now = new Date().toISOString();
 
-  for (let i = 0; i < targets.length; i += BF_FETCH_CONCURRENCY) {
-    const batch = targets.slice(i, i + BF_FETCH_CONCURRENCY);
-    await Promise.all(
-      batch.map(async ({ place_id, contentid }) => {
-        try {
-          const res = await withRetry(() =>
-            brfrTourInfoApi.detailWithTour<TourResponse>({
-              MobileOS: "ETC",
-              contentId: String(contentid),
-              numOfRows: "1",
-              pageNo: "1"
-            })
-          );
-          const item = pickItem(res);
-          if (!item) {
-            skipped += 1; // 무장애 정보가 없는 콘텐츠는 건너뜀
-            return;
-          }
-          fetched += 1;
-          const row: Record<string, unknown> = { place_id, contentid };
-          for (const field of BF_FIELDS) {
-            const value = item[field];
-            row[field] = typeof value === "string" ? value : "";
-          }
-          // 원본 컬럼을 채운 뒤 요약 플래그(has_blind/deaf/gait/infant) 계산
-          Object.assign(row, computeBfFlags(row));
-          rows.push(row);
-        } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
-          console.error(
-            `[syncBarrierfree] detailWithTour2 실패 (contentid=${contentid}): ${message}`
-          );
-          errors.push({ contentid, message });
+  for (const { place_id, contentid } of targets) {
+    if (Date.now() >= deadline) {
+      notDone = true;
+      break;
+    }
+    try {
+      const res = await withRetry(() =>
+        brfrTourInfoApi.detailWithTour<TourResponse>({
+          MobileOS: "ETC",
+          contentId: String(contentid),
+          numOfRows: "1",
+          pageNo: "1"
+        })
+      );
+      const item = pickItem(res);
+      if (!item) {
+        skipped += 1; // 무장애 정보가 없는 콘텐츠는 건너뜀
+      } else {
+        fetched += 1;
+        const row: Record<string, unknown> = { place_id, contentid };
+        for (const field of BF_FIELDS) {
+          const value = item[field];
+          row[field] = typeof value === "string" ? value : "";
         }
-      })
-    );
+        // 원본 컬럼을 채운 뒤 요약 플래그(has_blind/deaf/gait/infant) 계산
+        Object.assign(row, computeBfFlags(row));
+        rows.push(row);
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`[syncBarrierfree] detailWithTour2 실패 (contentid=${contentid}): ${message}`);
+      errors.push({ contentid, message });
+    }
+    await sleep(REQUEST_DELAY);
   }
 
   // barrierfree 는 PK(place_id) 기준으로 분류·upsert 한다(contentid 에 unique 제약이 없음).
@@ -1161,7 +1258,8 @@ async function syncBarrierfree(supabase: SupabaseClient): Promise<SyncOutcome> {
       deleted: 0,
       skipped,
       errorCount: errors.length,
-      errors: errors.slice(0, 20)
+      errors: errors.slice(0, 20),
+      notDone
     }
   };
 }
@@ -1175,7 +1273,10 @@ async function syncBarrierfree(supabase: SupabaseClient): Promise<SyncOutcome> {
 //  - DB 에만 있으면 소프트삭제(delete_yn='Y', deletetime 갱신)
 // 응답 컬럼은 대문자(BPLC_NM 등)로 오므로 소문자 컬럼으로 매핑하고, 테이블에 실제로
 // 존재하는 컬럼만 넣는다.
-const BAKERY_NUM_OF_ROWS = 100; // bakeries/info 한 페이지 조회 건수
+// bakeries/info 한 페이지 조회 건수 — 예전엔 100이라 95페이지 넘게 순회하다 API 요청 한도(403)에
+// 걸려 아예 못 끝났다. 페이지 크기를 areaBasedList2 와 같은 수준(1000)으로 키워서 요청 자체를
+// 크게 줄인다(다른 tour 계열 API 도 같은 최대치를 쓰는 걸 확인해서 맞춤).
+const BAKERY_NUM_OF_ROWS = 1000;
 const BAKERY_COND_SALS_STTS = "01"; // 영업 상태 코드
 const BAKERY_COND_ROAD_ADDR = "대전광역시"; // 도로명주소 LIKE 필터
 
@@ -1221,13 +1322,18 @@ type BakerySyncResult = {
   deleted: number;
   errorCount: number;
   errors: unknown[];
+  // true 면 시간 예산(deadline)을 넘겨서 페이지 조회를 중간에 멈췄다는 뜻.
+  notDone?: boolean;
 };
 
 type BakerySyncOutcome =
   | { ok: true; result: BakerySyncResult }
   | { ok: false; status: number; error: string; partial?: Record<string, unknown> };
 
-async function syncBakery(supabase: SupabaseClient): Promise<BakerySyncOutcome> {
+async function syncBakery(
+  supabase: SupabaseClient,
+  deadline: number
+): Promise<BakerySyncOutcome> {
   // 1) API 전체 페이지 조회 (대전광역시 / 영업). 응답 봉투는 tour 계열과 동일해
   //    TourResponse / extractItems 를 재사용한다.
   const errors: { page: number; message: string }[] = [];
@@ -1235,8 +1341,13 @@ async function syncBakery(supabase: SupabaseClient): Promise<BakerySyncOutcome> 
   let totalCount = Infinity;
   let pageNo = 1;
   let fetched = 0;
+  let pagesNotDone = false;
 
   while ((pageNo - 1) * BAKERY_NUM_OF_ROWS < totalCount) {
+    if (Date.now() >= deadline) {
+      pagesNotDone = true;
+      break;
+    }
     try {
       const res = await withRetry(() =>
         bakeryInfoApi.info<TourResponse>({
@@ -1261,6 +1372,7 @@ async function syncBakery(supabase: SupabaseClient): Promise<BakerySyncOutcome> 
       errors.push({ page: pageNo, message });
     }
     pageNo += 1;
+    await sleep(REQUEST_DELAY);
   }
 
   // 2) DB 기존 행 조회 (분류/삭제 판정용) — 상호명 존재 여부와 활성 상태만 필요
@@ -1295,18 +1407,17 @@ async function syncBakery(supabase: SupabaseClient): Promise<BakerySyncOutcome> 
     else toInsert.push(apiRow);
   }
 
-  // 4) insert (배치) — registtime/updatetime/delete_yn 은 DB default(now()/null/'N')에 맡긴다
+  // 4) insert (배치) — registtime/updatetime/delete_yn 은 DB default(now()/null/'N')에 맡긴다.
+  //    청크 하나가 실패해도(예: 특정 행의 데이터 문제) 나머지 insert/update/삭제 단계는 계속
+  //    진행한다 — 예전엔 첫 실패에서 바로 return 해버려서, 신규 항목 하나가 계속 insert 에
+  //    실패하면 기존 618건의 update(예: updatetime 갱신)까지 매번 통째로 안 도는 문제가 있었다.
   let inserted = 0;
   for (let i = 0; i < toInsert.length; i += UPSERT_CHUNK) {
     const chunk = toInsert.slice(i, i + UPSERT_CHUNK);
     const { error } = await supabase.from("tb_place_bakery").insert(chunk);
     if (error) {
-      return {
-        ok: false,
-        status: 502,
-        error: `insert 실패: ${error.message}`,
-        partial: { fetched, inserted, updated: 0, deleted: 0 }
-      };
+      errors.push({ page: -1, message: `insert 실패(${i}~${i + chunk.length}): ${error.message}` });
+      continue;
     }
     inserted += chunk.length;
   }
@@ -1328,20 +1439,16 @@ async function syncBakery(supabase: SupabaseClient): Promise<BakerySyncOutcome> 
       })
       .eq("bplc_nm", row.bplc_nm);
     if (error) {
-      return {
-        ok: false,
-        status: 502,
-        error: `update 실패: ${error.message}`,
-        partial: { fetched, inserted, updated, deleted: 0 }
-      };
+      errors.push({ page: -1, message: `update 실패(${row.bplc_nm}): ${error.message}` });
+      continue;
     }
     updated += 1;
   }
 
   // 6) 소프트 삭제 — API 결과에 없는 활성 DB 행 (delete_yn='Y', deletetime 갱신).
-  //    페이지 오류가 있으면 목록이 불완전할 수 있어 삭제를 건너뛴다.
+  //    페이지 오류·시간 예산 초과·insert/update 실패가 있었으면 목록이 불완전할 수 있어 건너뛴다.
   let deleted = 0;
-  if (errors.length === 0) {
+  if (errors.length === 0 && !pagesNotDone) {
     const toDelete = [...activeNames].filter((name) => !apiRows.has(name));
     for (let i = 0; i < toDelete.length; i += UPSERT_CHUNK) {
       const chunk = toDelete.slice(i, i + UPSERT_CHUNK);
@@ -1350,12 +1457,8 @@ async function syncBakery(supabase: SupabaseClient): Promise<BakerySyncOutcome> 
         .update({ delete_yn: "Y", deletetime: now })
         .in("bplc_nm", chunk);
       if (error) {
-        return {
-          ok: false,
-          status: 502,
-          error: `삭제 처리 실패: ${error.message}`,
-          partial: { fetched, inserted, updated, deleted }
-        };
+        errors.push({ page: -1, message: `삭제 처리 실패(${i}~${i + chunk.length}): ${error.message}` });
+        continue;
       }
       deleted += chunk.length;
     }
@@ -1370,7 +1473,8 @@ async function syncBakery(supabase: SupabaseClient): Promise<BakerySyncOutcome> 
       updated,
       deleted,
       errorCount: errors.length,
-      errors: errors.slice(0, 20)
+      errors: errors.slice(0, 20),
+      notDone: pagesNotDone
     }
   };
 }
@@ -1402,7 +1506,8 @@ function outcomeToJson(
 // 서로 독립인 detail / barrierfree 는 병렬로 실행한다.
 // tb_place_bakery 는 tb_place 에 의존하지 않으므로 place 시작과 동시에 병렬로 돌린다.
 export async function runFullSync(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  deadline: number
 ): Promise<
   Record<
     "place" | "detail" | "barrierfree" | "bakery" | "normalize",
@@ -1410,23 +1515,25 @@ export async function runFullSync(
   >
 > {
   // 0) tb_place 와 무관한 bakery 동기화를 먼저 시작(await 하지 않고 병렬 진행)
-  const bakeryPromise = syncBakery(supabase);
+  const bakeryPromise = syncBakery(supabase, deadline);
 
   // 1) 원본 테이블 tb_place 선행 동기화
   console.log("[sync] tb_place 동기화 시작");
-  const placeOutcome = await syncPlace(supabase);
+  const placeOutcome = await syncPlace(supabase, deadline);
   console.log("[sync] tb_place 완료 → detail/barrierfree 병렬 시작");
 
-  // 2) tb_place_detail / tb_place_barrierfree 병렬 동기화 (서로 독립) + bakery 수거
+  // 2) tb_place_detail / tb_place_barrierfree 병렬 동기화 (서로 독립) + bakery 수거.
+  //    셋 다 같은 deadline 을 공유한다 — 각자 그 시각이 되면 알아서 중단하고 notDone 을 남긴다.
   const [detailOutcome, barrierfreeOutcome, bakeryOutcome] = await Promise.all([
-    syncDetail(supabase),
-    syncBarrierfree(supabase),
+    syncDetail(supabase, deadline),
+    syncBarrierfree(supabase, deadline),
     bakeryPromise
   ]);
   console.log("[sync] detail/barrierfree/bakery 완료 → detail_normalized 정규화 시작");
 
-  // 3) detail 완료 후 정규화 (tb_place_detail → tb_place_detail_normalized 의존이라 순차 실행)
-  const normalizeOutcome = await syncDetailNormalized(supabase);
+  // 3) detail 완료 후 정규화 (tb_place_detail → tb_place_detail_normalized 의존이라 순차 실행).
+  //    시간이 이미 다 됐으면 syncDetailNormalized 내부에서 바로 notDone 으로 건너뛴다.
+  const normalizeOutcome = await syncDetailNormalized(supabase, deadline);
   console.log("[sync] detail_normalized 정규화 완료");
 
   return {
@@ -1478,10 +1585,11 @@ export async function POST(request: Request) {
   const supabase = createClient(config.supabaseUrl, config.secretKey, {
     auth: { persistSession: false }
   });
+  const deadline = Date.now() + TIME_BUDGET_MS;
 
   // 단일 테이블 동기화 — 기존 응답 형태(flat SyncResult)를 그대로 유지
   if (isSyncTarget(target)) {
-    const outcome = await SYNC_FNS[target](supabase);
+    const outcome = await SYNC_FNS[target](supabase, deadline);
     return outcome.ok
       ? NextResponse.json(outcome.result)
       : NextResponse.json(
@@ -1490,9 +1598,11 @@ export async function POST(request: Request) {
         );
   }
 
-  // 전체 동기화 — place 선행 후 detail/barrierfree 병렬 실행, 테이블별 결과를 묶어서 반환
+  // 전체 동기화 — place 선행 후 detail/barrierfree 병렬 실행, 테이블별 결과를 묶어서 반환.
+  // 60초 예산 안에 다 못 끝나면 각 결과의 notDone 이 true 로 남고, 관리자가 다시 누르면 이어서
+  // 처리된다(스케줄러는 자동으로 체이닝하지만, 이 수동 엔드포인트는 그렇게 안 하므로).
   if (target === "all") {
-    return NextResponse.json(await runFullSync(supabase));
+    return NextResponse.json(await runFullSync(supabase, deadline));
   }
 
   return NextResponse.json(

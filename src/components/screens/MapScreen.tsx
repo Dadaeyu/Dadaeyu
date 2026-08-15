@@ -1,17 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent
+} from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, Filter, LocateFixed, X, ChevronDown } from "lucide-react";
+import { LocateFixed, X, MoreVertical, Palette, RotateCcw, ZoomIn, Check } from "lucide-react";
 import { useFilters } from "@/components/PlaceFilters";
 import KakaoMap, { type MapMarker, type MapPathSegment } from "@/components/KakaoMap";
 import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
-import TourismDetailPanel, {
-  type PlaceRouteGuideState
-} from "@/components/search/TourismDetailPanel";
-import SearchResultList from "@/components/search/SearchResultList";
-import { FilterOverlayPanel } from "@/components/search/FilterPanel";
-import { getCategoryColor } from "@/lib/search/categoryColors";
+import { type PlaceRouteGuideState } from "@/components/search/TourismDetailPanel";
+import {
+  getCategoryColor,
+  LCLSSYSTM1_COLORS,
+  LCLSSYSTM1_LABELS
+} from "@/lib/search/categoryColors";
 import { usePlaceSearch } from "@/hooks/usePlaceSearch";
 import { useMyLocation, type MyLocationErrorReason } from "@/hooks/useMyLocation";
 import {
@@ -40,8 +46,71 @@ export default function Map() {
   const initialContentId = searchParams.get("contentId");
   const mapOnly = searchParams.get("mode") === "map";
 
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [resultsMinimized, setResultsMinimized] = useState(false);
+  // 모바일(및 mapOnly)에서 검색 패널을 코스 상세와 동일한 드래그 가능한 하단 시트로 띄운다.
+  // 핸들 자신이 드래그 도중 위치가 이동하므로(시트가 커지면 핸들도 같이 올라감), setPointerCapture 에
+  // 의존하지 않고 window 에 직접 리스너를 붙여서 손가락이 핸들 밖으로 벗어나도 계속 추적한다.
+  const [mobileSheetHeight, setMobileSheetHeight] = useState(65);
+  const sheetDragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const handleSheetDragStart = (e: ReactPointerEvent<HTMLDivElement>) => {
+    // 브라우저 기본 스크롤/패닝 제스처가 같이 발동해서 지도·페이지가 스크롤되는 걸 막는다.
+    e.preventDefault();
+    sheetDragRef.current = { startY: e.clientY, startHeight: mobileSheetHeight };
+
+    const onMove = (moveEvent: PointerEvent) => {
+      if (!sheetDragRef.current) return;
+      moveEvent.preventDefault();
+      const containerHeight = window.innerHeight - 64; // calc(100vh - 64px) 와 동일한 식
+      const deltaPercent =
+        ((sheetDragRef.current.startY - moveEvent.clientY) / containerHeight) * 100;
+      setMobileSheetHeight(
+        Math.min(92, Math.max(30, sheetDragRef.current.startHeight + deltaPercent))
+      );
+    };
+    const onUp = () => {
+      sheetDragRef.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+  // 지도 영역 자체의 높이를 재서(헤더 등 제외) 시트가 가리는 실제 픽셀 높이를 구한다 —
+  // window.innerHeight 로 계산하면 과대 추정돼서 경로 안내 시 지도가 시트에 가려진 채 맞춰진다.
+  const mapAreaRef = useRef<HTMLDivElement>(null);
+  const [mapBottomOverlayPx, setMapBottomOverlayPx] = useState(0);
+  useEffect(() => {
+    const updateOverlay = () => {
+      const isMobile = mapOnly || window.innerWidth < 768; // Tailwind md 기준
+      const containerHeight = mapAreaRef.current?.clientHeight ?? window.innerHeight;
+      setMapBottomOverlayPx(isMobile ? Math.round(containerHeight * (mobileSheetHeight / 100)) : 0);
+    };
+    updateOverlay();
+    window.addEventListener("resize", updateOverlay);
+    return () => window.removeEventListener("resize", updateOverlay);
+  }, [mobileSheetHeight, mapOnly]);
+
+  // 지도 오른쪽 하단 "기능 목록" 드롭다운 — 코스 상세와 동일: 초기화/내 위치/확대·축소/테마 범례.
+  const [mapMenuOpen, setMapMenuOpen] = useState(false);
+  const mapMenuRef = useRef<HTMLDivElement>(null);
+  // 전체 화면을 덮는 배경 버튼 대신 document 클릭을 직접 듣고 메뉴 영역 바깥인지만 판정한다 —
+  // 그래야 드롭다운이 열려 있어도 지도 위 마우스휠/터치가 그대로 지도에 전달돼 확대·축소가 된다.
+  useEffect(() => {
+    if (!mapMenuOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (mapMenuRef.current && !mapMenuRef.current.contains(e.target as Node)) {
+        setMapMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [mapMenuOpen]);
+  const [showThemeLegend, setShowThemeLegend] = useState(false);
+  const [showZoomControl, setShowZoomControl] = useState(true);
+  // "초기화" 메뉴 항목용 — 값을 바꿀 때마다 resetViewTrigger 가 달라져서 지도가 대전 전체 화면으로 되돌아간다.
+  const [mapManualResetTrigger, setMapManualResetTrigger] = useState(0);
+
   const { filters, set, toggleList, reset, activeCount } = useFilters({
     themes: initialTheme ? [initialTheme] : []
   });
@@ -319,18 +388,29 @@ export default function Map() {
   // 검색 전에는 핫플레이스 5곳을 목록·지도 마커 모두에 바로 보여준다.
   const markerPlaces = searchPlaces.length > 0 ? searchPlaces : topRatedPlaces;
 
-  // 모바일/mapOnly: 상세 열리면 지도·시트를 실제 상·하 50%로 분할 (오버레이 아님)
-  const splitMapForDetail = Boolean(searchDetail);
-
   return (
     <div
       className="relative -mx-4 -mt-6 -mb-24 flex overflow-hidden md:-mx-6"
       style={{ height: "calc(100vh - 64px)" }}
     >
-      {/* ── LEFT SIDEBAR (desktop only, hidden in mapOnly mode) ── */}
+      {/* ── 검색 패널 — 데스크톱은 왼쪽 고정 사이드바, 모바일(및 mapOnly)은 코스 상세와 동일한
+          드래그 가능한 하단 시트. 검색 목록 ↔ 상세 전환도 PlaceSearchSidebar 가 내부에서 처리한다. ── */}
       <aside
-        className={`${mapOnly ? "hidden" : "hidden md:flex"} relative w-72 shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white`}
+        className={
+          mapOnly
+            ? "border-hairline absolute inset-x-0 bottom-0 z-30 flex h-[var(--sheet-h)] shrink-0 flex-col overflow-hidden rounded-t-2xl border-t bg-white shadow-2xl"
+            : "border-hairline absolute inset-x-0 bottom-0 z-30 flex h-[var(--sheet-h)] shrink-0 flex-col overflow-hidden rounded-t-2xl border-t bg-white shadow-2xl md:static md:inset-auto md:z-auto md:flex md:h-auto md:w-72 md:rounded-none md:border-t-0 md:border-r md:shadow-none"
+        }
+        style={{ "--sheet-h": `${mobileSheetHeight}%` } as CSSProperties}
       >
+        {/* 하단 시트 핸들 — 드래그해서 시트 높이 조절. mapOnly 는 항상 시트 모드라 항상 보이고,
+            일반 모드는 모바일에서만 보인다(데스크톱은 고정폭 사이드바라 핸들 불필요). */}
+        <div
+          className={`shrink-0 touch-none justify-center py-3 ${mapOnly ? "flex" : "flex md:hidden"}`}
+          onPointerDown={handleSheetDragStart}
+        >
+          <span className="bg-hairline h-1 w-10 rounded-full" />
+        </div>
         <PlaceSearchSidebar
           keyword={keyword}
           setKeyword={setKeyword}
@@ -358,95 +438,9 @@ export default function Map() {
       </aside>
 
       {/* ── MAP AREA ── */}
-      <div
-        className={`relative flex-1 overflow-hidden ${
-          splitMapForDetail ? (mapOnly ? "flex flex-col" : "flex flex-col md:block") : ""
-        }`}
-      >
-        {/* 상단 지도 뷰포트 — 상세 열림(모바일) 시 높이 50%로 실제 축소 */}
-        <div
-          className={`relative min-h-0 overflow-hidden ${
-            splitMapForDetail ? (mapOnly ? "h-1/2" : "h-1/2 md:h-full") : "h-full"
-          }`}
-        >
-          {/* Search + filter bar */}
-          <div
-            className={`${mapOnly ? "" : "md:hidden"} absolute top-3 right-3 left-3 z-20 flex gap-2`}
-          >
-            <div className="border-hairline bg-background relative flex-1 rounded-xl border shadow-lg">
-              <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder={isSearching ? "검색 중..." : "장소 검색 (Enter)"}
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch(keyword)}
-                className="text-ink placeholder:text-stone w-full rounded-xl bg-transparent py-2.5 pr-4 pl-9 text-sm focus:outline-none"
-              />
-            </div>
-            {!mapOnly && (
-              <button
-                onClick={() => setShowMobileFilters(!showMobileFilters)}
-                className={`relative rounded-xl px-3 shadow-lg transition-colors ${showMobileFilters ? "bg-brand-700 text-white" : "bg-brand-600 hover:bg-brand-700 text-white"}`}
-              >
-                <Filter className="h-4 w-4" />
-                {activeFilterCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </button>
-            )}
-          </div>
-
-          {/* Mobile filter panel */}
-          {showMobileFilters && (
-            <FilterOverlayPanel
-              filters={filters}
-              set={set}
-              toggleList={toggleList}
-              guOptions={areaCodes.map((a) => a.name)}
-              dongOptions={dongOptions}
-              onReset={resetFilters}
-              onClose={() => setShowMobileFilters(false)}
-            />
-          )}
-
-          {searchPlaces.length > 0 && !showMobileFilters && !searchDetail ? (
-            <section
-              className={`${mapOnly ? "" : "md:hidden"} border-hairline absolute top-20 right-3 left-3 z-20 overflow-hidden rounded-lg border bg-white shadow-xl`}
-              aria-label={`검색 결과 ${searchPlaces.length}개`}
-            >
-              <button
-                type="button"
-                onClick={() => setResultsMinimized((v) => !v)}
-                className="border-hairline flex w-full items-center justify-between gap-2 border-b bg-white px-4 py-3 text-left"
-                aria-expanded={!resultsMinimized}
-              >
-                <div className="min-w-0">
-                  <p className="text-ink text-sm font-semibold">
-                    검색 결과 {searchPlaces.length}개
-                  </p>
-                  {!resultsMinimized && (
-                    <p className="text-steel mt-0.5 text-xs">
-                      장소를 선택하면 상세 정보를 확인할 수 있습니다.
-                    </p>
-                  )}
-                </div>
-                <ChevronDown
-                  className={`text-steel h-4 w-4 shrink-0 transition-transform ${resultsMinimized ? "" : "rotate-180"}`}
-                />
-              </button>
-              {!resultsMinimized && (
-                <div className="max-h-[min(46vh,24rem)] overflow-y-auto">
-                  <SearchResultList places={searchPlaces} onSelect={selectPlace} />
-                </div>
-              )}
-            </section>
-          ) : null}
-
-          <KakaoMap
-            markers={markerPlaces.map((sp): MapMarker => {
+      <div ref={mapAreaRef} className="relative flex-1 overflow-hidden">
+        <KakaoMap
+          markers={markerPlaces.map((sp): MapMarker => {
               if (sp.source === "kakao") {
                 // 눈물방울 핀(파란 배경 + 카카오 옐로우 중앙 점)으로 카카오 검색 결과임을 표시.
                 return {
@@ -475,7 +469,8 @@ export default function Map() {
             }}
             myLocation={myLocation}
             focusMyLocationTrigger={focusMyLocationTrigger}
-            resetViewTrigger={mapResetTrigger + myLocationResetTrigger}
+            resetViewTrigger={mapResetTrigger + myLocationResetTrigger + mapManualResetTrigger}
+            showZoomControl={showZoomControl}
             path={routePath}
             fitPathKey={
               routeGuide && !routeGuide.loading
@@ -494,6 +489,7 @@ export default function Map() {
                   }
                 : null
             }
+            bottomOverlayPx={mapBottomOverlayPx}
           />
 
           {routeGuide && !searchDetail ? (
@@ -542,7 +538,8 @@ export default function Map() {
             <div
               id="map-location-error"
               role="alert"
-              className="border-hairline bg-background absolute right-4 bottom-[9.25rem] z-[60] w-[min(16rem,calc(100%-2rem))] rounded-2xl border p-3.5 shadow-lg md:bottom-16"
+              className="border-hairline bg-background absolute right-4 z-[60] w-[min(16rem,calc(100%-2rem))] rounded-2xl border p-3.5 shadow-lg"
+              style={{ bottom: mapBottomOverlayPx + 16 + 56 }}
             >
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
@@ -565,48 +562,108 @@ export default function Map() {
             </div>
           ) : null}
 
-          {/* 내 위치 확인 버튼 — 켜져 있을 때 다시 누르면 대전 전체 화면으로 되돌아간다 */}
-          <button
-            type="button"
-            onClick={handleLocateClick}
-            className={`absolute right-4 bottom-20 z-[60] flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-colors md:bottom-4 ${
-              myLocationStatus === "active"
-                ? "bg-blue-600 text-white hover:bg-blue-700"
-                : myLocationStatus === "error"
+          {/* 테마 색상 범례 — 확대/축소 컨트롤(카카오 기본 줌 컨트롤, 데스크톱에서만 오른쪽 위에 뜸)이
+              켜져 있을 땐 윗변을 맞추고 바로 왼쪽에, 꺼져 있으면(모바일도 마찬가지) 오른쪽 끝에 붙인다. */}
+          {showThemeLegend && (
+            <div
+              className={`border-hairline absolute top-0.5 right-3 z-[55] rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "md:right-11" : ""}`}
+            >
+              <p className="text-steel mb-1.5 text-[11px] font-semibold">테마 색상</p>
+              <div className="space-y-1">
+                {Object.entries(LCLSSYSTM1_COLORS).map(([code, color]) => (
+                  <div key={code} className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ background: color }}
+                    />
+                    {LCLSSYSTM1_LABELS[code] ?? code}
+                  </div>
+                ))}
+                {/* 카카오 검색 결과 마커는 카카오 브랜드 옐로우(#FEE500)로 표시된다 */}
+                <div className="flex items-center gap-1.5 text-xs text-gray-700">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: "#FEE500" }}
+                  />
+                  카카오
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 지도 기능 드롭다운 — 초기화 / 내 위치 / 확대·축소 / 테마 범례.
+              모바일(및 mapOnly)에선 검색 패널이 하단 시트로 뜨므로, 그 시트 바로 위에 버튼이 오도록
+              mapBottomOverlayPx(시트가 가리는 높이)만큼 띄운다. 데스크톱은 overlay가 0이라
+              기존 bottom-4(16px)와 동일하게 유지된다. */}
+          <div
+            ref={mapMenuRef}
+            className="absolute right-4 z-[61]"
+            style={{ bottom: mapBottomOverlayPx + 16 }}
+          >
+            {mapMenuOpen && (
+              <div className="border-hairline absolute right-0 bottom-14 w-32 overflow-hidden rounded-xl border bg-white py-1 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => setMapManualResetTrigger((n) => n + 1)}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  <RotateCcw className="h-4 w-4 shrink-0 text-gray-500" />
+                  초기화
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLocateClick}
+                  className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  <span className="flex items-center gap-2">
+                    <LocateFixed
+                      className={`h-4 w-4 shrink-0 text-gray-500 ${myLocationStatus === "locating" ? "animate-pulse" : ""}`}
+                    />
+                    내 위치
+                  </span>
+                  {myLocationStatus === "active" && (
+                    <Check className="text-brand-600 h-4 w-4 shrink-0" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowZoomControl((v) => !v)}
+                  className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  <span className="flex items-center gap-2">
+                    <ZoomIn className="h-4 w-4 shrink-0 text-gray-500" />
+                    확대/축소
+                  </span>
+                  {showZoomControl && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowThemeLegend((v) => !v)}
+                  className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  <span className="flex items-center gap-2">
+                    <Palette className="h-4 w-4 shrink-0 text-gray-500" />
+                    테마 범례
+                  </span>
+                  {showThemeLegend && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setMapMenuOpen((v) => !v)}
+              className={`flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-colors ${
+                myLocationStatus === "error"
                   ? "border-error/30 text-error border bg-white hover:bg-red-50"
                   : "bg-white text-gray-600 hover:bg-gray-50"
-            }`}
-            aria-label={myLocationStatus === "active" ? "대전 전체 보기" : "내 위치 확인"}
-            aria-pressed={myLocationStatus === "active"}
-            aria-describedby={showLocationErrorToast ? "map-location-error" : undefined}
-          >
-            <LocateFixed
-              className={`h-5 w-5 ${myLocationStatus === "locating" ? "animate-pulse" : ""}`}
-            />
-          </button>
-        </div>
-
-        {/* 하단 상세 — flow로 하단 50% (지도 위에 덮지 않음) */}
-        {searchDetail ? (
-          <div
-            className={`${mapOnly ? "flex" : "flex md:hidden"} border-hairline h-1/2 min-h-0 flex-col overflow-hidden rounded-t-2xl border-t bg-white shadow-2xl`}
-          >
-            <div className="flex justify-center pt-2 pb-1">
-              <span className="bg-hairline h-1 w-10 rounded-full" aria-hidden />
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <TourismDetailPanel
-                sp={searchDetail}
-                detail={tourismDetail}
-                isLoading={isLoadingDetail}
-                onBack={backFromDetail}
-                onLikeChange={refreshLiked}
-                onStartRoute={handleStartRoute}
-                routeGuide={routeGuide}
-              />
-            </div>
+              }`}
+              aria-label="지도 기능 목록"
+              aria-expanded={mapMenuOpen}
+              aria-describedby={showLocationErrorToast ? "map-location-error" : undefined}
+            >
+              <MoreVertical className="h-5 w-5" />
+            </button>
           </div>
-        ) : null}
       </div>
     </div>
   );
