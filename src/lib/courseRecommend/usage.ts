@@ -1,0 +1,81 @@
+import "server-only";
+
+import { createAdminClient } from "@/lib/supabase/admin";
+
+/** 코스 추천(AI 호출) 인당 하루 제한 횟수 */
+export const COURSE_RECOMMEND_DAILY_LIMIT = 3;
+
+const COURSE_RECOMMEND_TIME_ZONE = "Asia/Seoul";
+
+export class CourseRecommendUsageError extends Error {
+  status: number;
+  used: number;
+  remaining: number;
+
+  constructor(message: string, status: number, used: number, remaining: number) {
+    super(message);
+    this.name = "CourseRecommendUsageError";
+    this.status = status;
+    this.used = used;
+    this.remaining = remaining;
+  }
+}
+
+export type CourseRecommendUsage = {
+  used: number;
+  remaining: number;
+  limit: number;
+};
+
+function getClientPeriod(date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: COURSE_RECOMMEND_TIME_ZONE
+  }).format(date);
+}
+
+/**
+ * tb 접두 테이블이 아닌 course_recommend_daily_usage(supabase/schema-course-recommend-usage.sql)에
+ * 원자적으로 카운트를 올린다. 한도 초과 시 CourseRecommendUsageError(429)를 던진다.
+ */
+export async function reserveCourseRecommendUsage(
+  clientKey: string
+): Promise<CourseRecommendUsage> {
+  const clientPeriod = getClientPeriod();
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("reserve_course_recommend_usage", {
+    p_client_key: clientKey,
+    p_client_period: clientPeriod,
+    p_client_limit: COURSE_RECOMMEND_DAILY_LIMIT,
+    p_usage: 1
+  });
+
+  if (error) {
+    throw new CourseRecommendUsageError(
+      "코스 추천 이용 횟수를 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요.",
+      503,
+      0,
+      0
+    );
+  }
+
+  const reservation = Array.isArray(data) ? data[0] : data;
+  if (!reservation?.allowed) {
+    const used = Number(reservation?.used ?? 0);
+    throw new CourseRecommendUsageError(
+      `코스 추천은 하루 ${COURSE_RECOMMEND_DAILY_LIMIT}회까지 이용할 수 있어요. 내일 다시 시도해 주세요.`,
+      429,
+      used,
+      Number(reservation?.remaining ?? 0)
+    );
+  }
+
+  const used = Number(reservation.used ?? 0);
+  return {
+    used,
+    remaining: Math.max(COURSE_RECOMMEND_DAILY_LIMIT - used, 0),
+    limit: COURSE_RECOMMEND_DAILY_LIMIT
+  };
+}

@@ -4,6 +4,11 @@ import { createFixedWindowRateLimiter } from "@/lib/server/fixed-window-rate-lim
 import { createTimeoutSignal } from "@/lib/server/timeout-signal";
 import { resolveChatClientKey } from "@/lib/chat/server/request-identity";
 import {
+  reserveCourseRecommendUsage,
+  CourseRecommendUsageError,
+  COURSE_RECOMMEND_DAILY_LIMIT
+} from "@/lib/courseRecommend/usage";
+import {
   getBarrierFreeIds,
   getHeadcountExcludeIds,
   getScheduleExcludeIds
@@ -71,6 +76,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const usage = await reserveCourseRecommendUsage(clientKey);
+
     const body = (await request.json().catch(() => ({}))) as {
       accessibility?: unknown;
       themes?: unknown;
@@ -133,7 +140,8 @@ export async function POST(request: Request) {
     if (markedActivityCandidates.length < MIN_CANDIDATES) {
       return NextResponse.json({
         courses: [],
-        message: "조건에 맞는 장소가 너무 적어서 코스를 만들지 못했어요. 필터를 조금 넓혀보세요."
+        message: "조건에 맞는 장소가 너무 적어서 코스를 만들지 못했어요. 필터를 조금 넓혀보세요.",
+        usage
       });
     }
 
@@ -171,12 +179,22 @@ export async function POST(request: Request) {
     if (courses.length === 0) {
       return NextResponse.json({
         courses: [],
-        message: "조건에 맞는 코스를 만들지 못했어요. 필터를 조금 바꿔서 다시 시도해 보세요."
+        message: "조건에 맞는 코스를 만들지 못했어요. 필터를 조금 바꿔서 다시 시도해 보세요.",
+        usage
       });
     }
 
-    return NextResponse.json({ courses });
+    return NextResponse.json({ courses, usage });
   } catch (error) {
+    if (error instanceof CourseRecommendUsageError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          usage: { used: error.used, remaining: error.remaining, limit: COURSE_RECOMMEND_DAILY_LIMIT }
+        },
+        { status: error.status }
+      );
+    }
     const message =
       error instanceof Error && error.name === "AbortError"
         ? "코스를 설계하는 데 시간이 오래 걸렸어요. 잠시 뒤 다시 시도해 주세요."

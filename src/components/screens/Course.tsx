@@ -839,6 +839,12 @@ export default function Course() {
   const [recommendNotice, setRecommendNotice] = useState(
     () => restoredRecommendSession?.notice ?? ""
   );
+  // AI 추천 하루 이용 횟수 — 응답에 실려오는 usage 를 그대로 반영(서버가 실제 제한을 판단).
+  const [recommendUsage, setRecommendUsage] = useState<{
+    used: number;
+    remaining: number;
+    limit: number;
+  } | null>(null);
 
   // 필터/결과가 바뀔 때마다 세션에 동기화 — 상세 화면(id 있음)에서는 건드리지 않는다.
   useEffect(() => {
@@ -891,7 +897,9 @@ export default function Course() {
         courses?: RecommendedCourseDraft[];
         message?: string;
         error?: string;
+        usage?: { used: number; remaining: number; limit: number };
       };
+      if (json.usage) setRecommendUsage(json.usage);
       if (!res.ok) {
         setRecommendError(json.error ?? "코스를 추천받지 못했어요. 잠시 뒤 다시 시도해 주세요.");
         return;
@@ -1303,13 +1311,15 @@ export default function Course() {
               <div>
                 <p className="text-brand-900 text-sm font-semibold">AI 코스 추천받기</p>
                 <p className="text-brand-600 mt-0.5 text-xs">
-                  필터 조건에 맞는 최적의 코스를 최대 5개까지 설계해드려요
+                  필터 조건에 맞는 최적의 코스를 최대 5개까지 설계해드려요 · 하루{" "}
+                  {recommendUsage?.limit ?? 3}회까지 이용할 수 있어요
+                  {recommendUsage ? ` (오늘 ${recommendUsage.used}/${recommendUsage.limit}회 사용)` : ""}
                 </p>
               </div>
             </div>
             <button
               onClick={handleRecommend}
-              disabled={recommendLoading}
+              disabled={recommendLoading || recommendUsage?.remaining === 0}
               className="bg-brand-600 hover:bg-brand-700 shrink-0 rounded-lg px-4 py-2 text-sm text-white transition-colors disabled:opacity-60"
             >
               {recommendLoading ? "설계 중..." : "추천받기"}
