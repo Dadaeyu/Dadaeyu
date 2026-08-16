@@ -4,6 +4,9 @@ export const THEME_CODE_GROUP = "CONTENTTYPE";
 /** tb_code.code_group — 여행 접근성 니즈 */
 export const BARRIERFREE_CODE_GROUP = "BARRIERFREE";
 
+/** tb_code.code_group — 게시글/댓글 신고 사유 */
+export const REPORT_REASON_CODE_GROUP = "report_reason";
+
 export type ThemeCodeOption = {
   code_id: string;
   code_nm: string;
@@ -39,6 +42,15 @@ export async function fetchAccessibilityNeedOptions(): Promise<CodeOption[]> {
   const res = await fetch("/api/codes/accessibility-needs");
   if (!res.ok) {
     throw new Error("접근성 목록을 불러오지 못했습니다.");
+  }
+  const data = (await res.json()) as { items?: CodeOption[] };
+  return data.items ?? [];
+}
+
+export async function fetchReportReasonOptions(): Promise<CodeOption[]> {
+  const res = await fetch("/api/codes/report-reasons");
+  if (!res.ok) {
+    throw new Error("신고 사유 목록을 불러오지 못했습니다.");
   }
   const data = (await res.json()) as { items?: CodeOption[] };
   return data.items ?? [];

@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Star,
   ShieldCheck,
+  ShieldAlert,
   Megaphone,
   HelpCircle,
   Layers
@@ -37,6 +38,7 @@ import { NoticesSection } from "@/components/screens/admin/NoticesSection";
 import { CommunityNoticesSection } from "@/components/screens/admin/CommunityNoticesSection";
 import { EventsSection } from "@/components/screens/admin/EventsSection";
 import { FaqSection } from "@/components/screens/admin/FaqSection";
+import { CommunityReportsSection } from "@/components/screens/admin/CommunityReportsSection";
 import { TablePagination } from "@/components/screens/admin/TablePagination";
 
 // ── 사이드바 메뉴 ─────────────────────────────────────────
@@ -49,6 +51,7 @@ const SECTIONS = [
   { key: "faq", label: "FAQ 관리", icon: HelpCircle },
   { key: "board-settings", label: "게시판 관리", icon: Layers },
   { key: "board-posts", label: "게시글 관리", icon: FileText },
+  { key: "community-reports", label: "신고 관리", icon: ShieldAlert },
   { key: "places", label: "장소 관리", icon: MapPin },
   { key: "courses", label: "코스 관리", icon: Route },
   { key: "reports", label: "제보 확인", icon: Flag }
@@ -201,6 +204,7 @@ export default function Admin() {
           {section === "users" && <UsersSection />}
           {section === "board-settings" && <BoardSection />}
           {section === "board-posts" && <BoardPostsSection />}
+          {section === "community-reports" && <CommunityReportsSection />}
           {section === "notices" && <NoticesSection />}
           {section === "community-notices" && <CommunityNoticesSection />}
           {section === "places" && <PlaceManagement />}
@@ -1970,4 +1974,3 @@ function CourseManagement() {
     </div>
   );
 }
-

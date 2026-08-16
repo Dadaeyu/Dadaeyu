@@ -39,6 +39,7 @@ import {
   CommunityFaqAccordion,
   CommunityNoticeList
 } from "@/components/community/CommunityListViews";
+import { ReportReasonDialog } from "@/components/community/ReportReasonDialog";
 
 type CommunityNoticeItem = {
   id: number;
@@ -163,7 +164,7 @@ function StarRatingInput({
   onChange: (next: number | null) => void;
 }) {
   return (
-    <div className="mt-2">
+    <div>
       <p className="text-slate mb-1 text-xs font-semibold">{label}</p>
       <div className="flex gap-1">
         {([1, 2, 3, 4, 5] as const).map((n) => (
@@ -802,6 +803,22 @@ function CommunityWrite() {
     results: courseResults,
     loading: courseSearching
   } = useCourseQuickSearch();
+  const placePickerRef = useRef<HTMLDivElement>(null);
+  const coursePickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showPlacePicker && !showCoursePicker) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (showPlacePicker && !placePickerRef.current?.contains(e.target as Node)) {
+        setShowPlacePicker(false);
+      }
+      if (showCoursePicker && !coursePickerRef.current?.contains(e.target as Node)) {
+        setShowCoursePicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [showPlacePicker, showCoursePicker]);
 
   useEffect(() => {
     fetch("/api/community/boards")
@@ -1054,9 +1071,19 @@ function CommunityWrite() {
       <div>
         <p className="text-slate mb-2 text-sm font-semibold">게시판</p>
         {selectedBoard ? (
-          <span className="bg-brand-100 text-brand-700 inline-flex items-center rounded-full px-4 py-2 text-sm font-medium">
-            {selectedBoard.board_nm}
-          </span>
+          isEditing ? (
+            <span className="bg-brand-100 text-brand-700 inline-flex items-center rounded-full px-4 py-2 text-sm font-medium">
+              {selectedBoard.board_nm}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setBoardId(null)}
+              className="bg-brand-100 text-brand-700 hover:bg-brand-200 inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors"
+            >
+              {selectedBoard.board_nm}
+            </button>
+          )
         ) : (
           <div className="flex flex-wrap gap-2">
             {boards.length === 0 && <p className="text-stone text-sm">조회중 입니다.</p>}
@@ -1209,91 +1236,93 @@ function CommunityWrite() {
         <p className="text-slate mb-2 text-sm font-semibold">
           장소 첨부 <span className="text-stone font-normal">(선택)</span>
         </p>
-        {selectedPlace ? (
-          <span className="bg-brand-50 border-brand-200 inline-flex max-w-full items-center gap-2 rounded-full border py-1.5 pr-2 pl-1.5 text-sm">
-            {selectedPlace.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={selectedPlace.image}
-                alt=""
-                className="h-7 w-7 shrink-0 rounded-full object-cover"
-              />
-            ) : (
-              <span className="bg-brand-100 flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
-                <MapPin className="text-brand-600 h-3.5 w-3.5" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {selectedPlace ? (
+            <span className="bg-brand-50 border-brand-200 inline-flex max-w-full items-center gap-2 rounded-full border py-1.5 pr-2 pl-1.5 text-sm">
+              {selectedPlace.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={selectedPlace.image}
+                  alt=""
+                  className="h-7 w-7 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <span className="bg-brand-100 flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+                  <MapPin className="text-brand-600 h-3.5 w-3.5" />
+                </span>
+              )}
+              <span className="text-brand-800 min-w-0 truncate font-medium">
+                {selectedPlace.name}
               </span>
-            )}
-            <span className="text-brand-800 min-w-0 truncate font-medium">
-              {selectedPlace.name}
+              <button
+                onClick={() => setSelectedPlace(null)}
+                aria-label="장소 첨부 해제"
+                className="flex min-h-11 min-w-11 shrink-0 items-center justify-center"
+              >
+                <X className="text-brand-400 hover:text-brand-700 h-3.5 w-3.5" />
+              </button>
             </span>
-            <button
-              onClick={() => setSelectedPlace(null)}
-              aria-label="장소 첨부 해제"
-              className="flex min-h-11 min-w-11 shrink-0 items-center justify-center"
-            >
-              <X className="text-brand-400 hover:text-brand-700 h-3.5 w-3.5" />
-            </button>
-          </span>
-        ) : (
-          <div className="relative">
-            <button
-              onClick={() => setShowPlacePicker((v) => !v)}
-              className="border-hairline text-steel hover:bg-surface-soft flex min-h-11 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors"
-            >
-              <MapPin className="h-4 w-4" />
-              장소 추가
-            </button>
-            {showPlacePicker && (
-              <div className="border-hairline bg-background absolute top-full left-0 z-20 mt-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border shadow-lg">
-                <div className="border-hairline-soft border-b p-2">
-                  <input
-                    autoFocus
-                    value={placeKeyword}
-                    onChange={(e) => setPlaceKeyword(e.target.value)}
-                    placeholder="장소 이름 검색"
-                    className="border-hairline bg-background text-ink w-full rounded-lg border px-3 py-2 text-sm"
-                  />
+          ) : (
+            <div ref={placePickerRef} className="relative">
+              <button
+                onClick={() => setShowPlacePicker((v) => !v)}
+                className="border-hairline text-steel hover:bg-surface-soft flex min-h-11 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors"
+              >
+                <MapPin className="h-4 w-4" />
+                장소 추가
+              </button>
+              {showPlacePicker && (
+                <div className="border-hairline bg-background absolute bottom-full left-0 z-20 mb-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border shadow-lg">
+                  <div className="border-hairline-soft border-b p-2">
+                    <input
+                      autoFocus
+                      value={placeKeyword}
+                      onChange={(e) => setPlaceKeyword(e.target.value)}
+                      placeholder="장소 이름 검색"
+                      className="border-hairline bg-background text-ink w-full rounded-lg border px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {placeSearching && (
+                      <p className="text-stone px-3 py-3 text-center text-xs">검색 중…</p>
+                    )}
+                    {!placeSearching && placeKeyword.trim() && placeResults.length === 0 && (
+                      <p className="text-stone px-3 py-3 text-center text-xs">검색 결과가 없어요</p>
+                    )}
+                    {!placeSearching &&
+                      placeResults.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            setSelectedPlace(p);
+                            setShowPlacePicker(false);
+                          }}
+                          className="border-hairline-soft hover:bg-surface-soft flex w-full items-center gap-2.5 border-b px-3 py-2.5 text-left transition-colors last:border-0"
+                        >
+                          {p.image ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={p.image}
+                              alt=""
+                              className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                            />
+                          ) : (
+                            <div className="bg-surface text-stone flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+                              <MapPin className="h-4 w-4" />
+                            </div>
+                          )}
+                          <p className="text-ink truncate text-sm font-medium">{p.name}</p>
+                        </button>
+                      ))}
+                  </div>
                 </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {placeSearching && (
-                    <p className="text-stone px-3 py-3 text-center text-xs">검색 중…</p>
-                  )}
-                  {!placeSearching && placeKeyword.trim() && placeResults.length === 0 && (
-                    <p className="text-stone px-3 py-3 text-center text-xs">검색 결과가 없어요</p>
-                  )}
-                  {!placeSearching &&
-                    placeResults.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => {
-                          setSelectedPlace(p);
-                          setShowPlacePicker(false);
-                        }}
-                        className="border-hairline-soft hover:bg-surface-soft flex w-full items-center gap-2.5 border-b px-3 py-2.5 text-left transition-colors last:border-0"
-                      >
-                        {p.image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={p.image}
-                            alt=""
-                            className="h-10 w-10 shrink-0 rounded-lg object-cover"
-                          />
-                        ) : (
-                          <div className="bg-surface text-stone flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
-                            <MapPin className="h-4 w-4" />
-                          </div>
-                        )}
-                        <p className="text-ink truncate text-sm font-medium">{p.name}</p>
-                      </button>
-                    ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {selectedBoard?.rating_yn && selectedPlace && (
-          <StarRatingInput label="장소 별점" value={rating} onChange={setRating} />
-        )}
+              )}
+            </div>
+          )}
+          {selectedBoard?.rating_yn && selectedPlace && (
+            <StarRatingInput label="장소 별점" value={rating} onChange={setRating} />
+          )}
+        </div>
       </div>
 
       {/* 코스 첨부 */}
@@ -1301,83 +1330,85 @@ function CommunityWrite() {
         <p className="text-slate mb-2 text-sm font-semibold">
           코스 첨부 <span className="text-stone font-normal">(선택)</span>
         </p>
-        {selectedCourse ? (
-          <span className="bg-navy-50 border-navy-200 inline-flex max-w-full items-center gap-2 rounded-full border py-1.5 pr-2 pl-1.5 text-sm">
-            <span className="bg-navy-100 flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
-              <Route className="text-navy-600 h-3.5 w-3.5" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {selectedCourse ? (
+            <span className="bg-navy-50 border-navy-200 inline-flex max-w-full items-center gap-2 rounded-full border py-1.5 pr-2 pl-1.5 text-sm">
+              <span className="bg-navy-100 flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+                <Route className="text-navy-600 h-3.5 w-3.5" />
+              </span>
+              <span className="text-navy-800 min-w-0 truncate font-medium">
+                {selectedCourse.name}
+              </span>
+              <button
+                onClick={() => setSelectedCourse(null)}
+                aria-label="코스 첨부 해제"
+                className="flex min-h-11 min-w-11 shrink-0 items-center justify-center"
+              >
+                <X className="text-navy-400 hover:text-navy-700 h-3.5 w-3.5" />
+              </button>
             </span>
-            <span className="text-navy-800 min-w-0 truncate font-medium">
-              {selectedCourse.name}
-            </span>
-            <button
-              onClick={() => setSelectedCourse(null)}
-              aria-label="코스 첨부 해제"
-              className="flex min-h-11 min-w-11 shrink-0 items-center justify-center"
-            >
-              <X className="text-navy-400 hover:text-navy-700 h-3.5 w-3.5" />
-            </button>
-          </span>
-        ) : (
-          <div className="relative">
-            <button
-              onClick={() => setShowCoursePicker((v) => !v)}
-              className="border-hairline text-steel hover:bg-surface-soft flex min-h-11 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors"
-            >
-              <Route className="h-4 w-4" />
-              코스 추가
-            </button>
-            {showCoursePicker && (
-              <div className="border-hairline bg-background absolute top-full left-0 z-20 mt-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border shadow-lg">
-                <div className="border-hairline-soft border-b p-2">
-                  <input
-                    autoFocus
-                    value={courseKeyword}
-                    onChange={(e) => setCourseKeyword(e.target.value)}
-                    placeholder="코스 이름 검색"
-                    className="border-hairline bg-background text-ink w-full rounded-lg border px-3 py-2 text-sm"
-                  />
+          ) : (
+            <div ref={coursePickerRef} className="relative">
+              <button
+                onClick={() => setShowCoursePicker((v) => !v)}
+                className="border-hairline text-steel hover:bg-surface-soft flex min-h-11 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors"
+              >
+                <Route className="h-4 w-4" />
+                코스 추가
+              </button>
+              {showCoursePicker && (
+                <div className="border-hairline bg-background absolute bottom-full left-0 z-20 mb-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border shadow-lg">
+                  <div className="border-hairline-soft border-b p-2">
+                    <input
+                      autoFocus
+                      value={courseKeyword}
+                      onChange={(e) => setCourseKeyword(e.target.value)}
+                      placeholder="코스 이름 검색"
+                      className="border-hairline bg-background text-ink w-full rounded-lg border px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {courseSearching && (
+                      <p className="text-stone px-3 py-3 text-center text-xs">검색 중…</p>
+                    )}
+                    {!courseSearching && courseKeyword.trim() && courseResults.length === 0 && (
+                      <p className="text-stone px-3 py-3 text-center text-xs">검색 결과가 없어요</p>
+                    )}
+                    {!courseSearching &&
+                      courseResults.map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() => {
+                            setSelectedCourse(c);
+                            setShowCoursePicker(false);
+                          }}
+                          className="border-hairline-soft hover:bg-surface-soft flex w-full items-center gap-2.5 border-b px-3 py-2.5 text-left transition-colors last:border-0"
+                        >
+                          <div className="bg-navy-100 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+                            <Route className="text-navy-600 h-4 w-4" />
+                          </div>
+                          <p className="text-ink min-w-0 flex-1 truncate text-sm font-medium">
+                            {c.name}
+                          </p>
+                          {c.isMine && (
+                            <span className="bg-navy-100 text-navy-600 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold">
+                              내 코스
+                            </span>
+                          )}
+                          {c.isLiked && (
+                            <Heart className="h-3.5 w-3.5 shrink-0 fill-red-500 text-red-500" />
+                          )}
+                        </button>
+                      ))}
+                  </div>
                 </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {courseSearching && (
-                    <p className="text-stone px-3 py-3 text-center text-xs">검색 중…</p>
-                  )}
-                  {!courseSearching && courseKeyword.trim() && courseResults.length === 0 && (
-                    <p className="text-stone px-3 py-3 text-center text-xs">검색 결과가 없어요</p>
-                  )}
-                  {!courseSearching &&
-                    courseResults.map((c) => (
-                      <button
-                        key={c.id}
-                        onClick={() => {
-                          setSelectedCourse(c);
-                          setShowCoursePicker(false);
-                        }}
-                        className="border-hairline-soft hover:bg-surface-soft flex w-full items-center gap-2.5 border-b px-3 py-2.5 text-left transition-colors last:border-0"
-                      >
-                        <div className="bg-navy-100 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
-                          <Route className="text-navy-600 h-4 w-4" />
-                        </div>
-                        <p className="text-ink min-w-0 flex-1 truncate text-sm font-medium">
-                          {c.name}
-                        </p>
-                        {c.isMine && (
-                          <span className="bg-navy-100 text-navy-600 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold">
-                            내 코스
-                          </span>
-                        )}
-                        {c.isLiked && (
-                          <Heart className="h-3.5 w-3.5 shrink-0 fill-red-500 text-red-500" />
-                        )}
-                      </button>
-                    ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {selectedBoard?.rating_yn && selectedCourse && (
-          <StarRatingInput label="코스 별점" value={courseRating} onChange={setCourseRating} />
-        )}
+              )}
+            </div>
+          )}
+          {selectedBoard?.rating_yn && selectedCourse && (
+            <StarRatingInput label="코스 별점" value={courseRating} onChange={setCourseRating} />
+          )}
+        </div>
       </div>
 
       {/* 하단 등록 버튼 (모바일용) */}
@@ -1461,8 +1492,20 @@ function CommunityDetail({ id }: { id: string }) {
   const [replySubmitting, setReplySubmitting] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [reportTarget, setReportTarget] = useState<
+    { type: "post" } | { type: "comment"; commentId: number } | null
+  >(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const imageScrollRef = useRef<HTMLDivElement>(null);
   const imageDragRef = useRef({ dragging: false, moved: false, startX: 0, startScrollLeft: 0 });
+
+  // 지도의 리뷰 클릭처럼, 게시판 목록이 아니라 다른 화면(지도의 검색/필터 상태 등)에서
+  // 들어온 경우가 많아 무조건 게시판 목록이 아니라 실제 이전 화면으로 돌아간다.
+  // 앱 내 히스토리가 없을 때(직접 링크 접속 등)만 목록으로 대체 이동한다.
+  const goBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) router.back();
+    else router.push("/community");
+  };
 
   // 스크롤바를 숨긴 대신, 세로 휠 입력을 가로 스크롤로 변환해 마우스 휠로도 넘길 수 있게 한다.
   useEffect(() => {
@@ -1718,41 +1761,46 @@ function CommunityDetail({ id }: { id: string }) {
   const handleReportPost = async () => {
     if (!(await requireLoginOrRedirect(auth?.user, router, `/community/${id}`, dialogConfirm)))
       return;
-    if (!(await dialogConfirm("이 게시글을 신고할까요?"))) return;
-    try {
-      const res = await fetch(`/api/community/board-posts/${id}/report`, {
-        method: "POST"
-      });
-      const json = (await res.json().catch(() => ({}))) as { error?: string; hidden?: boolean };
-      if (!res.ok) throw new Error(json.error ?? "신고에 실패했습니다.");
-      await dialogAlert(
-        json.hidden
-          ? "신고가 접수됐어요. 누적 신고로 게시글이 숨김 처리됐어요."
-          : "신고가 접수됐어요."
-      );
-    } catch (e) {
-      await dialogAlert(e instanceof Error ? e.message : "신고에 실패했습니다.");
-    }
+    setReportTarget({ type: "post" });
   };
 
   const handleCommentReport = async (commentId: number) => {
     if (!(await requireLoginOrRedirect(auth?.user, router, `/community/${id}`, dialogConfirm)))
       return;
-    if (!(await dialogConfirm("이 댓글을 신고할까요?"))) return;
+    setReportTarget({ type: "comment", commentId });
+  };
+
+  // 신고 사유 선택 모달(ReportReasonDialog)에서 사유를 고르고 제출했을 때 실제 신고를 접수한다.
+  const submitReport = async (reasonCode: string) => {
+    const target = reportTarget;
+    if (!target) return;
+    setReportSubmitting(true);
     try {
-      const res = await fetch(`/api/community/board-posts/${id}/comments/${commentId}/report`, {
-        method: "POST"
+      const url =
+        target.type === "post"
+          ? `/api/community/board-posts/${id}/report`
+          : `/api/community/board-posts/${id}/comments/${target.commentId}/report`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reasonCode })
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; hidden?: boolean };
       if (!res.ok) throw new Error(json.error ?? "신고에 실패했습니다.");
+      setReportTarget(null);
       await dialogAlert(
         json.hidden
-          ? "신고가 접수됐어요. 누적 신고로 댓글이 숨김 처리됐어요."
+          ? `신고가 접수됐어요. 누적 신고로 ${target.type === "post" ? "게시글" : "댓글"}이 숨김 처리됐어요.`
           : "신고가 접수됐어요."
       );
-      if (json.hidden) setComments((prev) => prev.filter((c) => c.id !== commentId));
+      if (target.type === "comment" && json.hidden) {
+        setComments((prev) => prev.filter((c) => c.id !== target.commentId));
+      }
     } catch (e) {
+      setReportTarget(null);
       await dialogAlert(e instanceof Error ? e.message : "신고에 실패했습니다.");
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -1803,7 +1851,7 @@ function CommunityDetail({ id }: { id: string }) {
   if (error || !post) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => router.push("/community")}>
+        <Button variant="ghost" size="sm" onClick={goBack}>
           <ArrowLeft className="h-4 w-4" />
           목록으로
         </Button>
@@ -1820,7 +1868,7 @@ function CommunityDetail({ id }: { id: string }) {
           variant="ghost"
           size="icon"
           className="min-h-11 min-w-11"
-          onClick={() => router.push("/community")}
+          onClick={goBack}
           aria-label="목록"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -2014,13 +2062,15 @@ function CommunityDetail({ id }: { id: string }) {
           <MessageCircle className="h-4 w-4" />
           <span>{post.comment_cnt}</span>
         </div>
-        <button
-          onClick={handleReportPost}
-          className="text-stone hover:text-error ml-auto flex min-h-11 items-center gap-1.5 rounded-full px-3 transition-colors"
-        >
-          <Flag className="h-4 w-4" />
-          신고
-        </button>
+        {!post.can_edit && (
+          <button
+            onClick={handleReportPost}
+            className="text-stone hover:text-error ml-auto flex min-h-11 items-center gap-1.5 rounded-full px-3 transition-colors"
+          >
+            <Flag className="h-4 w-4" />
+            신고
+          </button>
+        )}
       </div>
 
       {/* Reply */}
@@ -2267,6 +2317,12 @@ function CommunityDetail({ id }: { id: string }) {
           )}
         </div>
       )}
+      <ReportReasonDialog
+        open={!!reportTarget}
+        onCancel={() => setReportTarget(null)}
+        onSubmit={submitReport}
+        submitting={reportSubmitting}
+      />
       {dialogNode}
     </div>
   );
