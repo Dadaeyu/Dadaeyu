@@ -39,6 +39,7 @@ const a11yInitScript = `
     var el = document.documentElement;
     if (s.darkMode) el.classList.add("dark");
     if (s.highContrast) el.classList.add("high-contrast");
+    if (s.easyMode) el.classList.add("easy-mode");
     if (s.fontScale) el.style.setProperty("--a11y-scale", String(s.fontScale / 100));
   } catch (e) {}
 })();

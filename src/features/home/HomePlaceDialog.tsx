@@ -175,15 +175,17 @@ export function HomePlaceDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <section className="border-hairline border-b md:grid md:min-h-[25rem] md:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-            <div className="bg-surface relative aspect-[16/9] min-h-0 overflow-hidden sm:aspect-[16/10] md:aspect-auto md:min-h-[25rem]">
-              <HomePlaceImage
-                src={place.imageUrl}
-                alt={place.title}
-                className="block h-full w-full object-cover"
-              />
-              <span className="text-brand-900 absolute bottom-4 left-4 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold shadow-sm ring-1 ring-black/10 backdrop-blur-sm">
-                {place.category ?? "대전 관광"}
-              </span>
+            <div className="min-w-0 p-3 sm:p-4 md:p-5">
+              <div className="bg-surface relative aspect-[16/9] min-h-0 overflow-hidden rounded-2xl sm:aspect-[16/10] md:aspect-auto md:h-[22.5rem]">
+                <HomePlaceImage
+                  src={place.imageUrl}
+                  alt={place.title}
+                  className="block h-full w-full object-cover"
+                />
+                <span className="text-brand-900 absolute bottom-4 left-4 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold shadow-sm ring-1 ring-black/10 backdrop-blur-sm">
+                  {place.category ?? "대전 관광"}
+                </span>
+              </div>
             </div>
             <div className="flex flex-col justify-center p-4 pt-4 sm:p-7 md:p-8 md:pr-12">
               <h2

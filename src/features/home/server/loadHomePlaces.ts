@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getServerSupabaseConfig } from "@/lib/supabase/config";
 import {
   rankHomePlaces,
+  selectHomeFestivals,
   selectHomePlacesForDisplay,
   type HomeDataResponse,
   type HomeLocation,
@@ -51,18 +52,26 @@ export async function loadHomePlaces({
 }): Promise<HomeDataResponse> {
   const normalizedPlaces = await getCachedBaseHomePlaces();
   if (!normalizedPlaces.length) {
-    return { places: [], source: "한국관광공사 관광정보·무장애 여행정보" };
+    return { places: [], festivals: [], source: "한국관광공사 관광정보·무장애 여행정보" };
   }
 
   const rankedPlaces = rankHomePlaces(normalizedPlaces, needIds, location, query);
+  const discoveryPlaces = needIds.length
+    ? rankHomePlaces(normalizedPlaces, [], location, "")
+    : rankedPlaces;
+  const visitPlaces = rankedPlaces.filter(
+    (place) => place.category !== "축제·행사" && place.category !== "여행코스"
+  );
+  const selectedPlaces = selectHomePlacesForDisplay(visitPlaces, {
+    needIds,
+    query,
+    limit: 32,
+    recommendationSeed,
+    excludedPlaceIds
+  }).slice(0, 16);
   return {
-    places: selectHomePlacesForDisplay(rankedPlaces, {
-      needIds,
-      query,
-      limit: 16,
-      recommendationSeed,
-      excludedPlaceIds
-    }),
+    places: selectedPlaces,
+    festivals: selectHomeFestivals(discoveryPlaces, { limit: 3 }),
     source: "한국관광공사 관광정보·무장애 여행정보"
   };
 }

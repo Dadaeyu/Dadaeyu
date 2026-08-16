@@ -16,13 +16,22 @@ export interface AccessibilityState {
   highContrast: boolean;
   fontScale: number;
   readAloud: boolean;
+  easyMode: boolean;
 }
 
 export const DEFAULT_A11Y_STATE: AccessibilityState = {
   darkMode: false,
   highContrast: false,
   fontScale: 100,
-  readAloud: false
+  readAloud: false,
+  easyMode: false
+};
+
+export type AccessibilityPreferences = {
+  dark_mode: boolean;
+  high_contrast: boolean;
+  font_scale: number;
+  read_aloud: boolean;
 };
 
 export function loadAccessibilityState(): AccessibilityState {
@@ -37,7 +46,8 @@ export function loadAccessibilityState(): AccessibilityState {
       darkMode: Boolean(parsed.darkMode),
       highContrast: Boolean(parsed.highContrast),
       fontScale: clampFontScale(parsed.fontScale ?? DEFAULT_A11Y_STATE.fontScale),
-      readAloud: Boolean(parsed.readAloud)
+      readAloud: Boolean(parsed.readAloud),
+      easyMode: Boolean(parsed.easyMode)
     };
   } catch {
     return DEFAULT_A11Y_STATE;
@@ -60,8 +70,22 @@ export function applyAccessibilityState(state: AccessibilityState): void {
   const root = document.documentElement;
   root.classList.toggle("dark", state.darkMode);
   root.classList.toggle("high-contrast", state.highContrast);
+  root.classList.toggle("easy-mode", state.easyMode);
   root.classList.toggle("font-scale-large", state.fontScale >= 150);
   root.style.setProperty("--a11y-scale", String(state.fontScale / 100));
+}
+
+export function mergeAccessibilityPreferences(
+  prefs: AccessibilityPreferences,
+  current: AccessibilityState
+): AccessibilityState {
+  return {
+    darkMode: prefs.dark_mode,
+    highContrast: prefs.high_contrast,
+    fontScale: prefs.font_scale,
+    readAloud: prefs.read_aloud,
+    easyMode: current.easyMode
+  };
 }
 
 export function getSpeakableText(element: Element): string | null {

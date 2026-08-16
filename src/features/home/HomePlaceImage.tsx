@@ -4,21 +4,31 @@
 
 import { MapPin } from "lucide-react";
 import { useState } from "react";
-import { shouldShowHomePlaceImage } from "@/features/home/homePresentation";
+import { normalizeHomeImageSource } from "@/features/home/homePresentation";
 
 export function HomePlaceImage({
   src,
   alt,
-  className = ""
+  className = "",
+  fallbackSources = [],
+  compactFallback = false
 }: {
   src: string | null;
   alt: string;
   className?: string;
+  fallbackSources?: readonly (string | null | undefined)[];
+  compactFallback?: boolean;
 }) {
-  const [failedSource, setFailedSource] = useState<string | null>(null);
-  const showImage = shouldShowHomePlaceImage(src, failedSource);
+  const [failedSources, setFailedSources] = useState<string[]>([]);
+  const candidates = [src, ...fallbackSources]
+    .flatMap((source) => {
+      const normalized = normalizeHomeImageSource(source);
+      return normalized ? [normalized] : [];
+    })
+    .filter((source, index, allSources) => allSources.indexOf(source) === index);
+  const activeSource = candidates.find((source) => !failedSources.includes(source)) ?? null;
 
-  if (!src || !showImage) {
+  if (!activeSource) {
     return (
       <span
         className={`text-brand-900 relative isolate block min-h-full overflow-hidden bg-[#e5f2ed] ${className}`}
@@ -38,15 +48,33 @@ export function HomePlaceImage({
           className="bg-brand-700 absolute top-[29%] left-[19%] h-2.5 w-2.5 rounded-full ring-4 ring-white/75"
           aria-hidden="true"
         />
-        <span className="absolute inset-0 z-10 flex items-center justify-center p-4 text-center sm:p-5">
+        <span
+          className={`absolute inset-0 z-10 flex items-center justify-center text-center ${
+            compactFallback ? "p-2 sm:p-5" : "p-4 sm:p-5"
+          }`}
+        >
           <span className="flex max-w-[15rem] flex-col items-center">
-            <span className="border-brand-200/80 text-brand-800 grid size-11 place-items-center rounded-2xl border bg-white/90 shadow-sm backdrop-blur-sm">
+            <span
+              className={`border-brand-200/80 text-brand-800 grid place-items-center rounded-2xl border bg-white/90 shadow-sm backdrop-blur-sm ${
+                compactFallback ? "size-9 sm:size-11" : "size-11"
+              }`}
+            >
               <MapPin className="h-5 w-5" aria-hidden="true" />
             </span>
-            <span className="text-ink mt-3 block text-sm font-semibold sm:text-base">
+            <span
+              className={`text-ink block leading-tight font-semibold break-keep ${
+                compactFallback
+                  ? "mt-2 text-[0.7rem] sm:mt-3 sm:text-base"
+                  : "mt-3 text-sm sm:text-base"
+              }`}
+            >
               대표 사진이 없어요
             </span>
-            <span className="text-brand-900/65 mt-1 hidden text-xs leading-5 min-[360px]:block">
+            <span
+              className={`text-brand-900/65 mt-1 text-xs leading-5 ${
+                compactFallback ? "hidden sm:block" : "hidden min-[360px]:block"
+              }`}
+            >
               주소와 방문 정보는 그대로 확인할 수 있어요
             </span>
           </span>
@@ -57,13 +85,21 @@ export function HomePlaceImage({
 
   return (
     <img
-      src={src.startsWith("/") ? src : `/api/home/image?src=${encodeURIComponent(src)}`}
+      src={
+        activeSource.startsWith("/")
+          ? activeSource
+          : `/api/home/image?src=${encodeURIComponent(activeSource)}`
+      }
       alt={alt}
       className={className}
       loading="lazy"
       decoding="async"
       data-image-state="loaded"
-      onError={() => setFailedSource(src)}
+      onError={() =>
+        setFailedSources((currentSources) =>
+          currentSources.includes(activeSource) ? currentSources : [...currentSources, activeSource]
+        )
+      }
     />
   );
 }

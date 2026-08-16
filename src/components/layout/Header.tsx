@@ -7,6 +7,7 @@ import { LogOut, Settings } from "lucide-react";
 import { DesktopNav } from "./Navigation";
 import AccessibilitySettings from "../AccessibilitySettings";
 import { Button } from "../ui/Button";
+import { useAccessibility } from "@/context/AccessibilityContext";
 import { useOptionalAuth } from "@/context/AuthContext";
 
 export default function Header() {
@@ -15,6 +16,7 @@ export default function Header() {
   const auth = useOptionalAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const { easyMode } = useAccessibility();
 
   const handleLogout = async () => {
     if (!auth?.signOut || loggingOut) return;
@@ -26,6 +28,8 @@ export default function Header() {
       setLoggingOut(false);
     }
   };
+
+  if (pathname === "/" && easyMode) return null;
 
   return (
     <header className="border-hairline bg-background/85 sticky top-0 z-40 border-b backdrop-blur-md">

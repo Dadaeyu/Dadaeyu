@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Map, Route, Users, User, ShieldCheck } from "lucide-react";
+import { useAccessibility } from "@/context/AccessibilityContext";
 import { useOptionalAuth } from "@/context/AuthContext";
 import { cn } from "@/components/ui/utils";
 
@@ -90,9 +91,13 @@ export function DesktopNav() {
 
 export function MobileNav() {
   const isActive = useIsActive();
+  const pathname = usePathname();
+  const { easyMode } = useAccessibility();
   const auth = useOptionalAuth();
   const isAdmin = auth?.member?.role === "admin" && auth?.member?.status === "active";
   const allItems = isAdmin ? [...navItems, adminItem] : navItems;
+
+  if (pathname === "/" && easyMode) return null;
 
   return (
     <nav

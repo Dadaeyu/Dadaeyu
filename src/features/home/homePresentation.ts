@@ -2,6 +2,31 @@ export function shouldShowHomePlaceImage(source: string | null, failedSource: st
   return Boolean(source && source !== failedSource);
 }
 
+export function splitHomeRecommendationPlaces<T>(places: readonly T[], limit = 4) {
+  const visiblePlaces = places.slice(0, Math.max(limit, 0));
+  return {
+    featured: visiblePlaces[0] ?? null,
+    supporting: visiblePlaces.slice(1)
+  };
+}
+
+export function normalizeHomeImageSource(source: string | null | undefined): string | null {
+  const trimmed = source?.trim();
+  if (!trimmed) return null;
+  const normalizedSource = trimmed.startsWith("//") ? `https:${trimmed}` : trimmed;
+  if (normalizedSource.startsWith("/")) return normalizedSource;
+
+  try {
+    const url = new URL(normalizedSource);
+    if (url.protocol === "http:" && url.hostname === "tong.visitkorea.or.kr") {
+      url.protocol = "https:";
+    }
+    return url.toString();
+  } catch {
+    return normalizedSource;
+  }
+}
+
 const HTML_ENTITY_REPLACEMENTS: Record<string, string> = {
   "&nbsp;": " ",
   "&amp;": "&",

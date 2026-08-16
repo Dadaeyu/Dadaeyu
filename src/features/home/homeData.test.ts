@@ -15,6 +15,7 @@ import {
   placeSatisfiesHomeNeed,
   rankHomePlaces,
   resolveHomeNeedIds,
+  selectHomeFestivals,
   selectHomePlacesForDisplay,
   sortHomeEvidenceForNeeds,
   summarizeVisitInfo,
@@ -836,6 +837,42 @@ test("지난 축제는 홈 발견 후보에서 제외하고 진행 중이거나 
   assert.deepEqual(
     new Set(selected.map((place) => place.id)),
     new Set(["festival-current", "festival-upcoming", "museum"])
+  );
+});
+
+test("홈 축제는 종료된 행사를 빼고 진행 중인 행사와 가까운 예정 순으로 고른다", () => {
+  const rankedPlaces = [
+    {
+      ...rankedPlace("festival-later", "축제·행사", []),
+      eventStartDate: "20261001",
+      eventEndDate: "20261005"
+    },
+    {
+      ...rankedPlace("festival-current", "축제·행사", []),
+      eventStartDate: "20260801",
+      eventEndDate: "20260831"
+    },
+    {
+      ...rankedPlace("festival-next", "축제·행사", []),
+      eventStartDate: "20260901",
+      eventEndDate: "20260903"
+    },
+    {
+      ...rankedPlace("festival-ended", "축제·행사", []),
+      eventStartDate: "20260701",
+      eventEndDate: "20260703"
+    },
+    rankedPlace("museum", "문화시설", [])
+  ];
+
+  const selected = selectHomeFestivals(rankedPlaces, {
+    limit: 3,
+    now: new Date("2026-08-13T12:00:00+09:00")
+  });
+
+  assert.deepEqual(
+    selected.map((place) => place.id),
+    ["festival-current", "festival-next", "festival-later"]
   );
 });
 

@@ -82,7 +82,10 @@ async function courseIdsMatchingThemes(
 
   const placeIds = new Set<number>();
   if (officialCodes.length > 0) {
-    const { data, error } = await admin.from(T.place).select("place_id").in("lclssystm1", officialCodes);
+    const { data, error } = await admin
+      .from(T.place)
+      .select("place_id")
+      .in("lclssystm1", officialCodes);
     if (error) throw error;
     for (const p of data ?? []) placeIds.add(p.place_id as number);
   }
@@ -149,7 +152,11 @@ async function courseIdsWithAllPlacesInLocation(
     .in("place_id", allPlaceIds);
   if (placesErr) throw placesErr;
   const locationByPlace = new Map<number, { gu: string | null; dong: string | null }>();
-  for (const p of (places ?? []) as { place_id: number; ldongsigngucd: string | null; dong: string | null }[]) {
+  for (const p of (places ?? []) as {
+    place_id: number;
+    ldongsigngucd: string | null;
+    dong: string | null;
+  }[]) {
     locationByPlace.set(p.place_id, { gu: p.ldongsigngucd, dong: p.dong });
   }
 
@@ -305,13 +312,15 @@ async function courseIdsMatchingMinRating(
   return matched;
 }
 
-/** courseIds 각각의 평균 별점(tb_post.course_rating, board_id=1). 후기 없으면 0. */
-async function computeAverageRatings(
+type CourseRatingStat = { average: number; count: number };
+
+/** courseIds 각각의 별점 평균과 후기 수(tb_post.course_rating, board_id=1). */
+async function computeRatingStats(
   admin: ReturnType<typeof createAdminClient>,
   courseIds: number[]
-): Promise<Map<number, number>> {
-  const averageRatings = new Map<number, number>();
-  if (courseIds.length === 0) return averageRatings;
+): Promise<Map<number, CourseRatingStat>> {
+  const ratingStats = new Map<number, CourseRatingStat>();
+  if (courseIds.length === 0) return ratingStats;
   const { data, error } = await admin
     .from(T.boardPosts)
     .select("course_id, course_rating")
@@ -328,9 +337,12 @@ async function computeAverageRatings(
     sums.set(row.course_id, g);
   }
   for (const [cid, g] of sums) {
-    averageRatings.set(cid, Math.round((g.sum / g.count) * 10) / 10);
+    ratingStats.set(cid, {
+      average: Math.round((g.sum / g.count) * 10) / 10,
+      count: g.count
+    });
   }
-  return averageRatings;
+  return ratingStats;
 }
 
 function hourToTime(hour: number | null | undefined): string | null {
@@ -383,7 +395,9 @@ export async function GET(request: Request) {
     const dateTo = (url.searchParams.get("dateTo") ?? "").trim();
     const minRating = Number(url.searchParams.get("minRating") ?? "0");
     const mine = url.searchParams.get("mine") === "1";
-    const { field: sortField, ascending: sortAscending } = resolveSort(url.searchParams.get("sort"));
+    const { field: sortField, ascending: sortAscending } = resolveSort(
+      url.searchParams.get("sort")
+    );
 
     const admin = createAdminClient();
 
@@ -469,7 +483,7 @@ export async function GET(request: Request) {
     let activeCourses: CourseRow[];
     let hasMore: boolean;
     // rating 정렬일 때만 미리 채워둔다 — 아래에서 다시 계산하지 않고 이 맵을 그대로 쓴다.
-    let precomputedRatings: Map<number, number> | null = null;
+    let precomputedRatingStats: Map<number, CourseRatingStat> | null = null;
 
     if (sortField === "rating") {
       // 별점은 tb_course 컬럼이 아니라 tb_post 집계값이라 DB .order()/.range() 로 못 정렬·페이징한다.
@@ -491,10 +505,10 @@ export async function GET(request: Request) {
         return NextResponse.json({ items: [] as TourismSharedCourse[], hasMore: false });
       }
 
-      precomputedRatings = await computeAverageRatings(admin, allIds);
-      const ratingsForSort = precomputedRatings;
+      precomputedRatingStats = await computeRatingStats(admin, allIds);
+      const ratingsForSort = precomputedRatingStats;
       const sortedIds = [...allIds].sort((a, b) => {
-        const diff = (ratingsForSort.get(a) ?? 0) - (ratingsForSort.get(b) ?? 0);
+        const diff = (ratingsForSort.get(a)?.average ?? 0) - (ratingsForSort.get(b)?.average ?? 0);
         return sortAscending ? diff : -diff;
       });
       hasMore = offset + limit < sortedIds.length;
@@ -508,9 +522,7 @@ export async function GET(request: Request) {
         .select(courseColumns)
         .in("course_id", pageIds);
       if (pageErr) throw pageErr;
-      const courseById = new Map(
-        ((pageCourses ?? []) as CourseRow[]).map((c) => [c.course_id, c])
-      );
+      const courseById = new Map(((pageCourses ?? []) as CourseRow[]).map((c) => [c.course_id, c]));
       // pageIds 는 이미 정렬된 순서 — 그 순서를 그대로 유지해서 매핑한다.
       activeCourses = pageIds
         .map((id) => courseById.get(id))
@@ -636,8 +648,8 @@ export async function GET(request: Request) {
     }
 
     // 코스 별점 — 후기 게시판(board_id=1)의 course_rating 평균. 후기가 없으면 0.0.
-    // rating 정렬일 때는 이미 전체 후보를 대상으로 계산해둔 값(precomputedRatings)을 그대로 쓴다.
-    const averageRatings = precomputedRatings ?? (await computeAverageRatings(admin, courseIds));
+    // rating 정렬일 때는 이미 전체 후보를 대상으로 계산해둔 값(precomputedRatingStats)을 그대로 쓴다.
+    const ratingStats = precomputedRatingStats ?? (await computeRatingStats(admin, courseIds));
 
     const themeCodes = [...new Set([...themesByCourse.values()].flatMap((s) => [...s]))];
     // 이 결과 안에 빵집으로 판정된 장소가 하나라도 있으면 "빵지순례" 라벨도 같이 조회해둔다.
@@ -683,7 +695,9 @@ export async function GET(request: Request) {
       }
     }
 
-    const registerIds = [...new Set(activeCourses.map((c) => c.register).filter((v): v is string => !!v))];
+    const registerIds = [
+      ...new Set(activeCourses.map((c) => c.register).filter((v): v is string => !!v))
+    ];
     const memberMap = new Map<string, MemberRow>();
     if (registerIds.length > 0) {
       const { data: members, error: memberErr } = await admin
@@ -736,7 +750,8 @@ export async function GET(request: Request) {
         day_count: days.size > 0 ? days.size : 0,
         place_count: places.length,
         like_count: likeCounts.get(c.course_id) ?? 0,
-        average_rating: averageRatings.get(c.course_id) ?? 0,
+        average_rating: ratingStats.get(c.course_id)?.average ?? 0,
+        review_count: ratingStats.get(c.course_id)?.count ?? 0,
         themes: [...(themesByCourse.get(c.course_id) ?? [])]
           .map((code) => themeLabelByCode.get(code))
           .filter((v): v is string => !!v),

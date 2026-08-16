@@ -4,11 +4,36 @@ import {
   cleanHomePresentationText,
   formatHomeDetailValue,
   formatHomeEventPeriod,
+  normalizeHomeImageSource,
   shouldShowHomeParkingDetail,
+  splitHomeRecommendationPlaces,
   summarizeHomeFee,
   shouldShowHomePlaceImage,
   summarizeHomeEvidence
 } from "./homePresentation.ts";
+
+test("추천 장소는 입력 순서를 유지한 대표 1곳과 보조 최대 3곳으로 나눈다", () => {
+  assert.deepEqual(splitHomeRecommendationPlaces(["a", "b", "c", "d", "e"]), {
+    featured: "a",
+    supporting: ["b", "c", "d"]
+  });
+  assert.deepEqual(splitHomeRecommendationPlaces([]), {
+    featured: null,
+    supporting: []
+  });
+});
+
+test("관광공사 HTTP 이미지는 홈 프록시가 허용하는 HTTPS 주소로 바꾼다", () => {
+  assert.equal(
+    normalizeHomeImageSource(" http://tong.visitkorea.or.kr/cms/example.jpg "),
+    "https://tong.visitkorea.or.kr/cms/example.jpg"
+  );
+  assert.equal(normalizeHomeImageSource("/images/local.png"), "/images/local.png");
+  assert.equal(
+    normalizeHomeImageSource("//example.com/image.jpg"),
+    "https://example.com/image.jpg"
+  );
+});
 
 test("대표 이미지 실패 상태는 같은 주소에만 적용한다", () => {
   const failedSource = "https://example.com/failed.jpg";

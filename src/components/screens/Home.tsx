@@ -2,7 +2,10 @@
 
 import { useRef, useState } from "react";
 import Chatbot from "@/components/Chatbot";
+import { useAccessibility } from "@/context/AccessibilityContext";
+import { EasyHome } from "@/features/home/EasyHome";
 import { HomeHero, HomeNeedsPicker } from "@/features/home/HomeHero";
+import { HomeDiscovery } from "@/features/home/HomeDiscovery";
 import { HomeOfficialGuide } from "@/features/home/HomeOfficialGuide";
 import { HomePlaceDialog } from "@/features/home/HomePlaceDialog";
 import { HomeRecommendations } from "@/features/home/HomeRecommendations";
@@ -13,6 +16,7 @@ export default function Home() {
   const [chatOpen, setChatOpen] = useState(false);
   const chatTriggerRef = useRef<HTMLElement | null>(null);
   const experience = useHomeExperience();
+  const { easyMode, toggleEasyMode } = useAccessibility();
 
   const openChat = () => {
     chatTriggerRef.current =
@@ -27,17 +31,8 @@ export default function Home() {
     });
   };
 
-  return (
-    <div className="mx-auto max-w-6xl space-y-4 overflow-x-clip pb-24 sm:space-y-8 md:pb-8">
-      <HomeHero experience={experience} onOpenChat={openChat} />
-
-      <div className="border-hairline overflow-hidden rounded-[1.25rem] border bg-white shadow-[0_18px_44px_-40px_rgba(15,44,41,0.72)]">
-        <HomeNeedsPicker experience={experience} />
-        <HomeRecommendations experience={experience} />
-      </div>
-
-      <HomeOfficialGuide />
-
+  const sharedDialogs = (
+    <>
       {experience.selectedPlace ? (
         <HomePlaceDialog
           place={experience.selectedPlace}
@@ -52,6 +47,45 @@ export default function Home() {
           accessibilityNeeds={homeNeedIdsToChatNeeds(experience.selectedNeedIds)}
         />
       ) : null}
+    </>
+  );
+
+  if (easyMode) {
+    return (
+      <>
+        <EasyHome experience={experience} onOpenChat={openChat} onExitEasyMode={toggleEasyMode} />
+        {sharedDialogs}
+      </>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl overflow-x-hidden pb-24 md:pb-8">
+      <div className="space-y-4 sm:space-y-8">
+        <HomeHero experience={experience} onOpenChat={openChat} />
+
+        <section
+          className="border-hairline overflow-hidden rounded-[1.25rem] border bg-white shadow-[0_18px_44px_-40px_rgba(15,44,41,0.72)]"
+          aria-label="나에게 맞춰 보는 장소 추천"
+        >
+          <HomeNeedsPicker experience={experience} easyMode={easyMode} />
+          <HomeRecommendations experience={experience} easyMode={easyMode} />
+        </section>
+      </div>
+
+      <div className="mt-10 sm:mt-14 lg:mt-16">
+        <HomeDiscovery
+          festivals={experience.data?.festivals ?? []}
+          easyMode={false}
+          onOpenFestival={experience.openPlace}
+        />
+      </div>
+
+      <div className="mt-6 sm:mt-8">
+        <HomeOfficialGuide />
+      </div>
+
+      {sharedDialogs}
     </div>
   );
 }

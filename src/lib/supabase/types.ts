@@ -115,6 +115,7 @@ export interface TourismSharedCourse extends TourismMyCourse {
   updatetime: string | null;
   like_count: number;
   average_rating: number; // 후기(tb_post.course_rating) 평균, 소수 1자리 반올림. 후기 없으면 0.
+  review_count?: number; // 별점 후기가 등록된 게시물 수. 이전 응답과의 호환을 위해 선택 필드.
   themes: string[]; // 테마 라벨(필터 매칭용, 중복 제거)
   hashtags: string[]; // 테마+접근성 종합 상위 3개(표시용, "내 코스" 카드와 동일 로직)
   author_nickname: string;

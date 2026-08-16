@@ -221,6 +221,7 @@ export interface RankedHomePlace extends HomePlace {
 
 export interface HomeDataResponse {
   places: RankedHomePlace[];
+  festivals: RankedHomePlace[];
   source: string;
 }
 
@@ -605,6 +606,32 @@ export function selectHomePlacesForDisplay(
   }
 
   return selected;
+}
+
+export function selectHomeFestivals(
+  rankedPlaces: readonly RankedHomePlace[],
+  { limit = 3, now = new Date() }: { limit?: number; now?: Date } = {}
+): RankedHomePlace[] {
+  const today = getKoreaDateSeed(now);
+  const safeLimit = Math.max(0, Math.floor(limit));
+
+  return rankedPlaces
+    .filter((place) => place.category === "축제·행사" && !isPastEvent(place, now))
+    .sort((a, b) => {
+      const aStart = getHomeEventDateSeed(a.eventStartDate);
+      const bStart = getHomeEventDateSeed(b.eventStartDate);
+      const aEnd = getHomeEventDateSeed(a.eventEndDate);
+      const bEnd = getHomeEventDateSeed(b.eventEndDate);
+      const aIsCurrent = aStart !== null && aStart <= today && (aEnd === null || aEnd >= today);
+      const bIsCurrent = bStart !== null && bStart <= today && (bEnd === null || bEnd >= today);
+
+      if (aIsCurrent !== bIsCurrent) return aIsCurrent ? -1 : 1;
+      if (aStart !== null && bStart !== null && aStart !== bStart) return aStart - bStart;
+      if (aStart !== null) return -1;
+      if (bStart !== null) return 1;
+      return a.title.localeCompare(b.title, "ko");
+    })
+    .slice(0, safeLimit);
 }
 
 export function placeSatisfiesHomeNeed(
@@ -1087,6 +1114,13 @@ function isPastEvent(place: RankedHomePlace, now: Date) {
   const eventEndDate = place.eventEndDate?.replace(/\D/g, "").slice(0, 8);
   if (!eventEndDate || eventEndDate.length !== 8) return false;
   return Number(eventEndDate) < getKoreaDateSeed(now);
+}
+
+function getHomeEventDateSeed(value: string | null | undefined): number | null {
+  const digits = value?.replace(/\D/g, "").slice(0, 8);
+  if (!digits || digits.length !== 8) return null;
+  const seed = Number(digits);
+  return Number.isFinite(seed) && seed > 0 ? seed : null;
 }
 
 function distanceBetween(from: HomeLocation, to: { latitude: number; longitude: number }): number {

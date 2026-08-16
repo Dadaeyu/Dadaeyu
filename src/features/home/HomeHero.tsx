@@ -14,7 +14,7 @@ import {
 import { getHomeRecommendationNeedIds, type HomeNeedId } from "@/features/home/homeData";
 import type { HomeExperience } from "@/features/home/useHomeExperience";
 
-const NEED_ICONS = {
+export const HOME_NEED_ICONS = {
   step_free: Footprints,
   visual_guidance: Eye,
   hearing_guidance: Ear,
@@ -22,7 +22,7 @@ const NEED_ICONS = {
   family_support: Baby
 } satisfies Partial<Record<HomeNeedId, typeof Accessibility>>;
 
-const VISIT_SITUATIONS = [
+export const HOME_VISIT_SITUATIONS = [
   {
     id: "step_free",
     label: "계단 없는 이동",
@@ -70,30 +70,30 @@ export function HomeHero({
   return (
     <section
       id="home-intro"
-      className="border-hairline scroll-mt-24 rounded-[1.25rem] border bg-white p-3 shadow-[0_18px_44px_-40px_rgba(15,44,41,0.72)] sm:p-6"
+      className="border-hairline scroll-mt-24 rounded-[1.25rem] border bg-white p-4 shadow-[0_18px_44px_-40px_rgba(15,44,41,0.72)] sm:p-6"
       aria-labelledby="home-heading"
       aria-busy={experience.loadState === "loading"}
     >
-      <div className="grid gap-2.5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:gap-6">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:gap-6">
         <div className="min-w-0">
           <p className="text-brand-800 text-xs font-semibold sm:text-sm">
             {displayName ? `${displayName}님을 위한 대전 무장애 여행` : "대전 무장애 여행"}
           </p>
           <h1
             id="home-heading"
-            className="text-ink mt-0.5 text-[1.45rem] leading-[1.12] font-semibold tracking-[-0.03em] break-keep sm:mt-1 sm:text-[2.45rem]"
+            className="text-ink mt-1 text-[1.65rem] leading-[1.12] font-semibold tracking-[-0.035em] break-keep sm:text-[2.45rem]"
           >
             대전에서 어디로 가볼까요?
           </h1>
-          <p className="text-slate mt-1 max-w-[42rem] text-[0.82rem] leading-5 break-keep sm:mt-2 sm:text-base sm:leading-6">
+          <p className="text-slate mt-2 max-w-[42rem] text-sm leading-5 break-keep sm:text-base sm:leading-6">
             {introCopy}
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 md:w-[21rem]">
+        <div className="home-action-grid grid grid-cols-2 gap-2 md:w-[23rem]">
           <Link
             href="/map"
-            className="bg-brand-800 hover:bg-brand-900 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold text-white transition-colors sm:min-h-11 sm:gap-2 sm:px-4 sm:text-sm"
+            className="bg-brand-800 hover:bg-brand-900 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-white transition-colors sm:min-h-11 sm:px-4"
           >
             <MapPinned className="h-4 w-4" aria-hidden="true" />
             지도 보기
@@ -101,7 +101,7 @@ export function HomeHero({
           <button
             type="button"
             onClick={onOpenChat}
-            className="border-hairline text-ink hover:bg-brand-50 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border bg-white px-1.5 text-xs font-semibold transition-colors sm:min-h-11 sm:gap-2 sm:px-4 sm:text-sm"
+            className="border-hairline text-ink hover:bg-brand-50 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border bg-white px-2 text-sm font-semibold transition-colors sm:min-h-11 sm:px-4"
             aria-haspopup="dialog"
           >
             <MessageCircle className="h-4 w-4" aria-hidden="true" />
@@ -114,9 +114,28 @@ export function HomeHero({
   );
 }
 
-export function HomeNeedsPicker({ experience }: { experience: HomeExperience }) {
+export function HomeNeedsPicker({
+  experience,
+  easyMode
+}: {
+  experience: HomeExperience;
+  easyMode: boolean;
+}) {
   const { auth } = experience;
   const recommendationNeedIds = getHomeRecommendationNeedIds(experience.selectedNeedIds);
+  const selectNeedAndShowResults = (needId: HomeNeedId) => {
+    experience.toggleNeed(needId);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById("home-recommendations")?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? "auto"
+            : "smooth",
+          block: "start"
+        });
+      });
+    });
+  };
 
   if (auth.loading) {
     return (
@@ -157,21 +176,31 @@ export function HomeNeedsPicker({ experience }: { experience: HomeExperience }) 
   return (
     <section
       id="home-needs"
-      className="scroll-mt-24 p-3 sm:p-5"
+      className="bg-brand-50/25 scroll-mt-24 p-4 sm:p-6"
       aria-labelledby="needs-title"
       aria-busy={auth.loading}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className={`flex items-start justify-between gap-3 ${easyMode ? "flex-col" : ""}`}>
         <div className="min-w-0">
-          <p className="text-brand-800 text-xs font-semibold">나에게 맞춰 보기</p>
+          <p className="text-brand-800 flex items-center gap-2 text-xs font-semibold sm:text-sm">
+            <span
+              className="bg-brand-800 grid size-6 place-items-center rounded-full text-[0.7rem] text-white"
+              aria-hidden="true"
+            >
+              1
+            </span>
+            나에게 맞춰 보기 · 도움 선택
+          </p>
           <h2
             id="needs-title"
-            className="text-ink mt-0.5 text-base font-semibold break-keep sm:text-xl"
+            className="text-ink mt-2 text-xl font-semibold break-keep sm:text-2xl"
           >
-            어떤 도움이 가장 필요한가요?
+            필요한 도움을 골라 주세요
           </h2>
           <p className="text-steel mt-1 text-xs leading-5 break-keep sm:text-sm">
-            고른 조건을 모두 확인할 수 있는 장소만 보여드려요.
+            {easyMode
+              ? "하나를 고르면 바로 아래에 장소 4곳이 보여요."
+              : "선택하면 바로 아래 추천 장소 4곳이 조건에 맞춰 바뀝니다."}
           </p>
         </div>
 
@@ -179,53 +208,65 @@ export function HomeNeedsPicker({ experience }: { experience: HomeExperience }) 
           <button
             type="button"
             onClick={experience.clearNeeds}
-            className="text-steel hover:text-brand-800 min-h-11 shrink-0 px-2 text-xs font-semibold transition-colors sm:text-sm"
+            className={`text-steel hover:text-brand-800 min-h-11 shrink-0 px-2 text-xs font-semibold transition-colors sm:text-sm ${
+              easyMode
+                ? "border-hairline text-brand-800 w-full rounded-xl border bg-white text-center"
+                : ""
+            }`}
           >
             선택 초기화
           </button>
         ) : null}
       </div>
 
-      <fieldset className="mt-4 min-w-0">
+      <fieldset className="mt-5 min-w-0">
         <legend className="text-ink flex w-full items-center justify-between gap-3 text-sm font-semibold">
           <span>필요한 도움</span>
           <span className="text-steel text-xs font-normal">하나 선택</span>
         </legend>
-        <div className="mt-2 grid gap-2 min-[430px]:grid-cols-2 lg:grid-cols-5">
-          {VISIT_SITUATIONS.map((option) => {
+        <div className="home-needs-grid mt-2 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
+          {HOME_VISIT_SITUATIONS.map((option) => {
             const selected = experience.selectedNeedIds.includes(option.id);
-            const Icon = NEED_ICONS[option.id];
+            const Icon = HOME_NEED_ICONS[option.id];
             return (
               <button
                 key={option.id}
                 type="button"
-                onClick={() => experience.toggleNeed(option.id)}
+                onClick={() => selectNeedAndShowResults(option.id)}
                 disabled={auth.loading}
                 aria-pressed={selected}
                 aria-label={`${option.label}: ${option.description}`}
                 aria-controls="home-recommendations"
-                className={`relative flex min-h-[4.75rem] min-w-0 items-start gap-2.5 rounded-xl border p-3 text-left transition-[border-color,background-color,color,box-shadow,transform] duration-150 disabled:opacity-50 motion-reduce:transform-none ${
+                className={`relative flex min-w-0 gap-2 rounded-xl border text-left transition-[border-color,background-color,color,box-shadow,transform] duration-150 disabled:opacity-50 motion-reduce:transform-none ${
+                  easyMode
+                    ? "min-h-16 items-center p-3"
+                    : "min-h-[4.25rem] items-center p-2.5 last:col-span-2 sm:p-3 md:min-h-[4.75rem] md:items-start md:last:col-span-1"
+                } ${
                   selected
                     ? "border-brand-800 bg-brand-800 text-white shadow-[0_12px_24px_-20px_rgba(0,113,91,0.95)] active:scale-[0.99]"
                     : "border-hairline text-slate hover:border-brand-300 hover:bg-brand-50 bg-white active:scale-[0.99]"
                 }`}
               >
                 <span
-                  className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg ${
+                  className={`grid size-9 shrink-0 place-items-center rounded-lg ${
                     selected ? "bg-white/15" : "bg-brand-50 text-brand-800"
                   }`}
                 >
                   <Icon className="h-4 w-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold">{option.label}</span>
-                  <span
-                    className={`mt-1 block text-xs leading-[1.15rem] break-keep ${
-                      selected ? "text-white/80" : "text-steel"
-                    }`}
-                  >
-                    {option.description}
+                  <span className="block text-sm leading-tight font-semibold break-keep">
+                    {option.label}
                   </span>
+                  {!easyMode ? (
+                    <span
+                      className={`mt-1 hidden text-xs leading-[1.15rem] break-keep md:block ${
+                        selected ? "text-white/80" : "text-steel"
+                      }`}
+                    >
+                      {option.description}
+                    </span>
+                  ) : null}
                 </span>
                 {selected ? (
                   <span
@@ -248,12 +289,12 @@ export function HomeNeedsPicker({ experience }: { experience: HomeExperience }) 
         </legend>
         <button
           type="button"
-          onClick={() => experience.toggleNeed("accessible_toilet")}
+          onClick={() => selectNeedAndShowResults("accessible_toilet")}
           disabled={auth.loading}
           aria-pressed={experience.selectedNeedIds.includes("accessible_toilet")}
           aria-label="장애인 화장실: 장애인 화장실이 확인된 장소만 보기"
           aria-controls="home-recommendations"
-          className={`mt-2 flex min-h-12 w-full items-center gap-2.5 rounded-xl border px-3 text-sm font-semibold transition-colors disabled:opacity-50 min-[430px]:w-64 ${
+          className={`mt-2 flex min-h-12 w-full items-center gap-2.5 rounded-xl border px-3 text-sm font-semibold transition-colors disabled:opacity-50 sm:w-64 ${
             experience.selectedNeedIds.includes("accessible_toilet")
               ? "border-brand-800 bg-brand-50 text-brand-900"
               : "border-hairline text-slate hover:border-brand-300 hover:bg-brand-50 bg-white"

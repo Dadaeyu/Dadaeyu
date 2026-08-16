@@ -233,6 +233,14 @@
   --color-orange: #f55a3c;
   --color-orange-deep: #cc3a1f;
 
+  /* 쉬운 홈 ATM/kiosk palette */
+  --color-easy-navy: #102a43;
+  --color-easy-yellow: #ffd84d;
+  --color-easy-mint: #00a982;
+  --color-easy-bg: #eef4f7;
+  --color-easy-copy: #314e67;
+  --color-easy-danger: #b42318;
+
   /* Hero 대기 그라데이션 (DESIGN.md hero-* ) */
   --color-hero-sky-from: #87a8c8;
   --color-hero-sky-to: #f5e9d8;

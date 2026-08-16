@@ -1,5 +1,6 @@
 "use client";
 
+import { BookOpenCheck } from "lucide-react";
 import { useAccessibility, FONT_SCALE_MIN, FONT_SCALE_MAX } from "@/context/AccessibilityContext";
 
 const settingsConfig = [
@@ -32,10 +33,12 @@ export default function AccessibilitySettings({ onClose }: Props) {
     readAloud,
     highContrast,
     darkMode,
+    easyMode,
     fontScale,
     toggleReadAloud,
     toggleHighContrast,
     toggleDarkMode,
+    toggleEasyMode,
     increaseFontScale,
     decreaseFontScale
   } = useAccessibility();
@@ -84,6 +87,47 @@ export default function AccessibilitySettings({ onClose }: Props) {
               </div>
             </button>
           ))}
+
+          <button
+            type="button"
+            onClick={toggleEasyMode}
+            className={`focus-visible:outline-brand-600 flex min-h-16 w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${
+              easyMode
+                ? "border-brand-800 bg-brand-50 text-brand-900"
+                : "border-hairline text-ink hover:border-brand-300 hover:bg-brand-50 bg-white"
+            }`}
+            aria-pressed={easyMode}
+            aria-label={easyMode ? "쉬운 화면 끄기" : "쉬운 화면 켜기"}
+          >
+            <span
+              className={`grid size-11 shrink-0 place-items-center rounded-xl ${
+                easyMode ? "bg-brand-700 text-white" : "text-brand-800 bg-gray-100"
+              }`}
+              aria-hidden="true"
+            >
+              <BookOpenCheck className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-semibold">
+                {easyMode ? "쉬운 화면 사용 중" : "쉬운 화면"}
+              </span>
+              <span className="text-steel block text-sm leading-5">
+                {easyMode ? "누르면 기본 화면으로 돌아가요" : "글자와 버튼을 크게 보여줘요"}
+              </span>
+            </span>
+            <span
+              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                easyMode ? "bg-brand-700" : "bg-gray-200"
+              }`}
+              aria-hidden="true"
+            >
+              <span
+                className={`absolute top-1 size-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                  easyMode ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </span>
+          </button>
 
           <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-2">
             <div className="text-left">

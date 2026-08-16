@@ -19,6 +19,7 @@ import {
   FONT_SCALE_STEP,
   getSpeakableText,
   loadAccessibilityState,
+  mergeAccessibilityPreferences,
   saveAccessibilityState,
   type AccessibilityState
 } from "@/lib/accessibility";
@@ -28,6 +29,7 @@ import { updateUserPreferences } from "@/lib/supabase/member";
 interface AccessibilityContextValue extends AccessibilityState {
   toggleDarkMode: () => void;
   toggleHighContrast: () => void;
+  toggleEasyMode: () => void;
   toggleReadAloud: () => void;
   increaseFontScale: () => void;
   decreaseFontScale: () => void;
@@ -35,20 +37,6 @@ interface AccessibilityContextValue extends AccessibilityState {
 }
 
 const AccessibilityContext = createContext<AccessibilityContextValue | null>(null);
-
-function prefsToA11yState(prefs: {
-  dark_mode: boolean;
-  high_contrast: boolean;
-  font_scale: number;
-  read_aloud: boolean;
-}): AccessibilityState {
-  return {
-    darkMode: prefs.dark_mode,
-    highContrast: prefs.high_contrast,
-    fontScale: prefs.font_scale,
-    readAloud: prefs.read_aloud
-  };
-}
 
 export function AccessibilityProvider({ children }: { children: ReactNode }) {
   const auth = useOptionalAuth();
@@ -86,7 +74,7 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
     // 같은 유저로 이미 동기화했으면 스킵 (토글 직후 preferences 패치로 재적용·깜빡임 방지)
     if (syncedFromDb.current && syncedUserId.current === auth.user.id) return;
 
-    const fromDb = prefsToA11yState(auth.preferences);
+    const fromDb = mergeAccessibilityPreferences(auth.preferences, stateRef.current);
     syncedFromDb.current = true;
     syncedUserId.current = auth.user.id;
     stateRef.current = fromDb;
@@ -191,6 +179,10 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
     updateState((prev) => ({ ...prev, highContrast: !prev.highContrast }));
   }, [updateState]);
 
+  const toggleEasyMode = useCallback(() => {
+    updateState((prev) => ({ ...prev, easyMode: !prev.easyMode }));
+  }, [updateState]);
+
   const toggleReadAloud = useCallback(() => {
     updateState((prev) => ({ ...prev, readAloud: !prev.readAloud }));
   }, [updateState]);
@@ -224,6 +216,7 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
       ...state,
       toggleDarkMode,
       toggleHighContrast,
+      toggleEasyMode,
       toggleReadAloud,
       increaseFontScale,
       decreaseFontScale,
@@ -233,6 +226,7 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
       state,
       toggleDarkMode,
       toggleHighContrast,
+      toggleEasyMode,
       toggleReadAloud,
       increaseFontScale,
       decreaseFontScale,
