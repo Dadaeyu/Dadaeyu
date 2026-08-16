@@ -9,9 +9,8 @@ const REVIEW_BOARD_ID = 1;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const contentIdParam = searchParams.get("contentId");
-  const contentId = Number(contentIdParam);
-  if (!contentIdParam || !Number.isFinite(contentId)) {
+  const contentId = (searchParams.get("contentId") ?? "").trim();
+  if (!contentId) {
     return NextResponse.json({ error: "Invalid contentId" }, { status: 400 });
   }
 

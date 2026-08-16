@@ -106,7 +106,7 @@ interface CoursePlace {
   placeId?: number; // tb_course_detail.place_id 로 저장되는 원본 장소 id
   lat?: number; // 장소 검색으로 추가된 경우의 좌표 (지도 마커·경로선 표시용)
   lng?: number;
-  contentId?: number; // tb_place.contentid (TourAPI id) — /api/tourism/detail 조회용. placeId(내부 PK)와는 다른 값.
+  contentId?: string; // tb_place.contentid (TourAPI id, 관리자 등록 장소는 "a" 접두 문자열) — /api/tourism/detail 조회용. placeId(내부 PK)와는 다른 값.
   categoryCode?: string | null; // tb_place.lclssystm1 — 지도/장소목록의 테마별 색상에 쓴다.
 }
 
@@ -308,7 +308,7 @@ function CourseAuthorRow({
 // 아직 tb_course 에 저장되지 않은 상태라 course_id 가 없다 — "저장" 시에만 실제 코스가 된다.
 interface RecommendedCoursePlace {
   placeId: number;
-  contentId: number;
+  contentId: string;
   name: string;
   lat: number;
   lng: number;
@@ -1773,12 +1773,12 @@ function CourseDetail({ id }: { id: string }) {
         const contentIds = [
           ...new Set(
             [...placesById.values()]
-              .map((p) => (p.contentid != null && p.contentid !== "" ? Number(p.contentid) : null))
-              .filter((v): v is number => v != null)
+              .map((p) => (p.contentid != null && p.contentid !== "" ? String(p.contentid) : null))
+              .filter((v): v is string => v != null)
           )
         ];
         const bfFlagsByContentId = new Map<
-          number,
+          string,
           { has_blind: boolean; has_deaf: boolean; has_gait: boolean; has_infant: boolean }
         >();
         if (contentIds.length > 0) {
@@ -1787,7 +1787,7 @@ function CourseDetail({ id }: { id: string }) {
             .select("contentid, has_blind, has_deaf, has_gait, has_infant")
             .in("contentid", contentIds);
           if (bfErr) throw bfErr;
-          for (const b of bfRows ?? []) bfFlagsByContentId.set(Number(b.contentid), b);
+          for (const b of bfRows ?? []) bfFlagsByContentId.set(String(b.contentid), b);
         }
 
         const badgeCounts = new Map<string, number>();
@@ -1798,7 +1798,7 @@ function CourseDetail({ id }: { id: string }) {
         for (const [pid, p] of placesById.entries()) {
           if (p.lclssystm1) bumpBadge(themeLabelByCode.get(p.lclssystm1));
           if (bakeryPlaceIdSet.has(pid)) bumpBadge(themeLabelByCode.get(BAKERY_THEME_CODE));
-          const contentId = p.contentid != null && p.contentid !== "" ? Number(p.contentid) : null;
+          const contentId = p.contentid != null && p.contentid !== "" ? String(p.contentid) : null;
           const flags = contentId != null ? bfFlagsByContentId.get(contentId) : undefined;
           if (flags?.has_blind) bumpBadge("시각장애");
           if (flags?.has_deaf) bumpBadge("청각장애");
@@ -1826,7 +1826,7 @@ function CourseDetail({ id }: { id: string }) {
             // /api/tourism/detail 은 tb_place.contentid(TourAPI id)로 조회한다 — place_id(내부 PK)와는 다른 값.
             contentId:
               place?.contentid != null && place.contentid !== ""
-                ? Number(place.contentid)
+                ? String(place.contentid)
                 : undefined,
             categoryCode: place?.lclssystm1 ?? null
           });
@@ -2258,7 +2258,9 @@ function CourseDetail({ id }: { id: string }) {
     themes: placeFilters.filters.themes,
     minRating: placeFilters.filters.minRating
   });
-  const psDisplayPlaces = ps.searchPlaces.length > 0 ? ps.searchPlaces : ps.topRatedPlaces;
+  // 필터/검색을 아무것도 안 켰을 때만 핫플레이스를 기본으로 보여준다.
+  // 필터를 켰는데 결과가 0개면(searchPlaces=[]) 그대로 빈 목록으로 둬서 "결과 없음"이 보이게 한다.
+  const psDisplayPlaces = ps.hasActiveFilter ? ps.searchPlaces : ps.topRatedPlaces;
   // 상세의 "내 코스에 추가" → 현재 활성 Day 에 장소 추가 후 폼으로 복귀
   const addPlaceFromSearch = () => {
     const sp = ps.searchDetail;
@@ -2284,9 +2286,8 @@ function CourseDetail({ id }: { id: string }) {
               placeId: sp.placeId,
               lat: sp.lat,
               lng: sp.lng,
-              // sp.id 는 DB 출처일 때만 contentid(숫자 문자열)다 — /api/tourism/detail 조회용.
-              contentId:
-                sp.source === "db" && !Number.isNaN(Number(sp.id)) ? Number(sp.id) : undefined,
+              // sp.id 는 DB 출처일 때만 contentid 다(관리자 등록 장소는 "a" 접두 문자열) — /api/tourism/detail 조회용.
+              contentId: sp.source === "db" ? sp.id : undefined,
               // 지금 상세 패널에 열려있는 장소의 테마 코드 — 노드/순서아이콘 색이 바로 반영되게.
               categoryCode: ps.tourismDetail?.categoryCode ?? null
             }
@@ -2826,6 +2827,7 @@ function CourseDetail({ id }: { id: string }) {
             defaultFilterOpen
             places={psDisplayPlaces}
             searchCount={ps.searchPlaces.length}
+            hasActiveFilter={ps.hasActiveFilter}
             onSelectPlace={ps.setSearchDetailId}
             searchDetail={ps.searchDetail}
             tourismDetail={ps.tourismDetail}

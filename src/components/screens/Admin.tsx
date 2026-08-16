@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -10,25 +10,18 @@ import {
   Flag,
   Calendar,
   Database,
-  Search,
-  Plus,
-  Trash2,
-  Edit,
-  Check,
-  Eye,
-  EyeOff,
   AlertCircle,
   FileText,
   ChevronRight,
-  Star,
-  ShieldCheck,
+  ChevronDown,
   Megaphone,
   HelpCircle,
-  Layers
+  Layers,
+  type LucideIcon
 } from "lucide-react";
-import { PLACES, PLACE_COLORS } from "@/data/placesData";
-import { Button } from "@/components/ui/Button";
 import { DashboardSection } from "@/components/screens/admin/DashboardSection";
+import { PlacesSection } from "@/components/screens/admin/PlacesSection";
+import { CourseManagementSection } from "@/components/screens/admin/CourseManagementSection";
 import { UsersSection } from "@/components/screens/admin/UsersSection";
 import { BoardSection } from "@/components/screens/admin/BoardSection";
 import { BoardPostsSection } from "@/components/screens/admin/BoardPostsSection";
@@ -40,7 +33,11 @@ import { FaqSection } from "@/components/screens/admin/FaqSection";
 import { TablePagination } from "@/components/screens/admin/TablePagination";
 
 // ── 사이드바 메뉴 ─────────────────────────────────────────
-const SECTIONS = [
+// children이 있으면 트리메뉴(상위 클릭 시 펼침/접힘, 자체 페이지 없음), 없으면 단일 메뉴.
+type LeafSection = { key: string; label: string; icon: LucideIcon };
+type SidebarSection = LeafSection | (LeafSection & { children: { key: string; label: string }[] });
+
+const SECTIONS: SidebarSection[] = [
   { key: "dashboard", label: "대시보드", icon: LayoutDashboard },
   { key: "users", label: "사용자 관리", icon: Users },
   { key: "notices", label: "팝업 관리", icon: AlertCircle },
@@ -49,74 +46,17 @@ const SECTIONS = [
   { key: "faq", label: "FAQ 관리", icon: HelpCircle },
   { key: "board-settings", label: "게시판 관리", icon: Layers },
   { key: "board-posts", label: "게시글 관리", icon: FileText },
-  { key: "places", label: "장소 관리", icon: MapPin },
+  {
+    key: "place-group",
+    label: "장소 관리",
+    icon: MapPin,
+    children: [
+      { key: "places", label: "등록 장소 관리" },
+      { key: "place-sync", label: "데이터 동기화" }
+    ]
+  },
   { key: "courses", label: "코스 관리", icon: Route },
   { key: "reports", label: "제보 확인", icon: Flag }
-];
-
-// ── 목업 데이터 (장소·코스·이벤트) ─────────────────────────
-interface AdminCourse {
-  id: number;
-  title: string;
-  author: string;
-  duration: string;
-  places: number;
-  best: boolean;
-  visible: boolean;
-  date: string;
-}
-
-const INIT_COURSES: AdminCourse[] = [
-  {
-    id: 101,
-    title: "대전 무장애 가족 나들이",
-    author: "대전관광공사",
-    duration: "1일",
-    places: 5,
-    best: true,
-    visible: true,
-    date: "2025.04.10"
-  },
-  {
-    id: 102,
-    title: "휠체어로 즐기는 성심당 & 수목원",
-    author: "대전관광공사",
-    duration: "반일",
-    places: 3,
-    best: true,
-    visible: true,
-    date: "2025.03.28"
-  },
-  {
-    id: 103,
-    title: "유성온천 힐링 코스",
-    author: "대전시청 관광과",
-    duration: "1일",
-    places: 4,
-    best: false,
-    visible: true,
-    date: "2025.02.15"
-  },
-  {
-    id: 104,
-    title: "엄마랑 아이랑 과학 탐험",
-    author: "travel_daejeon",
-    duration: "반일",
-    places: 2,
-    best: false,
-    visible: true,
-    date: "2025.05.02"
-  },
-  {
-    id: 10,
-    title: "내 여행 계획",
-    author: "미대전",
-    duration: "2일",
-    places: 4,
-    best: false,
-    visible: false,
-    date: "2026.05.15"
-  }
 ];
 
 function resolveAdminSection(sectionParam: string | string[] | undefined): string {
@@ -131,6 +71,66 @@ export default function Admin() {
   const section = resolveAdminSection(params.section as string | string[] | undefined);
   const router = useRouter();
   const [pendingReports, setPendingReports] = useState(0);
+
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    for (const item of SECTIONS) {
+      if ("children" in item && item.children.some((c) => c.key === section)) initial.add(item.key);
+    }
+    return initial;
+  });
+
+  // 트리메뉴 하위 항목으로 직접(주소 입력 등) 들어왔을 때도 상위가 자동으로 펼쳐지게.
+  useEffect(() => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      for (const item of SECTIONS) {
+        if ("children" in item && item.children.some((c) => c.key === section)) next.add(item.key);
+      }
+      return next;
+    });
+  }, [section]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // 모바일 탭바용 — 그룹 메뉴는 드롭다운으로 열고, 하나만 열려있게 한다.
+  // 탭바 자체가 overflow-x-auto라 그 안에 absolute로 붙이면 overflow-y까지 auto로 취급돼(스펙상
+  // 한 축이 visible이 아니면 다른 축도 auto가 됨) 패널이 잘려 안 보인다 — fixed + 좌표 계산으로 우회.
+  const [mobileGroupOpen, setMobileGroupOpen] = useState<string | null>(null);
+  const [mobileGroupPos, setMobileGroupPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  const mobileGroupBtnRef = useRef<HTMLButtonElement>(null);
+  const mobileGroupPanelRef = useRef<HTMLDivElement>(null);
+  const toggleMobileGroup = (key: string, e: MouseEvent<HTMLButtonElement>) => {
+    if (mobileGroupOpen === key) {
+      setMobileGroupOpen(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMobileGroupPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    setMobileGroupOpen(key);
+  };
+  useEffect(() => {
+    if (!mobileGroupOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (mobileGroupBtnRef.current?.contains(target)) return;
+      if (mobileGroupPanelRef.current?.contains(target)) return;
+      setMobileGroupOpen(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [mobileGroupOpen]);
 
   useEffect(() => {
     fetch("/api/admin/stats")
@@ -151,7 +151,53 @@ export default function Admin() {
         <p className="text-stone mb-2 px-3 text-[10px] font-bold tracking-widest uppercase">
           관리자
         </p>
-        {SECTIONS.map(({ key, label, icon: Icon }) => {
+        {SECTIONS.map((item) => {
+          if ("children" in item) {
+            const Icon = item.icon;
+            const isExpanded = expandedGroups.has(item.key);
+            const childActive = item.children.some((c) => c.key === section);
+            return (
+              <div key={item.key}>
+                <button
+                  onClick={() => toggleGroup(item.key)}
+                  aria-expanded={isExpanded}
+                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
+                    childActive
+                      ? "text-navy-700"
+                      : "text-steel hover:bg-surface-soft hover:text-ink"
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 shrink-0 ${childActive ? "text-navy-600" : "text-stone"}`} />
+                  {item.label}
+                  <ChevronRight
+                    className={`text-stone ml-auto h-3.5 w-3.5 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                  />
+                </button>
+                {isExpanded && (
+                  <div className="border-hairline-soft mt-0.5 ml-4 flex flex-col gap-0.5 border-l pl-3">
+                    {item.children.map((child) => {
+                      const active = section === child.key;
+                      return (
+                        <button
+                          key={child.key}
+                          onClick={() => router.push(`/admin/${child.key}`)}
+                          className={`rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+                            active
+                              ? "bg-navy-50 text-navy-700"
+                              : "text-steel hover:bg-surface-soft hover:text-ink"
+                          }`}
+                        >
+                          {child.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          const { key, label, icon: Icon } = item;
           const active = section === key;
           return (
             <button
@@ -179,7 +225,29 @@ export default function Admin() {
       <div className="bg-surface-soft/40 flex min-w-0 flex-1 flex-col">
         {/* 모바일 탭바 */}
         <div className="border-hairline-soft bg-background flex gap-1 overflow-x-auto border-b px-4 py-2 md:hidden">
-          {SECTIONS.map(({ key, label, icon: Icon }) => {
+          {SECTIONS.map((item) => {
+            if ("children" in item) {
+              const Icon = item.icon;
+              const isOpen = mobileGroupOpen === item.key;
+              const childActive = item.children.some((c) => c.key === section);
+              return (
+                <button
+                  key={item.key}
+                  ref={isOpen ? mobileGroupBtnRef : undefined}
+                  onClick={(e) => toggleMobileGroup(item.key, e)}
+                  aria-expanded={isOpen}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                    childActive ? "bg-navy-50 text-navy-700" : "text-steel hover:bg-surface-soft"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {item.label}
+                  <ChevronDown className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                </button>
+              );
+            }
+
+            const { key, label, icon: Icon } = item;
             const active = section === key;
             return (
               <button
@@ -196,15 +264,53 @@ export default function Admin() {
           })}
         </div>
 
-        <div className="flex-1 overflow-auto px-4 py-6 md:px-8">
+        {/* 탭바가 overflow-x-auto라 그 안에서는 세로로 넘치는 패널이 잘리므로, fixed로 바깥에 띄운다. */}
+        {mobileGroupOpen &&
+          mobileGroupPos &&
+          (() => {
+            const group = SECTIONS.find((item) => item.key === mobileGroupOpen && "children" in item);
+            if (!group || !("children" in group)) return null;
+            return (
+              <div
+                ref={mobileGroupPanelRef}
+                style={{
+                  top: mobileGroupPos.top,
+                  left: mobileGroupPos.left,
+                  width: mobileGroupPos.width
+                }}
+                className="border-hairline fixed z-30 overflow-hidden rounded-xl border bg-white py-1 shadow-lg md:hidden"
+              >
+                {group.children.map((child) => {
+                  const active = section === child.key;
+                  return (
+                    <button
+                      key={child.key}
+                      onClick={() => {
+                        router.push(`/admin/${child.key}`);
+                        setMobileGroupOpen(null);
+                      }}
+                      className={`block w-full px-3 py-2 text-left text-xs font-semibold transition-colors ${
+                        active ? "bg-navy-50 text-navy-700" : "text-steel hover:bg-surface-soft"
+                      }`}
+                    >
+                      {child.label}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+        <div className="flex-1 overflow-auto px-4 pt-6 pb-24 md:px-8 md:py-6">
           {section === "dashboard" && <DashboardSection />}
           {section === "users" && <UsersSection />}
           {section === "board-settings" && <BoardSection />}
           {section === "board-posts" && <BoardPostsSection />}
           {section === "notices" && <NoticesSection />}
           {section === "community-notices" && <CommunityNoticesSection />}
-          {section === "places" && <PlaceManagement />}
-          {section === "courses" && <CourseManagement />}
+          {section === "places" && <PlacesSection />}
+          {section === "place-sync" && <PlaceSyncSection />}
+          {section === "courses" && <CourseManagementSection />}
           {section === "reports" && <ReportsSection />}
           {section === "events" && <EventsSection />}
           {section === "faq" && <FaqSection />}
@@ -247,8 +353,7 @@ const PLACE_COLUMNS = [
   "registtime",
   "updatetime",
   "delete_yn",
-  "deletetime",
-  "dong"
+  "deletetime"
 ] as const;
 
 const PLACE_DETAIL_COLUMNS = [
@@ -394,124 +499,20 @@ const PLACE_BAKERY_COLUMNS = [
   "deletetime"
 ] as const;
 
-function PlaceManagement() {
-  const [places, setPlaces] = useState(PLACES);
-  const [query, setQuery] = useState("");
+function PlaceSyncSection() {
   const [dbTab, setDbTab] = useState<DbTabKey>("place");
-
-  const filtered = places.filter((p) => p.name.includes(query) || p.category.includes(query));
-
-  const deletePlace = (id: number) => setPlaces((prev) => prev.filter((p) => p.id !== id));
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-ink text-xl font-bold">장소 관리</h1>
-        <button className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors">
-          <Plus className="h-4 w-4" />
-          장소 등록
-        </button>
-      </div>
-
-      <div className="relative">
-        <Search className="text-stone absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="장소명 또는 카테고리 검색"
-          className="border-hairline focus:ring-navy-400 w-full rounded-lg border py-2.5 pr-4 pl-9 text-sm focus:ring-2 focus:outline-none"
-        />
-      </div>
-
-      <div className="border-hairline-soft overflow-hidden rounded-lg border bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-hairline-soft bg-surface-soft border-b">
-                {["장소명", "카테고리", "평점", "접근성 태그", "액션"].map((h) => (
-                  <th
-                    key={h}
-                    className="text-steel px-4 py-3 text-left text-xs font-bold whitespace-nowrap"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p) => (
-                <tr
-                  key={p.id}
-                  className="border-hairline-soft hover:bg-surface-soft border-b transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{p.emoji}</span>
-                      <span className="text-ink font-semibold">{p.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="rounded-full px-2 py-0.5 text-xs font-semibold"
-                      style={{
-                        background: PLACE_COLORS[p.colorKey].bg,
-                        color: PLACE_COLORS[p.colorKey].color
-                      }}
-                    >
-                      {p.category}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-500" />
-                      <span className="text-slate font-medium">{p.rating}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {p.accessibility.map((a) => (
-                        <span
-                          key={a}
-                          className="bg-brand-50 text-brand-700 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-                        >
-                          {a}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="iconSm"
-                        aria-label="수정"
-                        className="text-stone hover:bg-navy-50 hover:text-navy-600 rounded-full"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="iconSm"
-                        onClick={() => deletePlace(p.id)}
-                        aria-label="삭제"
-                        className="text-stone rounded-full hover:bg-red-50 hover:text-red-500"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {filtered.length === 0 && (
-          <p className="text-stone py-8 text-center text-sm">검색 결과가 없어요</p>
-        )}
+      <div>
+        <h1 className="text-ink text-xl font-semibold tracking-[-0.02em]">데이터 동기화</h1>
+        <p className="text-stone mt-1 text-sm leading-5">
+          정부 API로 동기화되는 원본 테이블을 조회하고, 필요하면 수동으로 동기화를 실행합니다.
+        </p>
       </div>
 
       {/* Supabase 테이블 탭 */}
-      <div className="pt-4">
+      <div>
         <div className="border-hairline-soft flex gap-1 overflow-x-auto border-b">
           {DB_TABS.map(({ key, label, desc }) => {
             const active = dbTab === key;
@@ -1851,123 +1852,3 @@ function DbHolidayTable() {
     </div>
   );
 }
-
-// ── 4. 코스 관리 ─────────────────────────────────────────
-function CourseManagement() {
-  const [courses, setCourses] = useState<AdminCourse[]>(INIT_COURSES);
-  const [filter, setFilter] = useState<"전체" | "베스트" | "비공개">("전체");
-
-  const filtered = courses.filter((c) =>
-    filter === "전체" ? true : filter === "베스트" ? c.best : !c.visible
-  );
-
-  const toggleBest = (id: number) =>
-    setCourses((prev) => prev.map((c) => (c.id === id ? { ...c, best: !c.best } : c)));
-  const toggleVisible = (id: number) =>
-    setCourses((prev) => prev.map((c) => (c.id === id ? { ...c, visible: !c.visible } : c)));
-  const deleteCourse = (id: number) => setCourses((prev) => prev.filter((c) => c.id !== id));
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-ink text-xl font-bold">코스 관리</h1>
-        <button className="bg-navy-600 hover:bg-navy-700 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors">
-          <Plus className="h-4 w-4" />
-          코스 등록
-        </button>
-      </div>
-
-      <div className="flex gap-2">
-        {(["전체", "베스트", "비공개"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${filter === f ? "bg-navy-600 text-white" : "bg-surface text-steel hover:bg-hairline"}`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-3">
-        {filtered.map((c) => (
-          <div
-            key={c.id}
-            className="border-hairline-soft flex items-center gap-4 rounded-lg border bg-white px-5 py-4"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="mb-1 flex items-center gap-2">
-                <h3 className="text-ink truncate font-semibold">{c.title}</h3>
-                {c.best && (
-                  <span className="bg-gold-100 text-gold-700 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
-                    BEST
-                  </span>
-                )}
-                {!c.visible && (
-                  <span className="bg-surface text-steel shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
-                    비공개
-                  </span>
-                )}
-              </div>
-              <p className="text-stone text-xs">
-                {c.author} · {c.duration} · {c.places}곳 · {c.date}
-              </p>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2">
-              {/* 베스트 토글 */}
-              <button
-                onClick={() => toggleBest(c.id)}
-                title="베스트 코스 설정"
-                className={`flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                  c.best
-                    ? "border-gold-300 bg-gold-50 text-gold-700 hover:bg-gold-100"
-                    : "border-hairline text-steel hover:border-gold-300 hover:text-gold-600 bg-white"
-                }`}
-              >
-                <Star
-                  className={`h-3.5 w-3.5 ${c.best ? "fill-yellow-400 text-yellow-500" : ""}`}
-                />
-                베스트
-              </button>
-
-              {/* 노출 토글 */}
-              <Button
-                variant="ghost"
-                size="iconSm"
-                onClick={() => toggleVisible(c.id)}
-                title="공개 여부 변경"
-                aria-label="공개 여부 변경"
-                className="text-stone hover:bg-surface hover:text-steel rounded-full"
-              >
-                {c.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="iconSm"
-                aria-label="수정"
-                className="text-stone hover:bg-navy-50 hover:text-navy-600 rounded-full"
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="iconSm"
-                onClick={() => deleteCourse(c.id)}
-                aria-label="삭제"
-                className="text-stone rounded-full hover:bg-red-50 hover:text-red-500"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        ))}
-        {filtered.length === 0 && (
-          <p className="text-stone py-10 text-center text-sm">해당하는 코스가 없어요</p>
-        )}
-      </div>
-    </div>
-  );
-}
-

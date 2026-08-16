@@ -32,6 +32,8 @@ type AdminFormShellProps = {
   onBack: () => void;
   onSubmit: () => void;
   submitLabel?: string;
+  /** true면 목록 화면과 같은 너비(전체 폭)로 표시한다. 기본은 좁은 폼(max-w-3xl). */
+  wide?: boolean;
   children: ReactNode;
 };
 
@@ -101,10 +103,11 @@ export function AdminFormShell({
   onBack,
   onSubmit,
   submitLabel = "저장",
+  wide = false,
   children
 }: AdminFormShellProps) {
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className={wide ? "space-y-5" : "mx-auto max-w-3xl space-y-5"}>
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" disabled={saving} onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />

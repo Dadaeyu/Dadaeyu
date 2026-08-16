@@ -132,6 +132,7 @@ export default function Map() {
     handleSearch,
     focusPlaceById,
     topRatedPlaces,
+    hasActiveFilter,
     mapResetTrigger
   } = usePlaceSearch({
     accessibility: filters.accessibility,
@@ -384,9 +385,10 @@ export default function Map() {
     setSearchDetailId(null);
   };
 
-  const displayPlaces = searchPlaces.length > 0 ? searchPlaces : topRatedPlaces;
-  // 검색 전에는 핫플레이스 5곳을 목록·지도 마커 모두에 바로 보여준다.
-  const markerPlaces = searchPlaces.length > 0 ? searchPlaces : topRatedPlaces;
+  // 필터/검색을 아무것도 안 켰을 때만 핫플레이스를 기본으로 보여준다.
+  // 필터를 켰는데 결과가 0개면(searchPlaces=[]) 그대로 빈 목록으로 둬서 "결과 없음"이 보이게 한다.
+  const displayPlaces = hasActiveFilter ? searchPlaces : topRatedPlaces;
+  const markerPlaces = hasActiveFilter ? searchPlaces : topRatedPlaces;
 
   return (
     <div
@@ -426,6 +428,7 @@ export default function Map() {
           defaultFilterOpen
           places={displayPlaces}
           searchCount={searchPlaces.length}
+          hasActiveFilter={hasActiveFilter}
           onSelectPlace={selectPlace}
           searchDetail={searchDetail}
           tourismDetail={tourismDetail}

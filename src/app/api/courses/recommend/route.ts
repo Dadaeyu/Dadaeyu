@@ -12,7 +12,7 @@ import {
   getBarrierFreeIds,
   getHeadcountExcludeIds,
   getScheduleExcludeIds
-} from "@/app/api/search/route";
+} from "@/lib/search/placeFilters";
 import {
   haversineMeters,
   orderByNearestNeighbor,
@@ -52,7 +52,7 @@ const recommendRateLimiter = createFixedWindowRateLimiter({
 
 interface CandidatePlace extends RoutePoint {
   placeId: number;
-  contentId: number;
+  contentId: string;
   title: string;
   category: string | null; // 표시용 테마 이름(예: "음식") — 프롬프트/해시태그용
   categoryCode: string | null; // tb_place.lclssystm1 원본 코드(예: "FD") — 지도 마커 색상용
@@ -254,7 +254,7 @@ async function fetchPlaces(params: {
     query = query.in("contentid", accessIds.length > 0 ? accessIds : [-1]);
   }
 
-  const excludeIds = new Set<number>();
+  const excludeIds = new Set<string>();
   for (const id of await getHeadcountExcludeIds(params.headcount)) excludeIds.add(id);
   for (const id of await getScheduleExcludeIds(params.dateFrom, params.dateTo)) excludeIds.add(id);
   const finalQuery =
@@ -265,7 +265,7 @@ async function fetchPlaces(params: {
 
   const rows = (data ?? []) as Array<{
     place_id: number;
-    contentid: number;
+    contentid: string;
     title: string;
     mapx: string | number;
     mapy: string | number;
@@ -398,7 +398,7 @@ async function requestCourseDrafts({
 
 interface ScheduledPlaceOut {
   placeId: number;
-  contentId: number;
+  contentId: string;
   name: string;
   lat: number;
   lng: number;

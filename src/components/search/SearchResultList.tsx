@@ -28,7 +28,7 @@ export default function SearchResultList({
                 width={40}
                 height={40}
                 unoptimized
-                className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                className="bg-gray-50 h-10 w-10 shrink-0 rounded-lg object-contain"
               />
             ) : (
               <div

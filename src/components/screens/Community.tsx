@@ -900,7 +900,7 @@ function CommunityWrite() {
       const payload = {
         title: title.trim(),
         content: content.trim(),
-        content_id: selectedPlace ? Number(selectedPlace.id) : null,
+        content_id: selectedPlace ? selectedPlace.id : null,
         course_id: selectedCourse ? selectedCourse.id : null,
         rating: selectedBoard?.rating_yn && selectedPlace ? rating : null,
         course_rating: selectedBoard?.rating_yn && selectedCourse ? courseRating : null,
@@ -1410,7 +1410,7 @@ type PostDetail = {
   comment_cnt: number;
   notice_yn: boolean;
   created_at: string;
-  attached_place: { content_id: number; name: string; image: string } | null;
+  attached_place: { content_id: string; name: string; image: string } | null;
   attached_course: { course_id: number; course_nm: string } | null;
   images: string[];
   files: AttachedFile[];

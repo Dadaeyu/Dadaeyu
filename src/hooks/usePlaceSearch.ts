@@ -11,6 +11,7 @@ export interface TourismDetail {
   addr1: string;
   overview: string | null;
   use_time: string | null;
+  rest_date: string | null;
   phone: string | null;
   accessibility: { category: string; items: { label: string; text: string }[] }[];
 }
@@ -166,6 +167,36 @@ export function usePlaceSearch({
 
     return () => controller.abort();
   }, []);
+
+  // 검색어/필터가 하나라도 켜져 있는지 — 켜져 있는데 결과가 0개면 핫플레이스로 대체하지 않고
+  // "결과 없음"을 보여줘야 한다(아무 필터도 안 켰을 때만 핫플레이스가 기본 목록이 된다).
+  const hasActiveFilter = useMemo(
+    () =>
+      Boolean(
+        searchRequest.keyword.trim() ||
+          accessibility.length > 0 ||
+          selectedGuCode ||
+          dong ||
+          themes.length > 0 ||
+          minRating > 0 ||
+          headcount > 1 ||
+          dateFrom ||
+          dateTo ||
+          favoritesOnly
+      ),
+    [
+      accessibility,
+      dateFrom,
+      dateTo,
+      dong,
+      favoritesOnly,
+      headcount,
+      minRating,
+      searchRequest.keyword,
+      selectedGuCode,
+      themes
+    ]
+  );
 
   const searchKey = useMemo(
     () =>
@@ -329,6 +360,7 @@ export function usePlaceSearch({
     handleSearch,
     focusPlaceById,
     topRatedPlaces,
+    hasActiveFilter,
     mapResetTrigger
   };
 }

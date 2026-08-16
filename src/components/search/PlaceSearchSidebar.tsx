@@ -35,7 +35,8 @@ interface Props {
 
   // 결과 목록
   places: SearchPlace[];
-  searchCount: number; // 실제 검색 결과 수 (없으면 핫플레이스 표시)
+  searchCount: number; // 실제 검색 결과 수
+  hasActiveFilter: boolean; // true면 검색/필터가 켜진 상태 — 0개여도 핫플레이스로 대체하지 않는다.
   onSelectPlace: (id: string) => void;
 
   // 상세 (usePlaceSearch 결과)
@@ -71,6 +72,7 @@ export default function PlaceSearchSidebar({
   defaultFilterOpen = false,
   places,
   searchCount,
+  hasActiveFilter,
   onSelectPlace,
   searchDetail,
   tourismDetail,
@@ -158,13 +160,18 @@ export default function PlaceSearchSidebar({
       >
         <div className="sticky top-0 border-b border-gray-100 bg-gray-50 px-4 py-2">
           <span className="text-xs font-semibold tracking-wide text-gray-400 uppercase">
-            {searchCount > 0 ? `검색 결과 ${searchCount}개` : `핫플레이스${places.length}개`}
+            {hasActiveFilter ? `검색 결과 ${searchCount}개` : `핫플레이스 ${places.length}개`}
           </span>
         </div>
         {isSearching ? (
           <div className="flex items-center justify-center gap-2 py-10 text-xs text-gray-400">
             <span className="border-brand-500 h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-200 border-t-transparent" />
             검색 중...
+          </div>
+        ) : places.length === 0 && hasActiveFilter ? (
+          <div className="flex flex-col items-center justify-center gap-1 py-14 text-center text-gray-400">
+            <p className="text-sm font-medium">조건에 맞는 장소가 없어요</p>
+            <p className="text-xs">필터를 조정해서 다시 찾아보세요</p>
           </div>
         ) : (
           <SearchResultList places={places} onSelect={onSelectPlace} />

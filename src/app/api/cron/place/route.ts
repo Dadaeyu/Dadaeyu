@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getSyncConfig, runFullSync, TIME_BUDGET_MS } from "@/app/api/place/route";
+import { getSyncConfig, runFullSync, TIME_BUDGET_MS } from "@/lib/place/syncEngine";
 
 export const dynamic = "force-dynamic";
 // Vercel Hobby 플랜의 함수 실행 시간 상한(60초)에 맞춘다.

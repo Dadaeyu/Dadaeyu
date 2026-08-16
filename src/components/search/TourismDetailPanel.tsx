@@ -233,6 +233,7 @@ export default function TourismDetailPanel({
     : [
         { label: "주소", value: detail?.addr1 || "-" },
         { label: "시간", value: detail?.use_time || "-" },
+        { label: "쉬는날", value: detail?.rest_date || "-" },
         { label: "전화", value: detail?.phone || "-" }
       ];
 
@@ -266,7 +267,7 @@ export default function TourismDetailPanel({
           width={640}
           height={320}
           unoptimized
-          className="h-40 w-full shrink-0 object-cover"
+          className="bg-gray-50 h-40 w-full shrink-0 object-contain"
         />
       ) : (
         <div className="from-brand-400 to-brand-600 flex h-40 shrink-0 items-center justify-center bg-gradient-to-br">

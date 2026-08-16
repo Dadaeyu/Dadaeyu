@@ -23,13 +23,14 @@ export async function GET() {
 
     if (error) throw error;
 
-    const grouped = new Map<number, { sum: number; count: number }>();
+    const grouped = new Map<string, { sum: number; count: number }>();
     for (const row of rows ?? []) {
       if (row.content_id == null || row.rating == null) continue;
-      const g = grouped.get(row.content_id) ?? { sum: 0, count: 0 };
+      const cid = String(row.content_id);
+      const g = grouped.get(cid) ?? { sum: 0, count: 0 };
       g.sum += row.rating;
       g.count += 1;
-      grouped.set(row.content_id, g);
+      grouped.set(cid, g);
     }
 
     const ranked = Array.from(grouped.entries())
@@ -63,7 +64,7 @@ export async function GET() {
 
       if (placesError) throw placesError;
 
-      const placeByContentId = new Map((places ?? []).map((p) => [Number(p.contentid), p]));
+      const placeByContentId = new Map((places ?? []).map((p) => [String(p.contentid), p]));
 
       result = ranked
         .map((r) => {
