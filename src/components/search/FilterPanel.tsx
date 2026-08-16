@@ -71,7 +71,7 @@ export function FilterToggleSection({
         )}
       </div>
       {open && (
-        <div className="max-h-[190px] overflow-y-auto border-t border-gray-100 px-3 pt-2 pb-3 md:max-h-[270px]">
+        <div className="max-h-[190px] overflow-y-auto border-t border-gray-100 px-3 pt-2 pb-3 md:max-h-[220px]">
           <FilterFields
             filters={filters}
             set={set}

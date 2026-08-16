@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { getLikeCountsByContentId } from "@/lib/search/placeAggregates";
 
 // tb_place_barrierfree 컬럼명 기준. route/publictransport 라벨이 뒤바뀐 것처럼 보이는 건
 // TourAPI 응답 자체가 그렇게 오기 때문(place/route.ts BF_FIELDS와 동일 원본 필드).
@@ -64,13 +65,15 @@ export async function GET(request: Request) {
       .single(),
     supabase
       .from("tb_place_detail_normalized")
-      .select("overview, infocenter, usetime")
+      .select("overview, infocenter, usetime, restdate")
       .eq("contentid", contentId)
       .maybeSingle(),
     supabase.from("tb_place_barrierfree").select("*").eq("contentid", contentId).maybeSingle()
   ]);
 
   if (!place) return Response.json({ error: "not found" }, { status: 404 });
+
+  const likeCounts = await getLikeCountsByContentId(supabase, [contentId]);
 
   // 카카오맵의 "장소명 아래 카테고리"처럼 보여주기 위한 대분류명 (tb_code.code_group='LCLSSYSTM1').
   const { data: category } = place.lclssystm1
@@ -99,7 +102,9 @@ export async function GET(request: Request) {
     addr1: place.addr1 ?? "",
     overview: detail?.overview ?? null,
     use_time: detail?.usetime ?? null,
+    rest_date: detail?.restdate ?? null,
     phone: detail?.infocenter ?? null,
+    like_count: likeCounts.get(String(contentId)) ?? 0,
     accessibility
   });
 }

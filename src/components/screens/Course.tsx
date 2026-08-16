@@ -2817,6 +2817,9 @@ function CourseDetail({ id }: { id: string }) {
             places={psDisplayPlaces}
             searchCount={ps.searchPlaces.length}
             onSelectPlace={ps.setSearchDetailId}
+            searchPage={ps.searchPage}
+            searchTotal={ps.searchTotal}
+            onSearchPageChange={ps.setSearchPage}
             searchDetail={ps.searchDetail}
             tourismDetail={ps.tourismDetail}
             isLoadingDetail={ps.isLoadingDetail}

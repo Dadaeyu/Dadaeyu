@@ -11,8 +11,9 @@ import TourismDetailPanel, {
 } from "@/components/search/TourismDetailPanel";
 import SearchResultList from "@/components/search/SearchResultList";
 import { FilterOverlayPanel } from "@/components/search/FilterPanel";
+import { ListPagination } from "@/components/community/ListPagination";
 import { getCategoryColor } from "@/lib/search/categoryColors";
-import { usePlaceSearch } from "@/hooks/usePlaceSearch";
+import { usePlaceSearch, SEARCH_PAGE_SIZE } from "@/hooks/usePlaceSearch";
 import { useMyLocation, type MyLocationErrorReason } from "@/hooks/useMyLocation";
 import {
   fetchDirections,
@@ -63,7 +64,10 @@ export default function Map() {
     handleSearch,
     focusPlaceById,
     topRatedPlaces,
-    mapResetTrigger
+    mapResetTrigger,
+    searchPage,
+    setSearchPage,
+    searchTotal
   } = usePlaceSearch({
     accessibility: filters.accessibility,
     gu: filters.gu,
@@ -318,6 +322,8 @@ export default function Map() {
   const displayPlaces = searchPlaces.length > 0 ? searchPlaces : topRatedPlaces;
   // 검색 전에는 핫플레이스 5곳을 목록·지도 마커 모두에 바로 보여준다.
   const markerPlaces = searchPlaces.length > 0 ? searchPlaces : topRatedPlaces;
+  // 목록에 보이는 "검색 결과 N개"는 현재 페이지 개수가 아니라 전체 검색 결과 수로 보여준다.
+  const searchResultCount = Math.max(searchTotal, searchPlaces.length);
 
   // 모바일/mapOnly: 상세 열리면 지도·시트를 실제 상·하 50%로 분할 (오버레이 아님)
   const splitMapForDetail = Boolean(searchDetail);
@@ -347,6 +353,9 @@ export default function Map() {
           places={displayPlaces}
           searchCount={searchPlaces.length}
           onSelectPlace={selectPlace}
+          searchPage={searchPage}
+          searchTotal={searchTotal}
+          onSearchPageChange={setSearchPage}
           searchDetail={searchDetail}
           tourismDetail={tourismDetail}
           isLoadingDetail={isLoadingDetail}
@@ -415,7 +424,7 @@ export default function Map() {
           {searchPlaces.length > 0 && !showMobileFilters && !searchDetail ? (
             <section
               className={`${mapOnly ? "" : "md:hidden"} border-hairline absolute top-20 right-3 left-3 z-20 overflow-hidden rounded-lg border bg-white shadow-xl`}
-              aria-label={`검색 결과 ${searchPlaces.length}개`}
+              aria-label={`검색 결과 ${searchResultCount}개`}
             >
               <button
                 type="button"
@@ -424,9 +433,7 @@ export default function Map() {
                 aria-expanded={!resultsMinimized}
               >
                 <div className="min-w-0">
-                  <p className="text-ink text-sm font-semibold">
-                    검색 결과 {searchPlaces.length}개
-                  </p>
+                  <p className="text-ink text-sm font-semibold">검색 결과 {searchResultCount}개</p>
                   {!resultsMinimized && (
                     <p className="text-steel mt-0.5 text-xs">
                       장소를 선택하면 상세 정보를 확인할 수 있습니다.
@@ -438,9 +445,20 @@ export default function Map() {
                 />
               </button>
               {!resultsMinimized && (
-                <div className="max-h-[min(46vh,24rem)] overflow-y-auto">
-                  <SearchResultList places={searchPlaces} onSelect={selectPlace} />
-                </div>
+                <>
+                  <div className="max-h-[min(46vh,24rem)] overflow-y-auto">
+                    <SearchResultList places={searchPlaces} onSelect={selectPlace} />
+                  </div>
+                  <div className="border-hairline border-t bg-white">
+                    <ListPagination
+                      page={searchPage}
+                      total={searchTotal}
+                      pageSize={SEARCH_PAGE_SIZE}
+                      onChange={setSearchPage}
+                      compact
+                    />
+                  </div>
+                </>
               )}
             </section>
           ) : null}
@@ -448,17 +466,17 @@ export default function Map() {
           <KakaoMap
             markers={markerPlaces.map((sp): MapMarker => {
               if (sp.source === "kakao") {
-                // 눈물방울 핀(파란 배경 + 카카오 옐로우 중앙 점)으로 카카오 검색 결과임을 표시.
+                // 눈물방울 핀(카카오 옐로우 배경 + 파란 중앙 점)으로 카카오 검색 결과임을 표시.
                 return {
                   id: sp.id,
                   lat: sp.lat,
                   lng: sp.lng,
-                  color: "#2563EB",
-                  borderColor: "#FEE500",
+                  color: "#FEE500",
+                  borderColor: "#2563EB",
                   shape: "teardrop"
                 };
               }
-              if (likedIds.has(sp.id)) {
+              if (filters.favoritesOnly && likedIds.has(sp.id)) {
                 return { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#ef4444", shape: "heart" };
               }
               return {

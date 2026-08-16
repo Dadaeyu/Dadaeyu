@@ -60,7 +60,9 @@ export default function SearchResultList({
                             : "text-gray-300"
                         }`}
                       />
-                      <span>{sp.average_rating != null ? sp.average_rating.toFixed(1) : "0"}</span>
+                      <span>
+                        {sp.average_rating != null ? sp.average_rating.toFixed(1) : "0.0"}
+                      </span>
                     </div>
                   )}
                   {sp.like_count !== undefined && (

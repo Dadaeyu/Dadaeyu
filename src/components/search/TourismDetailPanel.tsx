@@ -64,12 +64,24 @@ function decodeHtmlEntities(text: string): string {
 }
 
 // <br> 기준으로 줄바꿈하되, 원문에 섞인 공백/개행까지 살아남아 빈 줄이 생기지 않도록 각 줄을 trim한다.
+// formatUseTime()이 넣어주는 실제 개행문자(\n)도 <br>와 동일하게 줄바꿈으로 처리한다.
 function renderWithLineBreaks(text: string) {
   const lines = text
-    .split(/<br\s*\/?>/gi)
+    .split(/<br\s*\/?>|\n/gi)
     .map((l) => decodeHtmlEntities(l.trim()))
     .filter(Boolean);
   return lines.flatMap((line, i) => (i === 0 ? [line] : [<br key={i} />, line]));
+}
+
+// tb_place_detail_normalized.usetime 원문은 "-"로 문장이 뒤섞여 있어 그대로 보여주면 읽기 어렵다.
+// 항목 구분점(요일/휴게시간/※안내 등) 앞에 줄바꿈을 넣어 가독성을 맞춘다.
+function formatUseTime(text: string): string {
+  return text
+    .replace(/^\s*-\s*/, "")
+    .replace(/-\s*(?=[가-힣※\[])/g, "\n")
+    .replace(/※/g, "\n※")
+    .replace(/\)주말/g, ")\n주말")
+    .replace(/(\d{2}:\d{2})\[/g, "$1\n[");
 }
 
 // 지도·코스 검색 결과 상세 패널 — DB(tb_place) 출처와 카카오 로컬 검색 출처를 함께 다룬다.
@@ -232,7 +244,8 @@ export default function TourismDetailPanel({
       ]
     : [
         { label: "주소", value: detail?.addr1 || "-" },
-        { label: "시간", value: detail?.use_time || "-" },
+        { label: "시간", value: detail?.use_time ? formatUseTime(detail.use_time) : "-" },
+        { label: "휴무일", value: detail?.rest_date || "-" },
         { label: "전화", value: detail?.phone || "-" }
       ];
 
@@ -285,13 +298,19 @@ export default function TourismDetailPanel({
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-base leading-snug font-bold text-gray-900">{title}</h3>
               {!isKakao && (
-                <div className="flex shrink-0 items-center gap-0.5">
-                  <Star
-                    className={`h-4 w-4 ${averageRating != null ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
-                  />
-                  <span className="text-sm font-semibold text-gray-800">
-                    {averageRating != null ? averageRating.toFixed(1) : "0"}
-                  </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex items-center gap-0.5">
+                    <Star
+                      className={`h-4 w-4 ${averageRating != null ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
+                    />
+                    <span className="text-sm font-semibold text-gray-800">
+                      {averageRating != null ? averageRating.toFixed(1) : "0.0"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-0.5 text-gray-500">
+                    <Heart className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">{detail?.like_count ?? 0}</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -428,7 +447,7 @@ export default function TourismDetailPanel({
           <div className="space-y-1.5 text-xs text-gray-600">
             {infoRows.map(({ label, value }) => (
               <div key={label} className="flex gap-2">
-                <span className="w-10 shrink-0 font-medium text-gray-700">{label}</span>
+                <span className="w-12 shrink-0 font-medium text-gray-700">{label}</span>
                 <span className="min-w-0 break-words">{renderWithLineBreaks(value)}</span>
               </div>
             ))}
