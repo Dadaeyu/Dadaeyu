@@ -13,6 +13,7 @@ export interface TourismDetail {
   use_time: string | null;
   rest_date: string | null;
   phone: string | null;
+  like_count: number;
   accessibility: { category: string; items: { label: string; text: string }[] }[];
 }
 
@@ -29,7 +30,11 @@ type SearchRequest = {
 type SearchResultState = {
   key: string;
   places: SearchPlace[];
+  total: number;
 };
+
+// 지도 검색 결과 페이지당 개수. /api/search 와 맞춘다.
+export const SEARCH_PAGE_SIZE = 50;
 
 type TourismDetailState = {
   contentId: string;
@@ -67,8 +72,10 @@ export function usePlaceSearch({
   });
   const [searchResult, setSearchResult] = useState<SearchResultState>({
     key: "",
-    places: []
+    places: [],
+    total: 0
   });
+  const [searchPage, setSearchPage] = useState(0);
   const [searchDetailId, setSearchDetailId] = useState<string | null>(null);
   const [areaCodes, setAreaCodes] = useState<AreaCode[]>([]);
 
@@ -174,15 +181,15 @@ export function usePlaceSearch({
     () =>
       Boolean(
         searchRequest.keyword.trim() ||
-          accessibility.length > 0 ||
-          selectedGuCode ||
-          dong ||
-          themes.length > 0 ||
-          minRating > 0 ||
-          headcount > 1 ||
-          dateFrom ||
-          dateTo ||
-          favoritesOnly
+        accessibility.length > 0 ||
+        selectedGuCode ||
+        dong ||
+        themes.length > 0 ||
+        minRating > 0 ||
+        headcount > 1 ||
+        dateFrom ||
+        dateTo ||
+        favoritesOnly
       ),
     [
       accessibility,
@@ -233,10 +240,18 @@ export function usePlaceSearch({
   // 대전 전체가 보이는 초기 화면으로 되돌린다.
   const [mapResetTrigger, setMapResetTrigger] = useState(0);
   const isFirstSearchRun = useRef(true);
+  const prevSearchKeyRef = useRef(searchKey);
 
   useEffect(() => {
     const skipReset = isFirstSearchRun.current;
     isFirstSearchRun.current = false;
+
+    // searchKey(검색어·필터)가 바뀐 경우엔 페이지를 1페이지로 되돌린다.
+    // 페이지 버튼만 눌러 searchPage 만 바뀐 경우엔 지도 줌도 리셋하지 않는다.
+    const isNewSearch = prevSearchKeyRef.current !== searchKey;
+    prevSearchKeyRef.current = searchKey;
+    const pageToFetch = isNewSearch ? 0 : searchPage;
+    if (isNewSearch && searchPage !== 0) setSearchPage(0);
 
     const controller = new AbortController();
 
@@ -252,26 +267,36 @@ export function usePlaceSearch({
         minRating,
         headcount,
         dateFrom,
-        dateTo
+        dateTo,
+        page: pageToFetch
       },
       controller.signal
     )
-      .then(({ liked, places }) => {
-        setSearchResult({ key: searchKey, places });
+      .then(({ liked, places, total }) => {
+        setSearchResult({ key: searchKey, places, total });
         setSearchDetailId(null);
         if (liked) setLikedPlaces(liked);
-        if (!skipReset) setMapResetTrigger((count) => count + 1);
+        if (isNewSearch && !skipReset) setMapResetTrigger((count) => count + 1);
       })
       .catch((error: unknown) => {
         if (!isAbortError(error)) {
-          setSearchResult({ key: searchKey, places: [] });
+          setSearchResult({ key: searchKey, places: [], total: 0 });
           setSearchDetailId(null);
-          if (!skipReset) setMapResetTrigger((count) => count + 1);
+          if (isNewSearch && !skipReset) setMapResetTrigger((count) => count + 1);
         }
       });
 
     return () => controller.abort();
-  }, [accessibility, dong, favoritesOnly, gu, searchKey, searchRequest.keyword, selectedGuCode]);
+  }, [
+    accessibility,
+    dong,
+    favoritesOnly,
+    gu,
+    searchKey,
+    searchRequest.keyword,
+    selectedGuCode,
+    searchPage
+  ]);
 
   const handleSearch = useCallback((nextKeyword: string) => {
     setSearchRequest((current) => ({
@@ -361,7 +386,10 @@ export function usePlaceSearch({
     focusPlaceById,
     topRatedPlaces,
     hasActiveFilter,
-    mapResetTrigger
+    mapResetTrigger,
+    searchPage,
+    setSearchPage,
+    searchTotal: searchResult.total
   };
 }
 
@@ -397,7 +425,8 @@ async function fetchCombinedPlaces(
     minRating,
     headcount,
     dateFrom,
-    dateTo
+    dateTo,
+    page
   }: {
     accessibility: string[];
     dong: string;
@@ -410,6 +439,7 @@ async function fetchCombinedPlaces(
     headcount: number;
     dateFrom: string;
     dateTo: string;
+    page: number;
   },
   signal: AbortSignal
 ) {
@@ -427,7 +457,7 @@ async function fetchCombinedPlaces(
   );
 
   if (!hasNormalQuery && !favoritesOnly) {
-    return { places: [] as SearchPlace[], liked: null as SearchPlace[] | null };
+    return { places: [] as SearchPlace[], liked: null as SearchPlace[] | null, total: 0 };
   }
 
   const params = new URLSearchParams();
@@ -440,23 +470,29 @@ async function fetchCombinedPlaces(
   if (headcount >= 1) params.set("headcount", String(headcount));
   if (dateFrom) params.set("dateFrom", dateFrom);
   if (dateTo) params.set("dateTo", dateTo);
+  if (hasNormalQuery) params.set("page", String(page));
 
   const [databaseResponse, kakaoResults, liked] = await Promise.all([
     hasNormalQuery
       ? fetch(`/api/search?${params}`, { signal }).then(async (response) => {
           if (!response.ok) throw new Error("장소 검색에 실패했습니다.");
-          return response.json();
+          return response.json() as Promise<{
+            places: Omit<SearchPlace, "source">[];
+            total: number;
+          }>;
         })
-      : Promise.resolve([]),
-    trimmedKeyword
+      : Promise.resolve({ places: [], total: 0 }),
+    // 카카오 결과는 자체 페이징이 없어(항상 같은 상위 결과) 1페이지에서만 보여준다.
+    trimmedKeyword && page === 0
       ? fetchKakaoPlaces(trimmedKeyword, gu || undefined, dong || undefined)
       : Promise.resolve([]),
     favoritesOnly ? fetchLikedPlaces(signal) : Promise.resolve(null)
   ]);
 
   const databasePlaces: SearchPlace[] = (
-    Array.isArray(databaseResponse) ? databaseResponse : []
+    Array.isArray(databaseResponse.places) ? databaseResponse.places : []
   ).map((place: Omit<SearchPlace, "source">) => ({ ...place, source: "db" as const }));
+  const total = typeof databaseResponse.total === "number" ? databaseResponse.total : 0;
 
   const mergedDatabasePlaces = Array.from(
     new Map([...databasePlaces, ...(liked ?? [])].map((place) => [place.id, place])).values()
@@ -472,7 +508,8 @@ async function fetchCombinedPlaces(
 
   return {
     places: [...mergedDatabasePlaces, ...uniqueKakaoPlaces],
-    liked
+    liked,
+    total
   };
 }
 

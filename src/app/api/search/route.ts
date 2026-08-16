@@ -8,6 +8,10 @@ import {
   getScheduleExcludeIds
 } from "@/lib/search/placeFilters";
 
+// 지도 검색 페이지당 결과 수. page 파라미터가 있을 때만 { places, total } 형태로 응답한다
+// (기존 호출부와의 하위 호환을 위해 page 없이 호출하면 예전처럼 배열만 반환).
+const SEARCH_PAGE_SIZE = 50;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const keyword = searchParams.get("keyword") ?? "";
@@ -20,6 +24,9 @@ export async function GET(request: Request) {
   const dateFrom = searchParams.get("dateFrom") ?? "";
   const dateTo = searchParams.get("dateTo") ?? "";
   const contentId = searchParams.get("id") ?? "";
+  const pageParam = searchParams.get("page");
+  const usePagination = pageParam !== null;
+  const page = usePagination ? Math.max(0, parseInt(pageParam, 10) || 0) : 0;
 
   // 특정 contentid 단건 조회 (게시글 첨부 장소를 지도에서 다시 찾을 때 사용)
   if (contentId.trim()) {
@@ -77,12 +84,14 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from("tb_place")
-    .select("place_id, contentid, title, addr1, mapx, mapy, firstimage, lclssystm1")
+    .select(
+      "place_id, contentid, title, addr1, mapx, mapy, firstimage, lclssystm1",
+      usePagination ? { count: "exact" } : undefined
+    )
     .or("delete_yn.is.null,delete_yn.eq.N")
     .eq("use_yn", "Y") // 관리자가 숨기지 않은 장소만
     .not("mapx", "is", null)
-    .not("mapy", "is", null)
-    .limit(50);
+    .not("mapy", "is", null);
 
   if (keyword.trim()) query = query.ilike("title", `%${keyword}%`);
   if (guCode.trim()) query = query.eq("ldongsigngucd", guCode);
@@ -130,10 +139,13 @@ export async function GET(request: Request) {
   for (const id of await getHeadcountExcludeIds(headcount)) excludeIds.add(id);
   for (const id of await getScheduleExcludeIds(dateFrom, dateTo)) excludeIds.add(id);
   // 재대입 없이 조건식으로 적용 (긴 체이닝의 타입 추론 깊이 문제 회피)
-  const finalQuery =
+  const filteredQuery =
     excludeIds.size > 0 ? query.not("contentid", "in", `(${[...excludeIds].join(",")})`) : query;
+  const finalQuery = usePagination
+    ? filteredQuery.range(page * SEARCH_PAGE_SIZE, page * SEARCH_PAGE_SIZE + SEARCH_PAGE_SIZE - 1)
+    : filteredQuery.limit(SEARCH_PAGE_SIZE);
 
-  const { data, error } = await finalQuery;
+  const { data, error, count } = await finalQuery;
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
   const ids = (data ?? []).map((p) => String(p.contentid));
@@ -144,24 +156,24 @@ export async function GET(request: Request) {
   bakeryIds ??= await getBakeryPlaceIds();
   const bakerySet = new Set(bakeryIds);
 
-  return Response.json(
-    (data ?? []).map((p) => {
-      const cid = String(p.contentid);
-      const rating = ratings.get(cid);
-      return {
-        id: cid,
-        placeId: p.place_id,
-        name: p.title,
-        lat: Number(p.mapy),
-        lng: Number(p.mapx),
-        image: p.firstimage ?? "",
-        address: p.addr1 ?? undefined,
-        // 빵지순례(BK)는 실제 LCLSSYSTM1 코드가 아니지만, 마커 색은 카테고리 하나처럼 취급한다.
-        categoryCode: bakerySet.has(p.place_id) ? BAKERY_THEME_CODE : (p.lclssystm1 ?? undefined),
-        average_rating: rating?.average ?? null,
-        review_count: rating?.count ?? 0,
-        like_count: likeCounts.get(cid) ?? 0
-      };
-    })
-  );
+  const places = (data ?? []).map((p) => {
+    const cid = String(p.contentid);
+    const rating = ratings.get(cid);
+    return {
+      id: cid,
+      placeId: p.place_id,
+      name: p.title,
+      lat: Number(p.mapy),
+      lng: Number(p.mapx),
+      image: p.firstimage ?? "",
+      address: p.addr1 ?? undefined,
+      // 빵지순례(BK)는 실제 LCLSSYSTM1 코드가 아니지만, 마커 색은 카테고리 하나처럼 취급한다.
+      categoryCode: bakerySet.has(p.place_id) ? BAKERY_THEME_CODE : (p.lclssystm1 ?? undefined),
+      average_rating: rating?.average ?? null,
+      review_count: rating?.count ?? 0,
+      like_count: likeCounts.get(cid) ?? 0
+    };
+  });
+
+  return Response.json(usePagination ? { places, total: count ?? places.length } : places);
 }

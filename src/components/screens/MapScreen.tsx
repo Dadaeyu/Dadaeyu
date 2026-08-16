@@ -133,7 +133,10 @@ export default function Map() {
     focusPlaceById,
     topRatedPlaces,
     hasActiveFilter,
-    mapResetTrigger
+    mapResetTrigger,
+    searchPage,
+    setSearchPage,
+    searchTotal
   } = usePlaceSearch({
     accessibility: filters.accessibility,
     gu: filters.gu,
@@ -430,6 +433,9 @@ export default function Map() {
           searchCount={searchPlaces.length}
           hasActiveFilter={hasActiveFilter}
           onSelectPlace={selectPlace}
+          searchPage={searchPage}
+          searchTotal={searchTotal}
+          onSearchPageChange={setSearchPage}
           searchDetail={searchDetail}
           tourismDetail={tourismDetail}
           isLoadingDetail={isLoadingDetail}
@@ -444,229 +450,227 @@ export default function Map() {
       <div ref={mapAreaRef} className="relative flex-1 overflow-hidden">
         <KakaoMap
           markers={markerPlaces.map((sp): MapMarker => {
-              if (sp.source === "kakao") {
-                // 눈물방울 핀(파란 배경 + 카카오 옐로우 중앙 점)으로 카카오 검색 결과임을 표시.
-                return {
-                  id: sp.id,
-                  lat: sp.lat,
-                  lng: sp.lng,
-                  color: "#2563EB",
-                  borderColor: "#FEE500",
-                  shape: "teardrop"
-                };
-              }
-              if (likedIds.has(sp.id)) {
-                return { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#ef4444", shape: "heart" };
-              }
+            if (sp.source === "kakao") {
+              // 눈물방울 핀(카카오 옐로우 배경 + 파란 중앙 점)으로 카카오 검색 결과임을 표시.
               return {
                 id: sp.id,
                 lat: sp.lat,
                 lng: sp.lng,
-                color: getCategoryColor(sp.categoryCode)
+                color: "#FEE500",
+                borderColor: "#2563EB",
+                shape: "teardrop"
               };
-            })}
-            selectedId={searchDetailId}
-            onSelect={(id) => selectPlace(id)}
-            onDeselect={() => {
-              backFromDetail();
-            }}
-            myLocation={myLocation}
-            focusMyLocationTrigger={focusMyLocationTrigger}
-            resetViewTrigger={mapResetTrigger + myLocationResetTrigger + mapManualResetTrigger}
-            showZoomControl={showZoomControl}
-            path={routePath}
-            fitPathKey={
-              routeGuide && !routeGuide.loading
-                ? `${routeGuide.mode}-${routeGuide.distanceM ?? "x"}-${selectedRouteId}-${routePath.length}`
-                : null
             }
-            pathSummary={
-              routeGuide &&
-              !routeGuide.loading &&
-              routeGuide.distanceM != null &&
-              routeGuide.durationSec != null
-                ? {
-                    distanceM: routeGuide.distanceM,
-                    durationSec: routeGuide.durationSec,
-                    tollFare: routeGuide.tollFare ?? 0
-                  }
-                : null
+            if (filters.favoritesOnly && likedIds.has(sp.id)) {
+              return { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#ef4444", shape: "heart" };
             }
-            bottomOverlayPx={mapBottomOverlayPx}
-          />
+            return {
+              id: sp.id,
+              lat: sp.lat,
+              lng: sp.lng,
+              color: getCategoryColor(sp.categoryCode)
+            };
+          })}
+          selectedId={searchDetailId}
+          onSelect={(id) => selectPlace(id)}
+          onDeselect={() => {
+            backFromDetail();
+          }}
+          myLocation={myLocation}
+          focusMyLocationTrigger={focusMyLocationTrigger}
+          resetViewTrigger={mapResetTrigger + myLocationResetTrigger + mapManualResetTrigger}
+          showZoomControl={showZoomControl}
+          path={routePath}
+          fitPathKey={
+            routeGuide && !routeGuide.loading
+              ? `${routeGuide.mode}-${routeGuide.distanceM ?? "x"}-${selectedRouteId}-${routePath.length}`
+              : null
+          }
+          pathSummary={
+            routeGuide &&
+            !routeGuide.loading &&
+            routeGuide.distanceM != null &&
+            routeGuide.durationSec != null
+              ? {
+                  distanceM: routeGuide.distanceM,
+                  durationSec: routeGuide.durationSec,
+                  tollFare: routeGuide.tollFare ?? 0
+                }
+              : null
+          }
+          bottomOverlayPx={mapBottomOverlayPx}
+        />
 
-          {routeGuide && !searchDetail ? (
-            <div className="border-hairline bg-background absolute bottom-20 left-3 z-20 max-w-xs rounded-2xl border p-3 shadow-lg md:bottom-4">
-              <p className="text-ink text-xs font-semibold">
-                {routeGuide.mode === "walk" ? "도보" : "자동차"} 경로
-                {routeGuide.loading ? " 불러오는 중…" : ""}
+        {routeGuide && !searchDetail ? (
+          <div className="border-hairline bg-background absolute bottom-20 left-3 z-20 max-w-xs rounded-2xl border p-3 shadow-lg md:bottom-4">
+            <p className="text-ink text-xs font-semibold">
+              {routeGuide.mode === "walk" ? "도보" : "자동차"} 경로
+              {routeGuide.loading ? " 불러오는 중…" : ""}
+            </p>
+            {routeGuide.distanceM != null && routeGuide.durationSec != null ? (
+              <p className="text-stone mt-1 text-xs">
+                {formatRouteDistance(routeGuide.distanceM)} ·{" "}
+                {formatRouteDuration(routeGuide.durationSec)}
+                {routeGuide.tollFare != null && routeGuide.tollFare > 0
+                  ? ` · ${formatRouteTollFare(routeGuide.tollFare)}`
+                  : ""}
               </p>
-              {routeGuide.distanceM != null && routeGuide.durationSec != null ? (
-                <p className="text-stone mt-1 text-xs">
-                  {formatRouteDistance(routeGuide.distanceM)} ·{" "}
-                  {formatRouteDuration(routeGuide.durationSec)}
-                  {routeGuide.tollFare != null && routeGuide.tollFare > 0
-                    ? ` · ${formatRouteTollFare(routeGuide.tollFare)}`
-                    : ""}
+            ) : null}
+            {routeGuide.mode === "car" &&
+            routeGuide.routeOptions &&
+            routeGuide.routeOptions.length > 1 &&
+            routeGuide.onSelectRoute ? (
+              <div className="mt-2">
+                <RouteOptionPicker
+                  options={routeGuide.routeOptions}
+                  selectedId={routeGuide.selectedRouteId ?? "0"}
+                  onSelect={routeGuide.onSelectRoute}
+                  disabled={routeGuide.loading}
+                />
+              </div>
+            ) : null}
+            {routeGuide.showTrafficLegend ? (
+              <div className="mt-2">
+                <TrafficLegend />
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => routeStops && openKakaoMapRoute(routeStops, routeGuide.mode)}
+              className="bg-brand-700 mt-2 w-full rounded-lg py-2 text-xs font-semibold text-white"
+            >
+              카카오맵에서 안내 시작
+            </button>
+          </div>
+        ) : null}
+        {showLocationErrorToast && locationErrorCopy ? (
+          <div
+            id="map-location-error"
+            role="alert"
+            className="border-hairline bg-background absolute right-4 z-[60] w-[min(16rem,calc(100%-2rem))] rounded-2xl border p-3.5 shadow-lg"
+            style={{ bottom: mapBottomOverlayPx + 16 + 56 }}
+          >
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-ink text-sm font-semibold tracking-[-0.01em]">
+                  {locationErrorCopy.title}
                 </p>
-              ) : null}
-              {routeGuide.mode === "car" &&
-              routeGuide.routeOptions &&
-              routeGuide.routeOptions.length > 1 &&
-              routeGuide.onSelectRoute ? (
-                <div className="mt-2">
-                  <RouteOptionPicker
-                    options={routeGuide.routeOptions}
-                    selectedId={routeGuide.selectedRouteId ?? "0"}
-                    onSelect={routeGuide.onSelectRoute}
-                    disabled={routeGuide.loading}
-                  />
-                </div>
-              ) : null}
-              {routeGuide.showTrafficLegend ? (
-                <div className="mt-2">
-                  <TrafficLegend />
-                </div>
-              ) : null}
+                <p className="text-stone mt-1 text-xs leading-relaxed">{locationErrorCopy.help}</p>
+              </div>
               <button
                 type="button"
-                onClick={() => routeStops && openKakaoMapRoute(routeStops, routeGuide.mode)}
-                className="bg-brand-700 mt-2 w-full rounded-lg py-2 text-xs font-semibold text-white"
+                onClick={() => setLocationToastDismissed(true)}
+                className="text-stone hover:text-ink hover:bg-surface-soft -mt-0.5 -mr-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors"
+                aria-label="안내 닫기"
               >
-                카카오맵에서 안내 시작
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
-          ) : null}
-          {showLocationErrorToast && locationErrorCopy ? (
-            <div
-              id="map-location-error"
-              role="alert"
-              className="border-hairline bg-background absolute right-4 z-[60] w-[min(16rem,calc(100%-2rem))] rounded-2xl border p-3.5 shadow-lg"
-              style={{ bottom: mapBottomOverlayPx + 16 + 56 }}
-            >
-              <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-ink text-sm font-semibold tracking-[-0.01em]">
-                    {locationErrorCopy.title}
-                  </p>
-                  <p className="text-stone mt-1 text-xs leading-relaxed">
-                    {locationErrorCopy.help}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setLocationToastDismissed(true)}
-                  className="text-stone hover:text-ink hover:bg-surface-soft -mt-0.5 -mr-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors"
-                  aria-label="안내 닫기"
-                >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-          ) : null}
+          </div>
+        ) : null}
 
-          {/* 테마 색상 범례 — 확대/축소 컨트롤(카카오 기본 줌 컨트롤, 데스크톱에서만 오른쪽 위에 뜸)이
+        {/* 테마 색상 범례 — 확대/축소 컨트롤(카카오 기본 줌 컨트롤, 데스크톱에서만 오른쪽 위에 뜸)이
               켜져 있을 땐 윗변을 맞추고 바로 왼쪽에, 꺼져 있으면(모바일도 마찬가지) 오른쪽 끝에 붙인다. */}
-          {showThemeLegend && (
-            <div
-              className={`border-hairline absolute top-0.5 right-3 z-[55] rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "md:right-11" : ""}`}
-            >
-              <p className="text-steel mb-1.5 text-[11px] font-semibold">테마 색상</p>
-              <div className="space-y-1">
-                {Object.entries(LCLSSYSTM1_COLORS).map(([code, color]) => (
-                  <div key={code} className="flex items-center gap-1.5 text-xs text-gray-700">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ background: color }}
-                    />
-                    {LCLSSYSTM1_LABELS[code] ?? code}
-                  </div>
-                ))}
-                {/* 카카오 검색 결과 마커는 카카오 브랜드 옐로우(#FEE500)로 표시된다 */}
-                <div className="flex items-center gap-1.5 text-xs text-gray-700">
+        {showThemeLegend && (
+          <div
+            className={`border-hairline absolute top-0.5 right-3 z-[55] rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "md:right-11" : ""}`}
+          >
+            <p className="text-steel mb-1.5 text-[11px] font-semibold">테마 색상</p>
+            <div className="space-y-1">
+              {Object.entries(LCLSSYSTM1_COLORS).map(([code, color]) => (
+                <div key={code} className="flex items-center gap-1.5 text-xs text-gray-700">
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ background: "#FEE500" }}
+                    style={{ background: color }}
                   />
-                  카카오
+                  {LCLSSYSTM1_LABELS[code] ?? code}
                 </div>
+              ))}
+              {/* 카카오 검색 결과 마커는 카카오 브랜드 옐로우(#FEE500)로 표시된다 */}
+              <div className="flex items-center gap-1.5 text-xs text-gray-700">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: "#FEE500" }}
+                />
+                카카오
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* 지도 기능 드롭다운 — 초기화 / 내 위치 / 확대·축소 / 테마 범례.
+        {/* 지도 기능 드롭다운 — 초기화 / 내 위치 / 확대·축소 / 테마 범례.
               모바일(및 mapOnly)에선 검색 패널이 하단 시트로 뜨므로, 그 시트 바로 위에 버튼이 오도록
               mapBottomOverlayPx(시트가 가리는 높이)만큼 띄운다. 데스크톱은 overlay가 0이라
               기존 bottom-4(16px)와 동일하게 유지된다. */}
-          <div
-            ref={mapMenuRef}
-            className="absolute right-4 z-[61]"
-            style={{ bottom: mapBottomOverlayPx + 16 }}
+        <div
+          ref={mapMenuRef}
+          className="absolute right-4 z-[61]"
+          style={{ bottom: mapBottomOverlayPx + 16 }}
+        >
+          {mapMenuOpen && (
+            <div className="border-hairline absolute right-0 bottom-14 w-32 overflow-hidden rounded-xl border bg-white py-1 shadow-lg">
+              <button
+                type="button"
+                onClick={() => setMapManualResetTrigger((n) => n + 1)}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <RotateCcw className="h-4 w-4 shrink-0 text-gray-500" />
+                초기화
+              </button>
+              <button
+                type="button"
+                onClick={handleLocateClick}
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <span className="flex items-center gap-2">
+                  <LocateFixed
+                    className={`h-4 w-4 shrink-0 text-gray-500 ${myLocationStatus === "locating" ? "animate-pulse" : ""}`}
+                  />
+                  내 위치
+                </span>
+                {myLocationStatus === "active" && (
+                  <Check className="text-brand-600 h-4 w-4 shrink-0" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowZoomControl((v) => !v)}
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <span className="flex items-center gap-2">
+                  <ZoomIn className="h-4 w-4 shrink-0 text-gray-500" />
+                  확대/축소
+                </span>
+                {showZoomControl && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowThemeLegend((v) => !v)}
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <span className="flex items-center gap-2">
+                  <Palette className="h-4 w-4 shrink-0 text-gray-500" />
+                  테마 범례
+                </span>
+                {showThemeLegend && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setMapMenuOpen((v) => !v)}
+            className={`flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-colors ${
+              myLocationStatus === "error"
+                ? "border-error/30 text-error border bg-white hover:bg-red-50"
+                : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+            aria-label="지도 기능 목록"
+            aria-expanded={mapMenuOpen}
+            aria-describedby={showLocationErrorToast ? "map-location-error" : undefined}
           >
-            {mapMenuOpen && (
-              <div className="border-hairline absolute right-0 bottom-14 w-32 overflow-hidden rounded-xl border bg-white py-1 shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => setMapManualResetTrigger((n) => n + 1)}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
-                >
-                  <RotateCcw className="h-4 w-4 shrink-0 text-gray-500" />
-                  초기화
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLocateClick}
-                  className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
-                >
-                  <span className="flex items-center gap-2">
-                    <LocateFixed
-                      className={`h-4 w-4 shrink-0 text-gray-500 ${myLocationStatus === "locating" ? "animate-pulse" : ""}`}
-                    />
-                    내 위치
-                  </span>
-                  {myLocationStatus === "active" && (
-                    <Check className="text-brand-600 h-4 w-4 shrink-0" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowZoomControl((v) => !v)}
-                  className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
-                >
-                  <span className="flex items-center gap-2">
-                    <ZoomIn className="h-4 w-4 shrink-0 text-gray-500" />
-                    확대/축소
-                  </span>
-                  {showZoomControl && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowThemeLegend((v) => !v)}
-                  className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
-                >
-                  <span className="flex items-center gap-2">
-                    <Palette className="h-4 w-4 shrink-0 text-gray-500" />
-                    테마 범례
-                  </span>
-                  {showThemeLegend && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
-                </button>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setMapMenuOpen((v) => !v)}
-              className={`flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-colors ${
-                myLocationStatus === "error"
-                  ? "border-error/30 text-error border bg-white hover:bg-red-50"
-                  : "bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-              aria-label="지도 기능 목록"
-              aria-expanded={mapMenuOpen}
-              aria-describedby={showLocationErrorToast ? "map-location-error" : undefined}
-            >
-              <MoreVertical className="h-5 w-5" />
-            </button>
-          </div>
+            <MoreVertical className="h-5 w-5" />
+          </button>
+        </div>
       </div>
     </div>
   );

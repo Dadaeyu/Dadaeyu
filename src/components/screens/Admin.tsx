@@ -14,6 +14,7 @@ import {
   FileText,
   ChevronRight,
   ChevronDown,
+  ShieldAlert,
   Megaphone,
   HelpCircle,
   Layers,
@@ -30,6 +31,7 @@ import { NoticesSection } from "@/components/screens/admin/NoticesSection";
 import { CommunityNoticesSection } from "@/components/screens/admin/CommunityNoticesSection";
 import { EventsSection } from "@/components/screens/admin/EventsSection";
 import { FaqSection } from "@/components/screens/admin/FaqSection";
+import { CommunityReportsSection } from "@/components/screens/admin/CommunityReportsSection";
 import { TablePagination } from "@/components/screens/admin/TablePagination";
 
 // ── 사이드바 메뉴 ─────────────────────────────────────────
@@ -46,6 +48,7 @@ const SECTIONS: SidebarSection[] = [
   { key: "faq", label: "FAQ 관리", icon: HelpCircle },
   { key: "board-settings", label: "게시판 관리", icon: Layers },
   { key: "board-posts", label: "게시글 관리", icon: FileText },
+  { key: "community-reports", label: "신고 관리", icon: ShieldAlert },
   {
     key: "place-group",
     label: "장소 관리",
@@ -167,7 +170,9 @@ export default function Admin() {
                       : "text-steel hover:bg-surface-soft hover:text-ink"
                   }`}
                 >
-                  <Icon className={`h-4 w-4 shrink-0 ${childActive ? "text-navy-600" : "text-stone"}`} />
+                  <Icon
+                    className={`h-4 w-4 shrink-0 ${childActive ? "text-navy-600" : "text-stone"}`}
+                  />
                   {item.label}
                   <ChevronRight
                     className={`text-stone ml-auto h-3.5 w-3.5 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
@@ -242,7 +247,9 @@ export default function Admin() {
                 >
                   <Icon className="h-3.5 w-3.5" />
                   {item.label}
-                  <ChevronDown className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                  <ChevronDown
+                    className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                  />
                 </button>
               );
             }
@@ -268,7 +275,9 @@ export default function Admin() {
         {mobileGroupOpen &&
           mobileGroupPos &&
           (() => {
-            const group = SECTIONS.find((item) => item.key === mobileGroupOpen && "children" in item);
+            const group = SECTIONS.find(
+              (item) => item.key === mobileGroupOpen && "children" in item
+            );
             if (!group || !("children" in group)) return null;
             return (
               <div
@@ -306,6 +315,7 @@ export default function Admin() {
           {section === "users" && <UsersSection />}
           {section === "board-settings" && <BoardSection />}
           {section === "board-posts" && <BoardPostsSection />}
+          {section === "community-reports" && <CommunityReportsSection />}
           {section === "notices" && <NoticesSection />}
           {section === "community-notices" && <CommunityNoticesSection />}
           {section === "places" && <PlacesSection />}

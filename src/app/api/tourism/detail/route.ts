@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { ACCESSIBILITY_GROUPS } from "@/lib/place/accessibilityFields";
+import { getLikeCountsByContentId } from "@/lib/search/placeAggregates";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -22,6 +23,8 @@ export async function GET(request: Request) {
   ]);
 
   if (!place) return Response.json({ error: "not found" }, { status: 404 });
+
+  const likeCounts = await getLikeCountsByContentId(supabase, [contentId]);
 
   // 카카오맵의 "장소명 아래 카테고리"처럼 보여주기 위한 대분류명 (tb_code.code_group='LCLSSYSTM1').
   const { data: category } = place.lclssystm1
@@ -52,6 +55,7 @@ export async function GET(request: Request) {
     use_time: detail?.usetime ?? null,
     rest_date: detail?.restdate ?? null,
     phone: detail?.infocenter ?? null,
+    like_count: likeCounts.get(String(contentId)) ?? 0,
     accessibility
   });
 }

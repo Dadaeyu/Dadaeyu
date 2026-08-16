@@ -1313,7 +1313,9 @@ export default function Course() {
                 <p className="text-brand-600 mt-0.5 text-xs">
                   필터 조건에 맞는 최적의 코스를 최대 5개까지 설계해드려요 · 하루{" "}
                   {recommendUsage?.limit ?? 3}회까지 이용할 수 있어요
-                  {recommendUsage ? ` (오늘 ${recommendUsage.used}/${recommendUsage.limit}회 사용)` : ""}
+                  {recommendUsage
+                    ? ` (오늘 ${recommendUsage.used}/${recommendUsage.limit}회 사용)`
+                    : ""}
                 </p>
               </div>
             </div>
@@ -2829,6 +2831,9 @@ function CourseDetail({ id }: { id: string }) {
             searchCount={ps.searchPlaces.length}
             hasActiveFilter={ps.hasActiveFilter}
             onSelectPlace={ps.setSearchDetailId}
+            searchPage={ps.searchPage}
+            searchTotal={ps.searchTotal}
+            onSearchPageChange={ps.setSearchPage}
             searchDetail={ps.searchDetail}
             tourismDetail={ps.tourismDetail}
             isLoadingDetail={ps.isLoadingDetail}
