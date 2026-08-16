@@ -64,6 +64,16 @@ test("모바일 정책 화면은 고정 주 메뉴가 긴 문서를 가리지 �
   assert.match(rootShellSource, /!isLegalPage\s*&&\s*<MobileNav\s*\/>/u);
 });
 
+test("일반 화면은 하단 공통 푸터에서 공개 정책 링크를 제공한다", async () => {
+  const rootShellSource = await readProjectFile("src", "components", "RootShell.tsx");
+
+  assert.match(rootShellSource, /LegalLinks/u);
+  assert.match(rootShellSource, /shouldShowGlobalLegalFooter\(pathname\)/u);
+  assert.match(rootShellSource, /showGlobalLegalFooter\s*&&\s*\([\s\S]*<footer/u);
+  assert.match(rootShellSource, /<LegalLinks/u);
+  assert.match(rootShellSource, /<footer[^>]*className="[^"]*pb-24[^"]*"/u);
+});
+
 test("모바일 문서 목차는 잘린 가로 버튼 대신 펼쳐서 확인한다", async () => {
   const shellSource = await readProjectFile("src", "components", "legal", "LegalPageShell.tsx");
 

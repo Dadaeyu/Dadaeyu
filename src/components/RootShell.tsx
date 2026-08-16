@@ -14,8 +14,9 @@ import NoticeModal, {
   snoozeStorageKey,
   type ActiveNotice
 } from "@/components/NoticeModal";
+import { LegalLinks } from "@/components/legal/LegalLinks";
 import { NavigationProgress } from "@/components/NavigationProgress";
-import { isPublicLegalPath } from "@/lib/legal/legalRoutes";
+import { isPublicLegalPath, shouldShowGlobalLegalFooter } from "@/lib/legal/legalRoutes";
 import { cn } from "@/components/ui/utils";
 
 function isSnoozedToday(noticeId: number): boolean {
@@ -41,6 +42,7 @@ export default function RootShell({
   const pathname = usePathname();
   const isHomePage = pathname === "/";
   const isLegalPage = isPublicLegalPath(pathname);
+  const showGlobalLegalFooter = shouldShowGlobalLegalFooter(pathname);
   const [queue, setQueue] = useState<ActiveNotice[]>([]);
 
   // 브라우저 첫 진입 시 지도 필터 옵션(접근성/테마)을 미리 받아 전역 캐시에 저장.
@@ -82,7 +84,7 @@ export default function RootShell({
       <AccessibilityProvider>
         <PlacesProvider initialPlaces={places} initialDetails={placeDetails} fromDb={fromDb}>
           <>
-            <div className="bg-background min-h-screen">
+            <div className="bg-background flex min-h-screen flex-col">
               <NavigationProgress />
               <a
                 href="#main"
@@ -99,6 +101,15 @@ export default function RootShell({
               >
                 <div className="mx-auto max-w-7xl">{children}</div>
               </main>
+
+              {showGlobalLegalFooter && (
+                <footer className="border-hairline bg-surface-soft/60 border-t px-4 pt-5 pb-24 md:px-6 md:pb-8">
+                  <div className="mx-auto flex max-w-7xl flex-col items-center gap-2 text-center">
+                    <p className="text-stone text-xs font-medium">다대유 서비스 안내</p>
+                    <LegalLinks />
+                  </div>
+                </footer>
+              )}
 
               {!isLegalPage && <MobileNav />}
             </div>
