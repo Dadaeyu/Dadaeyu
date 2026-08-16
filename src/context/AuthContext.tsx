@@ -45,6 +45,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fetchMember(userId).catch(() => null),
       fetchUserPreferences(userId).catch(() => null)
     ]);
+
+    if (m?.status === "withdrawn") {
+      const supabase = createClient();
+      await supabase.auth.signOut().catch(() => {});
+      setUser(null);
+      setSession(null);
+      setMember(null);
+      setPreferences(null);
+      return;
+    }
+
     setMember(m);
     setPreferences(prefs);
   }, []);

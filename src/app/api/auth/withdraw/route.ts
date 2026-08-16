@@ -92,6 +92,21 @@ export async function POST(request: Request) {
   const anonNickname = `deleted_${shortId}`;
   const anonEmail = `deleted_${user.id.replace(/-/g, "")}@withdrawn.local`;
 
+  // 공개 버킷의 프로필 이미지 원본도 함께 제거해야 한다. 먼저 삭제 대상을 확인하고,
+  // 실제 파일 제거는 필수 DB 정리가 성공한 뒤 수행한다.
+  const avatarBucket = admin.storage.from("avatars");
+  const { data: avatarObjects, error: listAvatarError } = await avatarBucket.list(user.id, {
+    limit: 100
+  });
+
+  if (listAvatarError) {
+    return jsonError("프로필 이미지 삭제 준비에 실패했습니다. 잠시 후 다시 시도해 주세요.", 500);
+  }
+
+  const avatarPaths = (avatarObjects ?? [])
+    .filter((object) => object.id !== null)
+    .map((object) => `${user.id}/${object.name}`);
+
   // members 먼저 (withdrawn 제약 미적용 시 여기서 실패 → Auth 미변경)
   const { error: updateMemberError } = await admin
     .from(T.members)
@@ -115,22 +130,71 @@ export async function POST(request: Request) {
     return jsonError((updateMemberError.message || "회원 정보 처리에 실패했습니다.") + hint, 500);
   }
 
-  await admin.from(T.userPreferences).upsert(
-    {
-      user_id: user.id,
-      accessibility_needs: [],
-      theme_preferences: [],
-      dark_mode: false,
-      high_contrast: false,
-      font_scale: 100,
-      read_aloud: false
-    },
-    { onConflict: "user_id" }
-  );
+  // tb_post는 작성 당시 닉네임을 별도 문자열로 보관하므로 회원 닉네임 변경만으로는
+  // 기존 화면이 익명화되지 않는다. 해당 사용자의 저장된 작성자명도 함께 바꾼다.
+  const { error: anonymizePostsError } = await admin
+    .from(T.boardPosts)
+    .update({ writer_nm: anonNickname })
+    .eq("writer_id", user.id);
 
-  await admin.from(T.userFavorites).delete().eq("user_id", user.id);
-  await admin.from(T.placeLikes).delete().eq("user_id", user.id);
-  await admin.from(T.courseLikes).delete().eq("user_id", user.id);
+  if (anonymizePostsError) {
+    await supabase.auth.signOut();
+    return jsonError("게시글 작성자 정보 익명화에 실패했습니다. 운영팀에 문의해 주세요.", 500);
+  }
+
+  const [
+    { error: resetPreferencesError },
+    { error: deleteFavoritesError },
+    { error: deletePlaceLikesError },
+    { error: deleteCourseLikesError },
+    { error: deletePostLikesError }
+  ] = await Promise.all([
+    admin.from(T.userPreferences).upsert(
+      {
+        user_id: user.id,
+        accessibility_needs: [],
+        theme_preferences: [],
+        dark_mode: false,
+        high_contrast: false,
+        font_scale: 100,
+        read_aloud: false
+      },
+      { onConflict: "user_id" }
+    ),
+    admin.from(T.userFavorites).delete().eq("user_id", user.id),
+    admin.from(T.placeLikes).delete().eq("user_id", user.id),
+    admin.from(T.courseLikes).delete().eq("user_id", user.id),
+    admin.from(T.postLikes).delete().eq("user_id", user.id)
+  ]);
+
+  if (resetPreferencesError) {
+    await supabase.auth.signOut();
+    return jsonError("개인 설정 초기화에 실패했습니다. 운영팀에 문의해 주세요.", 500);
+  }
+  if (deleteFavoritesError) {
+    await supabase.auth.signOut();
+    return jsonError("즐겨찾기 삭제에 실패했습니다. 운영팀에 문의해 주세요.", 500);
+  }
+  if (deletePlaceLikesError) {
+    await supabase.auth.signOut();
+    return jsonError("장소 좋아요 삭제에 실패했습니다. 운영팀에 문의해 주세요.", 500);
+  }
+  if (deleteCourseLikesError) {
+    await supabase.auth.signOut();
+    return jsonError("코스 좋아요 삭제에 실패했습니다. 운영팀에 문의해 주세요.", 500);
+  }
+  if (deletePostLikesError) {
+    await supabase.auth.signOut();
+    return jsonError("게시글 좋아요 삭제에 실패했습니다. 운영팀에 문의해 주세요.", 500);
+  }
+
+  if (avatarPaths.length > 0) {
+    const { error: removeAvatarError } = await avatarBucket.remove(avatarPaths);
+    if (removeAvatarError) {
+      await supabase.auth.signOut();
+      return jsonError("프로필 이미지 삭제에 실패했습니다. 운영팀에 문의해 주세요.", 500);
+    }
+  }
 
   const { error: authError } = await admin.auth.admin.updateUserById(user.id, {
     email: anonEmail,
@@ -138,17 +202,20 @@ export async function POST(request: Request) {
     user_metadata: {
       nickname: anonNickname,
       phone: null,
+      avatar_url: null,
+      picture: null,
+      name: null,
+      full_name: null,
+      theme_preferences: [],
+      accessibility_needs: [],
       withdrawn: true
     }
   });
 
   if (authError) {
-    // Auth 실패 시 members를 되돌릴 수 없어 안내 (status는 withdrawn → 미들웨어로 차단됨)
-    return jsonError(
-      authError.message ||
-        "계정 비활성화에 실패했습니다. 이미 탈퇴 처리된 상태일 수 있으니 관리자에게 문의해 주세요.",
-      500
-    );
+    // DB는 이미 탈퇴 상태이므로 Auth 갱신이 실패해도 현재 브라우저 세션은 즉시 종료한다.
+    await supabase.auth.signOut();
+    return jsonError("계정 비활성화에 실패했습니다. 운영팀에 문의해 주세요.", 500);
   }
 
   await supabase.auth.signOut();

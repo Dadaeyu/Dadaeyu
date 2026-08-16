@@ -230,15 +230,31 @@ export function AccountSection() {
         <div className="border-hairline bg-surface-soft rounded-xl border px-4 py-4">
           <p className="text-ink text-sm font-semibold">회원 탈퇴</p>
           <p className="text-steel mt-1 text-xs leading-relaxed">
-            탈퇴 시 계정과 개인정보가 비활성·익명 처리되며, 같은 이메일로 다시 가입할 수 있습니다.
+            탈퇴 시 계정과 개인정보가 비활성·익명 처리됩니다. 이메일 가입은 같은 주소로 다시 가입할
+            수 있으며, 소셜 로그인 재가입이 되지 않으면 운영팀에 문의해 주세요.
           </p>
-          <Link
-            href="/mypage/settings/withdraw"
-            className="border-hairline hover:bg-background mt-3 inline-flex rounded-full border bg-transparent px-4 py-2 text-sm font-semibold text-red-600 transition-colors dark:text-red-400"
-          >
-            회원 탈퇴 진행
-          </Link>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link
+              href="/mypage/settings/withdraw"
+              className="border-hairline hover:bg-background inline-flex rounded-full border bg-transparent px-4 py-2 text-sm font-semibold text-red-600 transition-colors dark:text-red-400"
+            >
+              회원 탈퇴 진행
+            </Link>
+            <Link
+              href="/account-deletion"
+              className="text-steel hover:text-ink focus-visible:ring-brand-500 inline-flex rounded-sm py-2 text-sm font-semibold underline-offset-4 transition-colors hover:underline focus-visible:ring-2 focus-visible:outline-none"
+            >
+              탈퇴·계정 삭제 안내
+            </Link>
+          </div>
         </div>
+
+        <Link
+          href="/privacy"
+          className="text-stone hover:text-ink focus-visible:ring-brand-500 mx-1 inline-flex rounded-sm py-1 text-xs underline-offset-4 transition-colors hover:underline focus-visible:ring-2 focus-visible:outline-none"
+        >
+          개인정보 처리방침
+        </Link>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Logo from "@/components/Logo";
+import { LegalLinks } from "@/components/legal/LegalLinks";
 import type { ReactNode } from "react";
 
 interface AuthLayoutProps {
@@ -25,13 +26,16 @@ export default function AuthLayout({ title, subtitle, children, footer }: AuthLa
           {children}
         </div>
 
-        {footer ?? (
-          <p className="text-stone mt-6 text-center text-sm">
-            <Link href="/" className="hover:text-brand-600">
-              둘러보기 (비로그인)
-            </Link>
-          </p>
-        )}
+        <div className="mt-6 space-y-3">
+          {footer ?? (
+            <p className="text-stone text-center text-sm">
+              <Link href="/" className="hover:text-brand-600">
+                둘러보기 (비로그인)
+              </Link>
+            </p>
+          )}
+          <LegalLinks />
+        </div>
       </div>
     </div>
   );

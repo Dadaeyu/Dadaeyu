@@ -15,6 +15,8 @@ import NoticeModal, {
   type ActiveNotice
 } from "@/components/NoticeModal";
 import { NavigationProgress } from "@/components/NavigationProgress";
+import { isPublicLegalPath } from "@/lib/legal/legalRoutes";
+import { cn } from "@/components/ui/utils";
 
 function isSnoozedToday(noticeId: number): boolean {
   try {
@@ -38,6 +40,7 @@ export default function RootShell({
 }) {
   const pathname = usePathname();
   const isHomePage = pathname === "/";
+  const isLegalPage = isPublicLegalPath(pathname);
   const [queue, setQueue] = useState<ActiveNotice[]>([]);
 
   // 브라우저 첫 진입 시 지도 필터 옵션(접근성/테마)을 미리 받아 전역 캐시에 저장.
@@ -90,11 +93,14 @@ export default function RootShell({
 
               <Header />
 
-              <main id="main" className="flex-1 px-4 py-6 pb-24 md:px-6 md:pb-6">
+              <main
+                id="main"
+                className={cn("flex-1 px-4 py-6 md:px-6 md:pb-6", isLegalPage ? "pb-8" : "pb-24")}
+              >
                 <div className="mx-auto max-w-7xl">{children}</div>
               </main>
 
-              <MobileNav />
+              {!isLegalPage && <MobileNav />}
             </div>
 
             {isHomePage && currentNotice && (

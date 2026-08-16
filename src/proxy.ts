@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveAuthDestination } from "@/lib/auth/post-login";
 import { needsEmailConfirmation } from "@/lib/auth/user";
+import { isPublicLegalPath } from "@/lib/legal/legalRoutes";
 import { getPublicSupabaseConfig } from "@/lib/supabase/config";
 
 const PROTECTED_PATHS = ["/mypage", "/onboarding"];
@@ -24,6 +25,7 @@ function isOnboardingExempt(pathname: string) {
     pathname === "/find-email" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/") ||
+    isPublicLegalPath(pathname) ||
     pathname === "/onboarding" ||
     isAdminPath(pathname)
   );
@@ -65,6 +67,7 @@ export async function proxy(request: NextRequest) {
     }
 
     if (
+      !isPublicLegalPath(pathname) &&
       !pathname.startsWith("/signup/check-email") &&
       !pathname.startsWith("/auth/") &&
       !AUTH_PATHS.includes(pathname)
@@ -85,11 +88,14 @@ export async function proxy(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (member?.status === "suspended") {
+    if (member?.status === "suspended" || member?.status === "withdrawn") {
       await supabase.auth.signOut();
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
-      loginUrl.searchParams.set("error", "account_suspended");
+      loginUrl.searchParams.set(
+        "error",
+        member.status === "withdrawn" ? "account_withdrawn" : "account_suspended"
+      );
       return NextResponse.redirect(loginUrl);
     }
   }

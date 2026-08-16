@@ -32,7 +32,7 @@ function LoginForm() {
     authError === "account_suspended"
       ? "정지된 계정입니다. 관리자에게 문의해 주세요."
       : authError === "account_withdrawn"
-        ? "탈퇴한 계정입니다. 같은 이메일로 다시 가입할 수 있습니다."
+        ? "탈퇴한 계정입니다. 이메일 가입은 같은 주소로 다시 가입할 수 있으며, 소셜 로그인 재가입은 운영팀에 문의해 주세요."
         : authError === "naver_config"
           ? "네이버 로그인 설정이 없습니다. .env.local에 NAVER_CLIENT_ID, NAVER_CLIENT_SECRET을 추가해 주세요."
           : authError === "email_not_provided"
