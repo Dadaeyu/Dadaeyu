@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
@@ -135,9 +135,34 @@ export default function TourismDetailPanel({
   const [reviews, setReviews] = useState<PlaceReviewItem[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [routeModeOpen, setRouteModeOpen] = useState(false);
+  const routeModePanelRef = useRef<HTMLDivElement | null>(null);
+  const routeGuidePanelRef = useRef<HTMLDivElement | null>(null);
+  const prevRouteGuideRef = useRef(false);
 
   // 카카오 출처는 contentid 가 없어(예: "kakao_123") 좋아요/리뷰 API 대상이 될 수 없다.
   const placeId = isKakao ? null : Number(sp.id);
+
+  // 모바일 하단 시트에서 이동수단 선택 패널이 화면 밖으로 밀리지 않도록 스크롤한다.
+  useEffect(() => {
+    if (!routeModeOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      routeModePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [routeModeOpen]);
+
+  // 경로 결과(로딩 포함)가 새로 열릴 때도 시트 안으로 맞춰 사용자가 인지하게 한다.
+  useEffect(() => {
+    const hasGuide = !!routeGuide;
+    if (hasGuide && !prevRouteGuideRef.current) {
+      const frame = window.requestAnimationFrame(() => {
+        routeGuidePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      prevRouteGuideRef.current = true;
+      return () => window.cancelAnimationFrame(frame);
+    }
+    prevRouteGuideRef.current = hasGuide;
+  }, [routeGuide]);
 
   useEffect(() => {
     if (isKakao) {
@@ -341,7 +366,13 @@ export default function TourismDetailPanel({
                 setRouteModeOpen((v) => !v);
               }}
               disabled={!onStartRoute}
-              className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-expanded={routeModeOpen}
+              aria-controls="route-mode-panel"
+              className={`flex flex-col items-center gap-1 rounded-xl border py-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                routeModeOpen
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+              }`}
             >
               <Navigation className="h-4 w-4 text-blue-500" />
               경로안내
@@ -349,7 +380,11 @@ export default function TourismDetailPanel({
           </div>
 
           {routeModeOpen && onStartRoute ? (
-            <div className="border-hairline bg-surface-soft space-y-2 rounded-xl border p-3">
+            <div
+              id="route-mode-panel"
+              ref={routeModePanelRef}
+              className="border-brand-200 bg-brand-50/50 animate-in fade-in slide-in-from-top-1 space-y-2 rounded-xl border p-3 shadow-sm"
+            >
               <p className="text-ink text-xs font-semibold">이동 수단을 선택하세요</p>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -358,7 +393,7 @@ export default function TourismDetailPanel({
                     setRouteModeOpen(false);
                     onStartRoute("walk");
                   }}
-                  className="border-hairline hover:bg-background flex items-center justify-center gap-1.5 rounded-lg border bg-white px-3 py-2.5 text-xs font-semibold text-gray-700"
+                  className="border-hairline hover:border-brand-300 hover:bg-background flex items-center justify-center gap-1.5 rounded-lg border bg-white px-3 py-2.5 text-xs font-semibold text-gray-700"
                 >
                   <Footprints className="h-3.5 w-3.5" />
                   도보
@@ -369,7 +404,7 @@ export default function TourismDetailPanel({
                     setRouteModeOpen(false);
                     onStartRoute("car");
                   }}
-                  className="border-hairline hover:bg-background flex items-center justify-center gap-1.5 rounded-lg border bg-white px-3 py-2.5 text-xs font-semibold text-gray-700"
+                  className="border-hairline hover:border-brand-300 hover:bg-background flex items-center justify-center gap-1.5 rounded-lg border bg-white px-3 py-2.5 text-xs font-semibold text-gray-700"
                 >
                   <Car className="h-3.5 w-3.5" />
                   자동차
@@ -379,7 +414,10 @@ export default function TourismDetailPanel({
           ) : null}
 
           {routeGuide ? (
-            <div className="border-brand-200 bg-brand-50/60 space-y-2 rounded-xl border p-3">
+            <div
+              ref={routeGuidePanelRef}
+              className="border-brand-200 bg-brand-50/60 space-y-2 rounded-xl border p-3"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-ink flex items-center gap-1.5 text-xs font-semibold">

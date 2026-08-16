@@ -103,22 +103,24 @@ export default function PlaceSearchSidebar({
   // 상세 화면 — DB/카카오 출처 모두 TourismDetailPanel 이 sp.source 로 분기해 처리한다.
   if (searchDetail) {
     return (
-      <TourismDetailPanel
-        sp={searchDetail}
-        detail={tourismDetail}
-        isLoading={isLoadingDetail}
-        onBack={onBackFromDetail}
-        onLikeChange={onLikeChange}
-        onAddToCourse={detailAction}
-        onStartRoute={onStartRoute}
-        routeGuide={routeGuide}
-      />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <TourismDetailPanel
+          sp={searchDetail}
+          detail={tourismDetail}
+          isLoading={isLoadingDetail}
+          onBack={onBackFromDetail}
+          onLikeChange={onLikeChange}
+          onAddToCourse={detailAction}
+          onStartRoute={onStartRoute}
+          routeGuide={routeGuide}
+        />
+      </div>
     );
   }
 
   // 검색 + 필터 + 목록 화면
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {onBack && (
         <div className="shrink-0 border-b border-gray-100">
           <button
@@ -201,6 +203,6 @@ export default function PlaceSearchSidebar({
           />
         </div>
       )}
-    </>
+    </div>
   );
 }

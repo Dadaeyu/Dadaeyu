@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Check } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import OAuthButtons, { AuthDivider, AuthLinks } from "@/components/AuthForms";
 import {
@@ -147,14 +148,34 @@ function LoginForm() {
           placeholder="비밀번호"
           className="border-hairline bg-background text-ink placeholder:text-stone focus:ring-brand-500 w-full rounded-xl border px-4 py-2.5 text-sm focus:ring-2 focus:outline-none"
         />
-        <label className="text-steel flex min-h-11 cursor-pointer items-center gap-2.5 px-0.5 text-sm select-none">
+        <label
+          className={`focus-within:ring-brand-500/30 focus-within:ring-offset-background flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-2.5 text-sm transition-all select-none focus-within:ring-2 focus-within:ring-offset-2 ${
+            rememberEmail
+              ? "border-brand-300 bg-brand-50 text-ink dark:border-brand-600/50 dark:bg-brand-900/25 shadow-[0_0_0_1px_rgba(0,212,164,0.12)] dark:shadow-none"
+              : "border-hairline bg-surface text-steel hover:border-brand-200 hover:bg-surface-soft hover:text-ink dark:hover:border-brand-700/50"
+          }`}
+        >
           <input
             type="checkbox"
             checked={rememberEmail}
             onChange={(e) => setRememberEmail(e.target.checked)}
-            className="border-hairline text-brand-600 focus:ring-brand-500 h-5 w-5 rounded"
+            className="sr-only"
           />
-          아이디 저장
+          <span
+            aria-hidden
+            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-all ${
+              rememberEmail
+                ? "border-brand-500 bg-brand-500 text-white shadow-sm"
+                : "border-hairline bg-background text-transparent"
+            }`}
+          >
+            <Check
+              className={`h-3.5 w-3.5 stroke-[3] transition-all duration-150 ${
+                rememberEmail ? "scale-100 opacity-100" : "scale-75 opacity-0"
+              }`}
+            />
+          </span>
+          <span className="font-medium">아이디 저장</span>
         </label>
         <button
           type="submit"

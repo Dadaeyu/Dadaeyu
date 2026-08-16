@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -36,6 +37,38 @@ import {
   formatRouteTollFare
 } from "@/lib/kakao/directions";
 
+/** 모바일 하단 시트 스냅 — 이름만 · 50% · 55%(지도 45%) · 거의 전체 */
+type MobileSheetSnap = "peek" | "half" | "default" | "full";
+const MOBILE_SHEET_SNAP_ORDER: MobileSheetSnap[] = ["peek", "half", "default", "full"];
+const MOBILE_SHEET_PEEK_PX = 92;
+/** 스냅별 시트 높이 % (peek 은 px 전용) */
+const MOBILE_SHEET_SNAP_PCT: Record<Exclude<MobileSheetSnap, "peek">, number> = {
+  half: 50,
+  default: 55, // 보이는 지도 ≈ 45%
+  full: 92
+};
+
+function sheetSnapToPercent(snap: MobileSheetSnap, containerH: number): number {
+  if (snap === "peek") {
+    const h = Math.max(containerH, 1);
+    return Math.min(92, Math.max(8, (MOBILE_SHEET_PEEK_PX / h) * 100));
+  }
+  return MOBILE_SHEET_SNAP_PCT[snap];
+}
+
+function nearestMobileSheetSnap(heightPct: number, containerH: number): MobileSheetSnap {
+  let best: MobileSheetSnap = "default";
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const snap of MOBILE_SHEET_SNAP_ORDER) {
+    const dist = Math.abs(sheetSnapToPercent(snap, containerH) - heightPct);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = snap;
+    }
+  }
+  return best;
+}
+
 // ── 메인 컴포넌트 ─────────────────────────────────────────
 // 지도 화면: 사이드바(검색/필터/목록) + KakaoMap. usePlaceSearch·useMyLocation 훅으로
 // DB/카카오 검색 결과와 내 위치를 지도에 반영하고, 선택한 장소의 상세 패널을 보여준다.
@@ -46,50 +79,131 @@ export default function Map() {
   const initialContentId = searchParams.get("contentId");
   const mapOnly = searchParams.get("mode") === "map";
 
-  // 모바일(및 mapOnly)에서 검색 패널을 코스 상세와 동일한 드래그 가능한 하단 시트로 띄운다.
-  // 핸들 자신이 드래그 도중 위치가 이동하므로(시트가 커지면 핸들도 같이 올라감), setPointerCapture 에
-  // 의존하지 않고 window 에 직접 리스너를 붙여서 손가락이 핸들 밖으로 벗어나도 계속 추적한다.
-  const [mobileSheetHeight, setMobileSheetHeight] = useState(65);
-  const sheetDragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  // 모바일(및 mapOnly) 하단 시트 — 오버레이 높이 스냅(peek / 50% / 55% / full).
+  // 핸들이 시트와 같이 움직이므로 window 리스너로 드래그 추적한다.
+  const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("default");
+  const [sheetDragPct, setSheetDragPct] = useState<number | null>(null);
+  const sheetDragRef = useRef<{ startY: number; startPct: number } | null>(null);
+  const sheetDragLatestPctRef = useRef(0);
+  const mobileSheetSnapRef = useRef<MobileSheetSnap>("default");
+  const sheetDragCleanupRef = useRef<(() => void) | null>(null);
+  const mapAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    mobileSheetSnapRef.current = mobileSheetSnap;
+  }, [mobileSheetSnap]);
+
+  // 드래그 중 언마운트 시 window 리스너 누수 방지
+  useEffect(() => {
+    return () => {
+      sheetDragCleanupRef.current?.();
+      sheetDragCleanupRef.current = null;
+    };
+  }, []);
+
+  const resolveContainerHeight = () =>
+    mapAreaRef.current?.clientHeight ||
+    (typeof window !== "undefined" ? Math.max(window.innerHeight - 64, 1) : 640);
+
+  /** CSS 변수 — peek 은 px, 그 외·드래그 중은 % (SSR 시 window 불필요) */
+  const sheetHeightCss = useMemo(() => {
+    if (sheetDragPct != null) return `${sheetDragPct}%`;
+    if (mobileSheetSnap === "peek") return `${MOBILE_SHEET_PEEK_PX}px`;
+    return `${MOBILE_SHEET_SNAP_PCT[mobileSheetSnap]}%`;
+  }, [mobileSheetSnap, sheetDragPct]);
+
   const handleSheetDragStart = (e: ReactPointerEvent<HTMLDivElement>) => {
-    // 브라우저 기본 스크롤/패닝 제스처가 같이 발동해서 지도·페이지가 스크롤되는 걸 막는다.
     e.preventDefault();
-    sheetDragRef.current = { startY: e.clientY, startHeight: mobileSheetHeight };
+    // 이전 드래그가 남아 있으면 정리
+    sheetDragCleanupRef.current?.();
+
+    const containerHeight = resolveContainerHeight();
+    const startPct =
+      sheetDragPct != null ? sheetDragPct : sheetSnapToPercent(mobileSheetSnap, containerHeight);
+    sheetDragRef.current = { startY: e.clientY, startPct };
+    sheetDragLatestPctRef.current = startPct;
+    setSheetDragPct(startPct);
 
     const onMove = (moveEvent: PointerEvent) => {
       if (!sheetDragRef.current) return;
       moveEvent.preventDefault();
-      const containerHeight = window.innerHeight - 64; // calc(100vh - 64px) 와 동일한 식
-      const deltaPercent =
-        ((sheetDragRef.current.startY - moveEvent.clientY) / containerHeight) * 100;
-      setMobileSheetHeight(
-        Math.min(92, Math.max(30, sheetDragRef.current.startHeight + deltaPercent))
+      const h = resolveContainerHeight();
+      const deltaPercent = ((sheetDragRef.current.startY - moveEvent.clientY) / h) * 100;
+      const next = Math.min(
+        92,
+        Math.max(sheetSnapToPercent("peek", h), sheetDragRef.current.startPct + deltaPercent)
       );
+      sheetDragLatestPctRef.current = next;
+      setSheetDragPct(next);
     };
-    const onUp = () => {
+    const finish = () => {
+      const drag = sheetDragRef.current;
       sheetDragRef.current = null;
       window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      sheetDragCleanupRef.current = null;
+      if (!drag) {
+        setSheetDragPct(null);
+        return;
+      }
+      const h = resolveContainerHeight();
+      const pct = sheetDragLatestPctRef.current;
+      const moved = pct - drag.startPct;
+      const currentSnap = mobileSheetSnapRef.current;
+      let nextSnap: MobileSheetSnap;
+      if (Math.abs(moved) < 3) {
+        nextSnap = currentSnap;
+      } else if (Math.abs(moved) < 10) {
+        const idx = MOBILE_SHEET_SNAP_ORDER.indexOf(currentSnap);
+        nextSnap =
+          moved > 0
+            ? MOBILE_SHEET_SNAP_ORDER[Math.min(MOBILE_SHEET_SNAP_ORDER.length - 1, idx + 1)]
+            : MOBILE_SHEET_SNAP_ORDER[Math.max(0, idx - 1)];
+      } else {
+        nextSnap = nearestMobileSheetSnap(pct, h);
+      }
+      setMobileSheetSnap(nextSnap);
+      setSheetDragPct(null);
     };
+    sheetDragCleanupRef.current = finish;
     window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
   };
+
+  const handleSheetHandleDoubleClick = () => {
+    setSheetDragPct(null);
+    setMobileSheetSnap((prev) => (prev === "full" ? "default" : "full"));
+  };
+
   // 지도 영역 자체의 높이를 재서(헤더 등 제외) 시트가 가리는 실제 픽셀 높이를 구한다 —
   // window.innerHeight 로 계산하면 과대 추정돼서 경로 안내 시 지도가 시트에 가려진 채 맞춰진다.
-  const mapAreaRef = useRef<HTMLDivElement>(null);
   const [mapBottomOverlayPx, setMapBottomOverlayPx] = useState(0);
   useEffect(() => {
     const updateOverlay = () => {
       const isMobile = mapOnly || window.innerWidth < 768; // Tailwind md 기준
+      if (!isMobile) {
+        setMapBottomOverlayPx(0);
+        return;
+      }
       const containerHeight = mapAreaRef.current?.clientHeight ?? window.innerHeight;
-      setMapBottomOverlayPx(isMobile ? Math.round(containerHeight * (mobileSheetHeight / 100)) : 0);
+      if (sheetDragPct != null) {
+        setMapBottomOverlayPx(Math.round(containerHeight * (sheetDragPct / 100)));
+        return;
+      }
+      if (mobileSheetSnap === "peek") {
+        setMapBottomOverlayPx(Math.min(MOBILE_SHEET_PEEK_PX, containerHeight));
+        return;
+      }
+      setMapBottomOverlayPx(
+        Math.round(containerHeight * (MOBILE_SHEET_SNAP_PCT[mobileSheetSnap] / 100))
+      );
     };
     updateOverlay();
     window.addEventListener("resize", updateOverlay);
     return () => window.removeEventListener("resize", updateOverlay);
-  }, [mobileSheetHeight, mapOnly]);
+  }, [mobileSheetSnap, sheetDragPct, mapOnly]);
 
   // 지도 오른쪽 하단 "기능 목록" 드롭다운 — 코스 상세와 동일: 초기화/내 위치/확대·축소/테마 범례.
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
@@ -181,10 +295,13 @@ export default function Map() {
   };
 
   // 내 위치 버튼 토글: 켜져 있으면 끄면서 대전 전체 화면으로, 꺼져 있으면 내 위치를 조회한다.
+  // 모바일에서는 시트 55%(지도 45%)로 맞춘 뒤 위치를 잡아, 보이는 지도 중앙에 오도록 한다.
   const handleLocateClick = () => {
     if (myLocationStatus === "active") {
       resetMyLocation();
     } else {
+      setSheetDragPct(null);
+      setMobileSheetSnap("default");
       handleStartMyLocation();
     }
   };
@@ -381,6 +498,9 @@ export default function Map() {
   const selectPlace = (id: string) => {
     clearRouteGuide();
     setSearchDetailId(id);
+    // 이름만 보이는 상태면 장소 상세를 볼 수 있게 기본 비율로 펼친다.
+    setSheetDragPct(null);
+    setMobileSheetSnap((snap) => (snap === "peek" ? "default" : snap));
   };
 
   const backFromDetail = () => {
@@ -406,44 +526,74 @@ export default function Map() {
             ? "border-hairline absolute inset-x-0 bottom-0 z-30 flex h-[var(--sheet-h)] shrink-0 flex-col overflow-hidden rounded-t-2xl border-t bg-white shadow-2xl"
             : "border-hairline absolute inset-x-0 bottom-0 z-30 flex h-[var(--sheet-h)] shrink-0 flex-col overflow-hidden rounded-t-2xl border-t bg-white shadow-2xl md:static md:inset-auto md:z-auto md:flex md:h-auto md:w-72 md:rounded-none md:border-t-0 md:border-r md:shadow-none"
         }
-        style={{ "--sheet-h": `${mobileSheetHeight}%` } as CSSProperties}
+        style={{ "--sheet-h": sheetHeightCss } as CSSProperties}
       >
-        {/* 하단 시트 핸들 — 드래그해서 시트 높이 조절. mapOnly 는 항상 시트 모드라 항상 보이고,
-            일반 모드는 모바일에서만 보인다(데스크톱은 고정폭 사이드바라 핸들 불필요). */}
+        {/* 하단 시트 핸들 — 드래그 후 peek/50%/55%/full 스냅. mapOnly 는 항상, 일반 모드는 모바일만. */}
         <div
-          className={`shrink-0 touch-none justify-center py-3 ${mapOnly ? "flex" : "flex md:hidden"}`}
+          role="slider"
+          tabIndex={0}
+          aria-valuemin={0}
+          aria-valuemax={3}
+          aria-valuenow={MOBILE_SHEET_SNAP_ORDER.indexOf(mobileSheetSnap)}
+          aria-valuetext={
+            mobileSheetSnap === "peek"
+              ? "장소 이름만"
+              : mobileSheetSnap === "half"
+                ? "절반"
+                : mobileSheetSnap === "full"
+                  ? "거의 전체"
+                  : "기본(지도 45%)"
+          }
+          aria-label="검색·장소 정보 창 높이 조절"
+          className={`shrink-0 touch-none items-center justify-center py-3 active:cursor-grabbing ${mapOnly ? "flex" : "flex md:hidden"} cursor-grab`}
           onPointerDown={handleSheetDragStart}
+          onDoubleClick={handleSheetHandleDoubleClick}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              const idx = MOBILE_SHEET_SNAP_ORDER.indexOf(mobileSheetSnap);
+              setMobileSheetSnap(
+                MOBILE_SHEET_SNAP_ORDER[Math.min(MOBILE_SHEET_SNAP_ORDER.length - 1, idx + 1)]
+              );
+            } else if (e.key === "ArrowDown") {
+              e.preventDefault();
+              const idx = MOBILE_SHEET_SNAP_ORDER.indexOf(mobileSheetSnap);
+              setMobileSheetSnap(MOBILE_SHEET_SNAP_ORDER[Math.max(0, idx - 1)]);
+            }
+          }}
         >
-          <span className="bg-hairline h-1 w-10 rounded-full" />
+          <span className="bg-stone/40 h-1 w-10 rounded-full" aria-hidden />
         </div>
-        <PlaceSearchSidebar
-          keyword={keyword}
-          setKeyword={setKeyword}
-          onSearch={handleSearch}
-          isSearching={isSearching}
-          filters={filters}
-          set={set}
-          toggleList={toggleList}
-          guOptions={areaCodes.map((a) => a.name)}
-          dongOptions={dongOptions}
-          activeCount={activeFilterCount}
-          onResetFilters={resetFilters}
-          defaultFilterOpen
-          places={displayPlaces}
-          searchCount={searchPlaces.length}
-          hasActiveFilter={hasActiveFilter}
-          onSelectPlace={selectPlace}
-          searchPage={searchPage}
-          searchTotal={searchTotal}
-          onSearchPageChange={setSearchPage}
-          searchDetail={searchDetail}
-          tourismDetail={tourismDetail}
-          isLoadingDetail={isLoadingDetail}
-          onBackFromDetail={backFromDetail}
-          onLikeChange={refreshLiked}
-          onStartRoute={handleStartRoute}
-          routeGuide={routeGuide}
-        />
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <PlaceSearchSidebar
+            keyword={keyword}
+            setKeyword={setKeyword}
+            onSearch={handleSearch}
+            isSearching={isSearching}
+            filters={filters}
+            set={set}
+            toggleList={toggleList}
+            guOptions={areaCodes.map((a) => a.name)}
+            dongOptions={dongOptions}
+            activeCount={activeFilterCount}
+            onResetFilters={resetFilters}
+            defaultFilterOpen
+            places={displayPlaces}
+            searchCount={searchPlaces.length}
+            hasActiveFilter={hasActiveFilter}
+            onSelectPlace={selectPlace}
+            searchPage={searchPage}
+            searchTotal={searchTotal}
+            onSearchPageChange={setSearchPage}
+            searchDetail={searchDetail}
+            tourismDetail={tourismDetail}
+            isLoadingDetail={isLoadingDetail}
+            onBackFromDetail={backFromDetail}
+            onLikeChange={refreshLiked}
+            onStartRoute={handleStartRoute}
+            routeGuide={routeGuide}
+          />
+        </div>
       </aside>
 
       {/* ── MAP AREA ── */}

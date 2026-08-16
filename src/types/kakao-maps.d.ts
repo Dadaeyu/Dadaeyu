@@ -9,10 +9,19 @@ declare namespace kakao.maps {
     isEmpty(): boolean;
   }
 
+  class Point {
+    constructor(x: number, y: number);
+    x: number;
+    y: number;
+  }
+
   class Map {
     constructor(container: HTMLElement, options: { center: LatLng; level: number });
     setCenter(latlng: LatLng): void;
+    getCenter(): LatLng;
     panTo(latlngOrBounds: LatLng | LatLngBounds, padding?: number): void;
+    /** 지도 중심을 픽셀 단위로 이동 (x: 가로, y: 세로) */
+    panBy(dx: number, dy: number): void;
     setBounds(
       bounds: LatLngBounds,
       paddingTop?: number,
@@ -23,8 +32,16 @@ declare namespace kakao.maps {
     setLevel(level: number, options?: { animate?: boolean }): void;
     getLevel(): number;
     relayout(): void;
+    getProjection(): MapProjection;
     addControl(control: object, position: number): void;
     removeControl(control: object): void;
+  }
+
+  interface MapProjection {
+    /** 지도 좌표 → 컨테이너 픽셀 */
+    containerPointFromCoords(latlng: LatLng): Point;
+    /** 컨테이너 픽셀 → 지도 좌표 */
+    coordsFromContainerPoint(point: Point): LatLng;
   }
 
   class CustomOverlay {
