@@ -46,12 +46,3 @@ export async function fetchAccessibilityNeedOptions(): Promise<CodeOption[]> {
   const data = (await res.json()) as { items?: CodeOption[] };
   return data.items ?? [];
 }
-
-export async function fetchReportReasonOptions(): Promise<CodeOption[]> {
-  const res = await fetch("/api/codes/report-reasons");
-  if (!res.ok) {
-    throw new Error("신고 사유 목록을 불러오지 못했습니다.");
-  }
-  const data = (await res.json()) as { items?: CodeOption[] };
-  return data.items ?? [];
-}

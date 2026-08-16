@@ -5,7 +5,7 @@ import { ArrowLeft, Eraser, FileText, MessageSquare } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
-import { formatDate } from "./helpers";
+import { formatDateTime } from "./helpers";
 import { AdminListShell } from "./AdminListShell";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { adminAlertClass, adminPanelClass } from "./adminUi";
@@ -205,7 +205,7 @@ export function CommunityReportsSection() {
                       <span className="text-ink font-medium">{r.reasonNm}</span>
                       <span className="text-stone text-xs">{r.reporterNickname}</span>
                     </div>
-                    <span className="text-stone text-xs">{formatDate(r.createdAt)}</span>
+                    <span className="text-stone text-xs">{formatDateTime(r.createdAt)}</span>
                   </div>
                 ))}
             </div>
@@ -297,7 +297,7 @@ export function CommunityReportsSection() {
                   )}
                 </div>
                 <p className="text-stone mt-0.5 text-xs">
-                  신고 {item.reportCount}건 · 최근 {formatDate(item.latestAt)}
+                  신고 {item.reportCount}건 · 최근 {formatDateTime(item.latestAt)}
                 </p>
               </div>
             </button>

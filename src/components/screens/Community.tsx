@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
 import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { formatCommunityDate } from "@/lib/community/format";
+import { formatCommunityDate, formatCommunityDateTime } from "@/lib/community/format";
 import { COMMUNITY_DEFAULT_PAGE_SIZE, COMMUNITY_PAGE_SIZES } from "@/lib/pagination";
 import { ListPagination } from "@/components/community/ListPagination";
 import { useOptionalAuth } from "@/context/AuthContext";
@@ -1915,7 +1915,7 @@ function CommunityDetail({ id }: { id: string }) {
           <div className="text-steel flex flex-wrap items-center gap-2 text-sm">
             <CommunityLevelBadge level={post.writer_community_level} size="sm" />
             <span className="text-slate font-medium">{post.writer_nm}</span>
-            <span className="text-stone">{formatCommunityDate(post.created_at)}</span>
+            <span className="text-stone">{formatCommunityDateTime(post.created_at)}</span>
           </div>
         </header>
         <div className="bg-surface-soft/40 px-5 py-6 sm:px-7 sm:py-8">
@@ -2178,7 +2178,7 @@ function CommunityDetail({ id }: { id: string }) {
                         showLabel={false}
                       />
                       <span className="text-ink font-semibold">{c.author_nickname}</span>
-                      <span className="text-stone">{formatCommunityDate(c.created_at)}</span>
+                      <span className="text-stone">{formatCommunityDateTime(c.created_at)}</span>
                     </div>
                     {editingCommentId !== c.id && (
                       <div className="flex shrink-0 items-center gap-1">

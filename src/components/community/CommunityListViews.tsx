@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Calendar, ChevronDown, Eye, Heart, HelpCircle, MessageCircle, Pin } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { CommunityLevelBadge } from "@/components/community/CommunityLevelBadge";
-import { formatCommunityDate } from "@/lib/community/format";
+import { formatCommunityDate, formatCommunityDateTime } from "@/lib/community/format";
 
 export type BoardListItem = {
   id: number;
@@ -106,7 +106,7 @@ export function CommunityBoardList({
                 />
                 <span className="text-steel">{post.writer_nm}</span>
                 <span aria-hidden>·</span>
-                <span>{formatCommunityDate(post.created_at)}</span>
+                <span>{formatCommunityDateTime(post.created_at)}</span>
               </div>
             </div>
             <div className="text-stone flex shrink-0 flex-col items-end gap-1.5 text-[11px] sm:flex-row sm:items-center sm:gap-3 sm:text-xs">
