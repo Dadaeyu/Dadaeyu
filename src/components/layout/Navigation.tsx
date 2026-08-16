@@ -51,7 +51,10 @@ export function DesktopNav() {
   const isAdmin = auth?.member?.role === "admin" && auth?.member?.status === "active";
 
   return (
-    <nav className="hidden items-center gap-0.5 md:flex lg:gap-1" aria-label="주 메뉴">
+    <nav
+      className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 overflow-x-auto md:flex lg:gap-1"
+      aria-label="주 메뉴"
+    >
       {navItems.map(({ path, label, icon: Icon }) => {
         const active = isActive(path);
         return (
@@ -65,13 +68,14 @@ export function DesktopNav() {
             )}
           >
             <Icon className={cn("h-4 w-4 shrink-0", active && "drop-shadow-sm")} />
-            <span>{label}</span>
+            <span className="hidden lg:inline">{label}</span>
+            <span className="sr-only lg:hidden">{label}</span>
           </Link>
         );
       })}
       {isAdmin && (
         <>
-          <div className="bg-hairline mx-1 h-6 w-px" aria-hidden="true" />
+          <div className="bg-hairline mx-1 hidden h-6 w-px lg:block" aria-hidden="true" />
           <Link
             href={adminItem.path}
             aria-current={isActive(adminItem.path) ? "page" : undefined}
@@ -81,7 +85,8 @@ export function DesktopNav() {
             )}
           >
             <adminItem.icon className="h-4 w-4 shrink-0" />
-            <span>{adminItem.label}</span>
+            <span className="hidden lg:inline">{adminItem.label}</span>
+            <span className="sr-only lg:hidden">{adminItem.label}</span>
           </Link>
         </>
       )}

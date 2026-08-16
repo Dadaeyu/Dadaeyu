@@ -33,7 +33,7 @@ export default function Header() {
 
   return (
     <header className="border-hairline bg-background/85 sticky top-0 z-40 border-b backdrop-blur-md">
-      <div className="relative mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 lg:gap-4 lg:px-6">
+      <div className="relative mx-auto flex h-16 max-w-7xl items-center gap-2 px-3 sm:px-4 lg:gap-4 lg:px-6">
         {/* 브랜드 로고 — 마크(위치핀+하트) + 워드마크 */}
         <Link
           href="/"
@@ -63,7 +63,7 @@ export default function Header() {
           </span>
         </Link>
         <DesktopNav />
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="relative z-10 ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
           {auth?.user ? (
             <>
               <Link
@@ -85,7 +85,7 @@ export default function Header() {
                     </span>
                   )}
                 </span>
-                <span>
+                <span className="hidden lg:inline">
                   <span className="text-ink font-semibold">{auth.member?.nickname ?? "회원"}</span>
                   님
                 </span>
@@ -93,12 +93,12 @@ export default function Header() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="hidden min-h-12 min-w-12 lg:inline-flex"
+                className="inline-flex min-h-11 min-w-11 px-2 sm:min-h-12 sm:px-3"
                 disabled={loggingOut}
                 onClick={handleLogout}
               >
                 <LogOut className="h-4 w-4" />
-                {loggingOut ? "로그아웃 중…" : "로그아웃"}
+                <span className="hidden sm:inline">{loggingOut ? "로그아웃 중…" : "로그아웃"}</span>
               </Button>
             </>
           ) : (
@@ -106,7 +106,7 @@ export default function Header() {
               variant="ghost"
               size="sm"
               asChild
-              className="hidden min-h-12 min-w-12 lg:inline-flex"
+              className="inline-flex min-h-11 min-w-[3.25rem] px-3 sm:min-h-12"
             >
               <Link href={`/login?next=${encodeURIComponent(pathname)}`}>로그인</Link>
             </Button>
@@ -117,7 +117,7 @@ export default function Header() {
             onClick={() => setShowAccessibility((v) => !v)}
             aria-label="접근성 설정"
             aria-expanded={showAccessibility}
-            className={`size-12 rounded-full ${
+            className={`size-11 shrink-0 rounded-full sm:size-12 ${
               showAccessibility ? "bg-brand-50 text-brand-600" : "text-steel hover:text-brand-600"
             }`}
           >

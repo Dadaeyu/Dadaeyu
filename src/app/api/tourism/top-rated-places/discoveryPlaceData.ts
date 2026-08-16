@@ -40,6 +40,7 @@ export function buildPlaceReviewRankings(
   const grouped = groupPlaceReviewSignals(rows);
   const ranked = Array.from(grouped.entries())
     .map(([contentId, { sum, count }]) => ({ contentId, average: sum / count, count }))
+    .filter(({ average }) => average >= 4)
     .sort((a, b) => b.average - a.average || b.count - a.count)
     .slice(0, Math.max(homeLimit, legacyLimit));
 

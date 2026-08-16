@@ -620,8 +620,8 @@ export default function KakaoMap({
     if (fitPathKey != null && fitPathKey !== "") return;
     if (!focusMyLocationTrigger || !myLocation || !mapRef.current || !window.kakao?.maps) return;
     const K = window.kakao.maps;
+    // 확대/축소 비율은 지금 상태 그대로 두고 중심만 내 위치로 옮긴다(줌 레벨 강제 변경 안 함).
     mapRef.current.panTo(new K.LatLng(myLocation.lat, myLocation.lng));
-    mapRef.current.setLevel(4, { animate: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusMyLocationTrigger, mapInitCount]);
 

@@ -44,8 +44,7 @@ export async function GET(request: Request) {
     }
 
     if (contentIdParam) {
-      const contentId = Number(contentIdParam);
-      if (Number.isFinite(contentId)) query = query.eq("content_id", contentId);
+      query = query.eq("content_id", contentIdParam);
     }
 
     query = applyIlikeSearch(query, "title", q);
@@ -96,7 +95,7 @@ export async function POST(request: Request) {
       board_id?: number;
       title?: string;
       content?: string;
-      content_id?: number | null;
+      content_id?: string | null;
       course_id?: number | null;
       rating?: number | null;
       course_rating?: number | null;
@@ -113,9 +112,7 @@ export async function POST(request: Request) {
     const title = (body.title ?? "").trim();
     const content = (body.content ?? "").trim();
     const content_id =
-      body.content_id != null && Number.isFinite(Number(body.content_id))
-        ? Number(body.content_id)
-        : null;
+      typeof body.content_id === "string" && body.content_id.trim() ? body.content_id.trim() : null;
     const course_id =
       body.course_id != null && Number.isFinite(Number(body.course_id))
         ? Number(body.course_id)

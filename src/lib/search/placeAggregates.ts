@@ -9,7 +9,7 @@ export async function getRatingsByContentId(
   supabase: SupabaseClient,
   contentIds: (string | number)[]
 ): Promise<Map<string, { average: number; count: number }>> {
-  const ids = [...new Set(contentIds.map(Number).filter(Number.isFinite))];
+  const ids = [...new Set(contentIds.map((c) => String(c)))];
   if (ids.length === 0) return new Map();
 
   const { data } = await supabase
@@ -20,18 +20,18 @@ export async function getRatingsByContentId(
     .not("rating", "is", null)
     .in("content_id", ids);
 
-  const grouped = new Map<number, { sum: number; count: number }>();
+  const grouped = new Map<string, { sum: number; count: number }>();
   for (const row of data ?? []) {
     if (row.content_id == null || row.rating == null) continue;
-    const g = grouped.get(row.content_id) ?? { sum: 0, count: 0 };
+    const cid = String(row.content_id);
+    const g = grouped.get(cid) ?? { sum: 0, count: 0 };
     g.sum += row.rating;
     g.count += 1;
-    grouped.set(row.content_id, g);
+    grouped.set(cid, g);
   }
 
   const result = new Map<string, { average: number; count: number }>();
-  for (const [cid, g] of grouped)
-    result.set(String(cid), { average: g.sum / g.count, count: g.count });
+  for (const [cid, g] of grouped) result.set(cid, { average: g.sum / g.count, count: g.count });
   return result;
 }
 

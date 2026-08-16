@@ -4,10 +4,15 @@ import { createFixedWindowRateLimiter } from "@/lib/server/fixed-window-rate-lim
 import { createTimeoutSignal } from "@/lib/server/timeout-signal";
 import { resolveChatClientKey } from "@/lib/chat/server/request-identity";
 import {
+  reserveCourseRecommendUsage,
+  CourseRecommendUsageError,
+  COURSE_RECOMMEND_DAILY_LIMIT
+} from "@/lib/courseRecommend/usage";
+import {
   getBarrierFreeIds,
   getHeadcountExcludeIds,
   getScheduleExcludeIds
-} from "@/app/api/search/route";
+} from "@/lib/search/placeFilters";
 import {
   haversineMeters,
   orderByNearestNeighbor,
@@ -47,7 +52,7 @@ const recommendRateLimiter = createFixedWindowRateLimiter({
 
 interface CandidatePlace extends RoutePoint {
   placeId: number;
-  contentId: number;
+  contentId: string;
   title: string;
   category: string | null; // 표시용 테마 이름(예: "음식") — 프롬프트/해시태그용
   categoryCode: string | null; // tb_place.lclssystm1 원본 코드(예: "FD") — 지도 마커 색상용
@@ -70,6 +75,8 @@ export async function POST(request: Request) {
         { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } }
       );
     }
+
+    const usage = await reserveCourseRecommendUsage(clientKey);
 
     const body = (await request.json().catch(() => ({}))) as {
       accessibility?: unknown;
@@ -125,7 +132,11 @@ export async function POST(request: Request) {
     const bakeryPlaceIdSet = new Set(await getBakeryPlaceIds());
     const markBakery = (p: CandidatePlace): CandidatePlace =>
       bakeryPlaceIdSet.has(p.placeId)
-        ? { ...p, category: themeNames.get(BAKERY_THEME_CODE) ?? "빵지순례", categoryCode: BAKERY_THEME_CODE }
+        ? {
+            ...p,
+            category: themeNames.get(BAKERY_THEME_CODE) ?? "빵지순례",
+            categoryCode: BAKERY_THEME_CODE
+          }
         : p;
     const markedActivityCandidates = activityCandidates.map(markBakery);
     const markedRestaurantCandidates = restaurantCandidates.map(markBakery);
@@ -133,7 +144,8 @@ export async function POST(request: Request) {
     if (markedActivityCandidates.length < MIN_CANDIDATES) {
       return NextResponse.json({
         courses: [],
-        message: "조건에 맞는 장소가 너무 적어서 코스를 만들지 못했어요. 필터를 조금 넓혀보세요."
+        message: "조건에 맞는 장소가 너무 적어서 코스를 만들지 못했어요. 필터를 조금 넓혀보세요.",
+        usage
       });
     }
 
@@ -171,12 +183,26 @@ export async function POST(request: Request) {
     if (courses.length === 0) {
       return NextResponse.json({
         courses: [],
-        message: "조건에 맞는 코스를 만들지 못했어요. 필터를 조금 바꿔서 다시 시도해 보세요."
+        message: "조건에 맞는 코스를 만들지 못했어요. 필터를 조금 바꿔서 다시 시도해 보세요.",
+        usage
       });
     }
 
-    return NextResponse.json({ courses });
+    return NextResponse.json({ courses, usage });
   } catch (error) {
+    if (error instanceof CourseRecommendUsageError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          usage: {
+            used: error.used,
+            remaining: error.remaining,
+            limit: COURSE_RECOMMEND_DAILY_LIMIT
+          }
+        },
+        { status: error.status }
+      );
+    }
     const message =
       error instanceof Error && error.name === "AbortError"
         ? "코스를 설계하는 데 시간이 오래 걸렸어요. 잠시 뒤 다시 시도해 주세요."
@@ -236,7 +262,7 @@ async function fetchPlaces(params: {
     query = query.in("contentid", accessIds.length > 0 ? accessIds : [-1]);
   }
 
-  const excludeIds = new Set<number>();
+  const excludeIds = new Set<string>();
   for (const id of await getHeadcountExcludeIds(params.headcount)) excludeIds.add(id);
   for (const id of await getScheduleExcludeIds(params.dateFrom, params.dateTo)) excludeIds.add(id);
   const finalQuery =
@@ -247,7 +273,7 @@ async function fetchPlaces(params: {
 
   const rows = (data ?? []) as Array<{
     place_id: number;
-    contentid: number;
+    contentid: string;
     title: string;
     mapx: string | number;
     mapy: string | number;
@@ -380,7 +406,7 @@ async function requestCourseDrafts({
 
 interface ScheduledPlaceOut {
   placeId: number;
-  contentId: number;
+  contentId: string;
   name: string;
   lat: number;
   lng: number;
@@ -514,5 +540,8 @@ function topCategories(places: CandidatePlace[], limit: number): string[] {
     if (!place.category) continue;
     counts.set(place.category, (counts.get(place.category) ?? 0) + 1);
   }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([label]) => label);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label]) => label);
 }

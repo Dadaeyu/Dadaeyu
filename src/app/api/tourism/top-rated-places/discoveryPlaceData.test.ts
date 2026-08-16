@@ -44,3 +44,17 @@ test("홈 후기 목록은 4개로 제한해도 기존 places 응답은 상위 5
     ["place-1", "place-2", "place-3", "place-4", "place-5"]
   );
 });
+
+test("핫플레이스 후기 순위는 평균 4점 미만 장소를 제외한다", () => {
+  const rankings = buildPlaceReviewRankings([
+    { content_id: "place-1", rating: 4.1 },
+    { content_id: "place-2", rating: 4 },
+    { content_id: "place-3", rating: 3.9 },
+    { content_id: "place-4", rating: 1 }
+  ]);
+
+  assert.deepEqual(
+    rankings.legacy.map(({ contentId }) => contentId),
+    ["place-1", "place-2"]
+  );
+});

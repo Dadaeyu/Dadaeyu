@@ -11,9 +11,10 @@ import SearchResultList from "@/components/search/SearchResultList";
 import TourismDetailPanel, {
   type PlaceRouteGuideState
 } from "@/components/search/TourismDetailPanel";
+import { ListPagination } from "@/components/community/ListPagination";
 import type { Filters } from "@/components/PlaceFilters";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
-import type { TourismDetail } from "@/hooks/usePlaceSearch";
+import { SEARCH_PAGE_SIZE, type TourismDetail } from "@/hooks/usePlaceSearch";
 import type { RouteMode } from "@/lib/kakao/directions";
 
 interface Props {
@@ -35,8 +36,14 @@ interface Props {
 
   // 결과 목록
   places: SearchPlace[];
-  searchCount: number; // 실제 검색 결과 수 (없으면 핫플레이스 표시)
+  searchCount: number; // 실제 검색 결과 수
+  hasActiveFilter: boolean; // true면 검색/필터가 켜진 상태 — 0개여도 핫플레이스로 대체하지 않는다.
   onSelectPlace: (id: string) => void;
+
+  // 검색 결과 페이징 (50개씩) — 넘기지 않으면 페이징 UI를 표시하지 않는다.
+  searchPage?: number;
+  searchTotal?: number;
+  onSearchPageChange?: (page: number) => void;
 
   // 상세 (usePlaceSearch 결과)
   searchDetail: SearchPlace | null;
@@ -71,7 +78,11 @@ export default function PlaceSearchSidebar({
   defaultFilterOpen = false,
   places,
   searchCount,
+  hasActiveFilter,
   onSelectPlace,
+  searchPage = 0,
+  searchTotal = 0,
+  onSearchPageChange,
   searchDetail,
   tourismDetail,
   isLoadingDetail,
@@ -158,7 +169,9 @@ export default function PlaceSearchSidebar({
       >
         <div className="sticky top-0 border-b border-gray-100 bg-gray-50 px-4 py-2">
           <span className="text-xs font-semibold tracking-wide text-gray-400 uppercase">
-            {searchCount > 0 ? `검색 결과 ${searchCount}개` : `핫플레이스${places.length}개`}
+            {hasActiveFilter
+              ? `검색 결과 ${Math.max(searchTotal, searchCount)}개`
+              : `핫플레이스 ${places.length}개`}
           </span>
         </div>
         {isSearching ? (
@@ -166,10 +179,28 @@ export default function PlaceSearchSidebar({
             <span className="border-brand-500 h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-200 border-t-transparent" />
             검색 중...
           </div>
+        ) : places.length === 0 && hasActiveFilter ? (
+          <div className="flex flex-col items-center justify-center gap-1 py-14 text-center text-gray-400">
+            <p className="text-sm font-medium">조건에 맞는 장소가 없어요</p>
+            <p className="text-xs">필터를 조정해서 다시 찾아보세요</p>
+          </div>
         ) : (
           <SearchResultList places={places} onSelect={onSelectPlace} />
         )}
       </div>
+
+      {/* 페이징 — 목록 스크롤 영역 밖에 고정해, 목록을 내려 스크롤해도 항상 보인다 */}
+      {onSearchPageChange && (
+        <div className="shrink-0 border-t border-gray-100 bg-white">
+          <ListPagination
+            page={searchPage}
+            total={searchTotal}
+            pageSize={SEARCH_PAGE_SIZE}
+            onChange={onSearchPageChange}
+            compact
+          />
+        </div>
+      )}
     </>
   );
 }

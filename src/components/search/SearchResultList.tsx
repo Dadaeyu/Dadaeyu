@@ -28,7 +28,7 @@ export default function SearchResultList({
                 width={40}
                 height={40}
                 unoptimized
-                className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                className="h-10 w-10 shrink-0 rounded-lg bg-gray-50 object-contain"
               />
             ) : (
               <div
@@ -60,7 +60,9 @@ export default function SearchResultList({
                             : "text-gray-300"
                         }`}
                       />
-                      <span>{sp.average_rating != null ? sp.average_rating.toFixed(1) : "0"}</span>
+                      <span>
+                        {sp.average_rating != null ? sp.average_rating.toFixed(1) : "0.0"}
+                      </span>
                     </div>
                   )}
                   {sp.like_count !== undefined && (

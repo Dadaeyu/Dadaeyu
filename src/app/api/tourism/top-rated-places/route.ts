@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/server";
 import { getBakeryPlaceIds, BAKERY_THEME_CODE } from "@/lib/theme/bakeryTheme";
 import { buildPlaceReviewRankings, groupPlaceFavoriteSignals } from "./discoveryPlaceData";
 
@@ -12,6 +12,8 @@ const REVIEW_BOARD_ID = 1;
 
 export async function GET() {
   try {
+    const supabase = await createClient();
+
     const [reviewResult, favoriteResult] = await Promise.all([
       supabase
         .from("tb_post")
@@ -86,6 +88,7 @@ export async function GET() {
 
       if (placesError) throw placesError;
 
+      // content_id와 contentid는 bigint라 문자열 기준으로 맞춘다.
       for (const place of places ?? []) placeByContentId.set(String(place.contentid), place);
     }
 
@@ -123,45 +126,7 @@ export async function GET() {
       .map((item) => toPlaceResult(item.contentId))
       .filter((place): place is PlaceResult => place !== null);
 
-    let result = legacyReviewPlaces;
-
-    // 후기가 있는 곳이 5개 미만이면, 별점 없는 실제 장소로 나머지를 채운다.
-    if (result.length < LEGACY_RESULT_COUNT) {
-      const remaining = LEGACY_RESULT_COUNT - result.length;
-      const excludeIds = new Set(result.map((r) => r.id));
-
-      const { data: fillerRows, error: fillerError } = await supabase
-        .from("tb_place")
-        .select("place_id, contentid, title, addr1, mapx, mapy, firstimage, lclssystm1")
-        .or("delete_yn.is.null,delete_yn.eq.N")
-        .not("mapx", "is", null)
-        .not("mapy", "is", null)
-        .order("place_id", { ascending: false })
-        .limit(remaining + excludeIds.size);
-
-      if (fillerError) throw fillerError;
-
-      const filler = (fillerRows ?? [])
-        .filter((p) => !excludeIds.has(String(p.contentid)))
-        .slice(0, remaining)
-        .map((p) => ({
-          id: String(p.contentid),
-          placeId: p.place_id,
-          name: p.title,
-          lat: Number(p.mapy),
-          lng: Number(p.mapx),
-          image: p.firstimage ?? "",
-          address: p.addr1 ?? undefined,
-          categoryCode: p.lclssystm1 ?? undefined,
-          average_rating: null,
-          review_count: 0,
-          like_count: likeCounts.get(String(p.contentid)) ?? 0
-        }));
-
-      result = [...result, ...filler];
-    }
-
-    const legacyPlaces = result.map((r) => ({
+    const legacyPlaces = legacyReviewPlaces.map((r) => ({
       ...r,
       // 빵지순례(BK)는 실제 LCLSSYSTM1 코드가 아니지만, 마커 색은 카테고리 하나처럼 취급한다.
       categoryCode: bakerySet.has(r.placeId) ? BAKERY_THEME_CODE : r.categoryCode

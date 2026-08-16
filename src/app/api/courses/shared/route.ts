@@ -670,12 +670,12 @@ export async function GET(request: Request) {
     const allContentIds = [
       ...new Set(
         [...placeMap.values()]
-          .map((p) => (p.contentid != null && p.contentid !== "" ? Number(p.contentid) : null))
-          .filter((v): v is number => v != null)
+          .map((p) => (p.contentid != null && p.contentid !== "" ? p.contentid : null))
+          .filter((v): v is string => v != null)
       )
     ];
     const bfFlagsByContentId = new Map<
-      number,
+      string,
       { has_blind: boolean; has_deaf: boolean; has_gait: boolean; has_infant: boolean }
     >();
     if (allContentIds.length > 0) {
@@ -685,13 +685,13 @@ export async function GET(request: Request) {
         .in("contentid", allContentIds);
       if (bfErr) throw bfErr;
       for (const b of (bfRows ?? []) as {
-        contentid: string | number;
+        contentid: string;
         has_blind: boolean;
         has_deaf: boolean;
         has_gait: boolean;
         has_infant: boolean;
       }[]) {
-        bfFlagsByContentId.set(Number(b.contentid), b);
+        bfFlagsByContentId.set(b.contentid, b);
       }
     }
 
@@ -725,7 +725,7 @@ export async function GET(request: Request) {
         if (place.lclssystm1) bump(themeLabelByCode.get(place.lclssystm1));
         if (bakeryPlaceIdSet.has(pid)) bump(themeLabelByCode.get(BAKERY_THEME_CODE));
         const contentId =
-          place.contentid != null && place.contentid !== "" ? Number(place.contentid) : null;
+          place.contentid != null && place.contentid !== "" ? place.contentid : null;
         const flags = contentId != null ? bfFlagsByContentId.get(contentId) : undefined;
         if (flags?.has_blind) bump("시각장애");
         if (flags?.has_deaf) bump("청각장애");

@@ -72,7 +72,7 @@ export async function GET(_request: Request, { params }: Params) {
 
     // 조회수 증가는 POST .../view 에서만 (GET 중복·수정 로드·Strict Mode 이중 호출 방지)
 
-    let attachedPlace: { content_id: number; name: string; image: string } | null = null;
+    let attachedPlace: { content_id: string; name: string; image: string } | null = null;
     if (rest.content_id != null) {
       const { data: place } = await supabase
         .from("tb_place")
@@ -81,7 +81,7 @@ export async function GET(_request: Request, { params }: Params) {
         .maybeSingle();
       if (place) {
         attachedPlace = {
-          content_id: Number(place.contentid),
+          content_id: String(place.contentid),
           name: place.title,
           image: place.firstimage ?? ""
         };
@@ -204,7 +204,7 @@ export async function PATCH(request: Request, { params }: Params) {
     let body: {
       title?: string;
       content?: string;
-      content_id?: number | null;
+      content_id?: string | null;
       course_id?: number | null;
       rating?: number | null;
       course_rating?: number | null;
@@ -231,8 +231,8 @@ export async function PATCH(request: Request, { params }: Params) {
     }
     if (body.content_id !== undefined) {
       updates.content_id =
-        body.content_id != null && Number.isFinite(Number(body.content_id))
-          ? Number(body.content_id)
+        typeof body.content_id === "string" && body.content_id.trim()
+          ? body.content_id.trim()
           : null;
     }
     if (body.course_id !== undefined) {
