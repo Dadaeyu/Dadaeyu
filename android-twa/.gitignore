@@ -7,9 +7,14 @@ app/build/
 android-sdk/
 android-sdk-*/
 android-commandlinetools*/
+android-commandlinetools*.zip
 commandlinetools*/
+commandlinetools*.zip
 jdk/
 jdk-*/
+jdk*.zip
+jdk*.tar.gz
+openjdk*.tar.gz
 
 # Signing material and local credentials
 *.jks

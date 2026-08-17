@@ -50,12 +50,18 @@ signing.properties
 credentials.env
 
 # android local tooling, signing, and release outputs
+/private/android-signing/
 /android-sdk/
 /android-sdk-*/
 /android-commandlinetools*/
+/android-commandlinetools*.zip
 /commandlinetools*/
+/commandlinetools*.zip
 /jdk/
 /jdk-*/
+/jdk*.zip
+/jdk*.tar.gz
+/openjdk*.tar.gz
 /.gradle/
 /android-twa/.gradle/
 /android-twa/build/
