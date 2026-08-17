@@ -16,14 +16,14 @@ const VALID_SHA256_FINGERPRINT =
 const validContract = {
   twaManifest: {
     host: "dadaeyu.vercel.app",
-    packageId: "kr.dadaeyu.app",
+    packageId: "com.dadaeyou.app",
     versionCode: 1,
     versionName: "1.0.0",
     signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
     fingerprints: [VALID_SHA256_FINGERPRINT]
   },
   androidGradle: {
-    applicationId: "kr.dadaeyu.app",
+    applicationId: "com.dadaeyou.app",
     versionCode: 1,
     versionName: "1.0.0",
     compileSdk: 36,
@@ -34,7 +34,7 @@ const validContract = {
       relation: ["delegate_permission/common.handle_all_urls"],
       target: {
         namespace: "android_app",
-        package_name: "kr.dadaeyu.app",
+        package_name: "com.dadaeyou.app",
         sha256_cert_fingerprints: [VALID_SHA256_FINGERPRINT]
       }
     }
@@ -73,18 +73,18 @@ test("Android release contract reports every TWA launch contract drift", () => {
 
   assert.deepEqual(errors, [
     "Expected TWA host dadaeyu.vercel.app, received example.com.",
-    "Expected Android package kr.dadaeyu.app, received com.example.app.",
+    "Expected Android package com.dadaeyou.app, received com.example.app.",
     "Expected versionCode 1, received 2.",
     "Expected versionName 1.0.0, received 2.0.0.",
     "Expected signing key path ../../private/android-signing/dadaeyu-upload.jks, received android-twa/dadaeyu-upload.jks.",
-    "Expected Gradle applicationId kr.dadaeyu.app, received com.example.app.",
+    "Expected Gradle applicationId com.dadaeyou.app, received com.example.app.",
     "Expected Gradle versionCode 1, received 2.",
     "Expected Gradle versionName 1.0.0, received 2.0.0.",
     "Expected compileSdk 36, received 35.",
     "Expected targetSdk 36, received 35.",
     "Expected assetlinks[0].relation to include delegate_permission/common.handle_all_urls.",
     "Expected assetlinks[0].target.namespace android_app, received web.",
-    "Expected assetlinks[0].target.package_name kr.dadaeyu.app, received com.example.app.",
+    "Expected assetlinks[0].target.package_name com.dadaeyou.app, received com.example.app.",
     "Expected assetlinks[0].target.sha256_cert_fingerprints to contain SHA-256 fingerprints."
   ]);
 });
@@ -94,7 +94,7 @@ test("generated Android project matches the TWA package, version, and SDK contra
 
   assert.deepEqual(contract.twaManifest, {
     host: "dadaeyu.vercel.app",
-    packageId: "kr.dadaeyu.app",
+    packageId: "com.dadaeyou.app",
     versionCode: 1,
     versionName: "1.0.0",
     signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
@@ -103,7 +103,7 @@ test("generated Android project matches the TWA package, version, and SDK contra
     ]
   });
   assert.deepEqual(contract.androidGradle, {
-    applicationId: "kr.dadaeyu.app",
+    applicationId: "com.dadaeyou.app",
     versionCode: 1,
     versionName: "1.0.0",
     compileSdk: 36,
