@@ -1,0 +1,28 @@
+# Android TWA local files
+.gradle/
+build/
+app/build/
+
+# Local Android tooling downloads
+android-sdk/
+android-sdk-*/
+android-commandlinetools*/
+commandlinetools*/
+jdk/
+jdk-*/
+
+# Signing material and local credentials
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+local.properties
+keystore.properties
+signing.properties
+credentials.env
+
+# Release artifacts
+*.apk
+*.aab
+*.apks
