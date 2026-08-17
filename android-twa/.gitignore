@@ -32,3 +32,4 @@ credentials.env
 *.apk
 *.aab
 *.apks
+*.idsig
