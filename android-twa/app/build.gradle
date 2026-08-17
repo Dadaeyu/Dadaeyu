@@ -21,7 +21,7 @@ plugins {
 }
 
 def twaManifest = [
-    applicationId: 'kr.dadaeyu.app',
+    applicationId: 'com.dadaeyou.app',
     hostName: 'dadaeyu.vercel.app', // The domain being opened in the TWA.
     launchUrl: '/', // The start path for the TWA. Must be relative to the domain.
     name: '다대유', // The application name.
@@ -52,9 +52,9 @@ def twaManifest = [
 
 android {
     compileSdkVersion 36
-    namespace "kr.dadaeyu.app"
+    namespace "com.dadaeyou.app"
     defaultConfig {
-        applicationId "kr.dadaeyu.app"
+        applicationId "com.dadaeyou.app"
         minSdkVersion 21
         targetSdkVersion 36
         versionCode 1
