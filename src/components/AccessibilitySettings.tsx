@@ -1,99 +1,160 @@
 "use client";
 
-import { useState } from "react";
+import { BookOpenCheck } from "lucide-react";
+import { useAccessibility, FONT_SCALE_MIN, FONT_SCALE_MAX } from "@/context/AccessibilityContext";
 
 const settingsConfig = [
-  { key: "screenReader" as const, label: "스크린리더", description: "화면 읽기 기능" },
-  { key: "highContrast" as const, label: "고대비", description: "높은 대비 색상" },
-  { key: "darkMode" as const, label: "다크모드", description: "어두운 테마" },
+  {
+    key: "readAloud" as const,
+    label: "음성 읽어주기",
+    description: "포커스·마우스 올린 내용 음성 안내",
+    toggle: "toggleReadAloud" as const
+  },
+  {
+    key: "highContrast" as const,
+    label: "고대비",
+    description: "글자·테두리·면 구분을 더 또렷하게",
+    toggle: "toggleHighContrast" as const
+  },
+  {
+    key: "darkMode" as const,
+    label: "다크모드",
+    description: "어두운 테마",
+    toggle: "toggleDarkMode" as const
+  }
 ];
-
-type Settings = Record<typeof settingsConfig[number]["key"], boolean>;
-
-const ZOOM_MIN = 100;
-const ZOOM_MAX = 200;
-const ZOOM_STEP = 10;
 
 interface Props {
   onClose: () => void;
 }
 
 export default function AccessibilitySettings({ onClose }: Props) {
-  const [settings, setSettings] = useState<Settings>({
-    screenReader: false,
-    highContrast: false,
-    darkMode: false,
-  });
-  const [zoom, setZoom] = useState(100);
+  const {
+    readAloud,
+    highContrast,
+    darkMode,
+    easyMode,
+    fontScale,
+    toggleReadAloud,
+    toggleHighContrast,
+    toggleDarkMode,
+    toggleEasyMode,
+    increaseFontScale,
+    decreaseFontScale
+  } = useAccessibility();
 
-  const toggle = (key: keyof Settings) =>
-    setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
-
-  const decreaseZoom = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setZoom((prev) => Math.max(ZOOM_MIN, prev - ZOOM_STEP));
-  };
-
-  const increaseZoom = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setZoom((prev) => Math.min(ZOOM_MAX, prev + ZOOM_STEP));
+  const values = { readAloud, highContrast, darkMode };
+  const toggles = {
+    toggleReadAloud,
+    toggleHighContrast,
+    toggleDarkMode
   };
 
   return (
     <>
-      {/* 배경 클릭 시 닫기 */}
-      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />
 
-      <div className="absolute right-4 top-full mt-2 z-50 w-64 bg-white rounded-xl shadow-lg border border-gray-200 p-3">
-        <p className="text-xs font-semibold text-gray-500 mb-2 px-1">접근성 설정</p>
+      <div
+        role="dialog"
+        aria-label="접근성 설정"
+        className="border-hairline absolute top-full right-4 z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border bg-white p-3 shadow-lg"
+      >
+        <p className="text-stone mb-2 px-1 text-xs font-semibold">접근성 설정</p>
         <div className="space-y-1">
-          {settingsConfig.map(({ key, label, description }) => (
+          {settingsConfig.map(({ key, label, description, toggle }) => (
             <button
               key={key}
-              onClick={() => toggle(key)}
-              className="w-full flex items-center justify-between px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+              type="button"
+              onClick={toggles[toggle]}
+              className="hover:bg-surface flex w-full items-center justify-between rounded-lg px-2 py-2 transition-colors"
+              aria-pressed={values[key]}
             >
               <div className="text-left">
-                <p className="text-sm font-medium text-gray-800">{label}</p>
-                <p className="text-xs text-gray-400">{description}</p>
+                <p className="text-ink text-sm font-medium">{label}</p>
+                <p className="text-stone text-xs">{description}</p>
               </div>
-              {/* 토글 스위치 */}
               <div
-                className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${
-                  settings[key] ? "bg-brand-500" : "bg-gray-200"
+                className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
+                  values[key] ? "bg-brand-500" : "bg-gray-200"
                 }`}
+                aria-hidden="true"
               >
                 <span
-                  className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${
-                    settings[key] ? "left-5" : "left-1"
+                  className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all duration-200 ${
+                    values[key] ? "left-5" : "left-1"
                   }`}
                 />
               </div>
             </button>
           ))}
 
-          {/* 화면 확대 — 맨 아래 */}
-          <div className="w-full flex items-center justify-between px-2 py-2 rounded-lg">
+          <button
+            type="button"
+            onClick={toggleEasyMode}
+            className={`focus-visible:outline-brand-600 flex min-h-16 w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${
+              easyMode
+                ? "border-brand-800 bg-brand-50 text-brand-900"
+                : "border-hairline text-ink hover:border-brand-300 hover:bg-brand-50 bg-white"
+            }`}
+            aria-pressed={easyMode}
+            aria-label={easyMode ? "쉬운 화면 끄기" : "쉬운 화면 켜기"}
+          >
+            <span
+              className={`grid size-11 shrink-0 place-items-center rounded-xl ${
+                easyMode ? "bg-brand-700 text-white" : "text-brand-800 bg-gray-100"
+              }`}
+              aria-hidden="true"
+            >
+              <BookOpenCheck className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-semibold">
+                {easyMode ? "쉬운 화면 사용 중" : "쉬운 화면"}
+              </span>
+              <span className="text-steel block text-sm leading-5">
+                {easyMode ? "누르면 기본 화면으로 돌아가요" : "글자와 버튼을 크게 보여줘요"}
+              </span>
+            </span>
+            <span
+              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                easyMode ? "bg-brand-700" : "bg-gray-200"
+              }`}
+              aria-hidden="true"
+            >
+              <span
+                className={`absolute top-1 size-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                  easyMode ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </span>
+          </button>
+
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-2">
             <div className="text-left">
-              <p className="text-sm font-medium text-gray-800">화면 확대</p>
-              <p className="text-xs text-gray-400">텍스트 크기 증가</p>
+              <p className="text-ink text-sm font-medium">화면 확대</p>
+              <p className="text-stone text-xs">텍스트 크기 조절</p>
             </div>
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex shrink-0 items-center gap-1">
               <button
-                onClick={decreaseZoom}
-                disabled={zoom <= ZOOM_MIN}
-                className="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold text-sm transition-colors"
+                type="button"
+                onClick={decreaseFontScale}
+                disabled={fontScale <= FONT_SCALE_MIN}
+                className="flex h-12 w-12 items-center justify-center rounded-md bg-gray-100 text-lg font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="화면 축소"
               >
                 −
               </button>
-              <span className="text-sm font-semibold text-gray-800 w-10 text-center tabular-nums">
-                {zoom}%
+              <span
+                className="w-10 text-center text-sm font-semibold text-gray-800 tabular-nums"
+                aria-live="polite"
+              >
+                {fontScale}%
               </span>
               <button
-                onClick={increaseZoom}
-                disabled={zoom >= ZOOM_MAX}
-                className="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold text-sm transition-colors"
+                type="button"
+                onClick={increaseFontScale}
+                disabled={fontScale >= FONT_SCALE_MAX}
+                className="flex h-12 w-12 items-center justify-center rounded-md bg-gray-100 text-lg font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="화면 확대"
               >
                 +

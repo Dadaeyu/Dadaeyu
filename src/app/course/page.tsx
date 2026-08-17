@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import Course from "@/components/screens/Course";
 
 export default function Page() {
-  return <Course />;
+  return (
+    <Suspense fallback={null}>
+      <Course />
+    </Suspense>
+  );
 }

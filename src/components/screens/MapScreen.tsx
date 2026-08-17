@@ -1,315 +1,849 @@
 "use client";
 
-import { useState } from "react";
-import { useSearchParams } from "next/navigation";
 import {
-  Search, Filter, X, ChevronDown, Star, Heart,
-  SlidersHorizontal, Navigation,
-} from "lucide-react";
-import { THEMES, Filters, DEFAULT_FILTERS, FilterFields } from "@/components/PlaceFilters";
-import { PLACES, type Place } from "@/data/placesData";
-import PlaceDetailPanel from "@/components/PlaceDetailPanel";
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent
+} from "react";
+import { useSearchParams } from "next/navigation";
+import { LocateFixed, X, MoreVertical, Palette, RotateCcw, ZoomIn, Check } from "lucide-react";
+import { useFilters } from "@/components/PlaceFilters";
+import KakaoMap, { type MapMarker, type MapPathSegment } from "@/components/KakaoMap";
+import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
+import { type PlaceRouteGuideState } from "@/components/search/TourismDetailPanel";
+import {
+  getCategoryColor,
+  LCLSSYSTM1_COLORS,
+  LCLSSYSTM1_LABELS
+} from "@/lib/search/categoryColors";
+import { usePlaceSearch } from "@/hooks/usePlaceSearch";
+import { useMyLocation, type MyLocationErrorReason } from "@/hooks/useMyLocation";
+import {
+  fetchDirections,
+  openKakaoMapRoute,
+  pickRouteOption,
+  buildRoutePathFromOption,
+  type RouteMode,
+  type RouteOption
+} from "@/lib/kakao/directions";
+import RouteOptionPicker from "@/components/search/RouteOptionPicker";
+import TrafficLegend from "@/components/search/TrafficLegend";
+import {
+  formatRouteDistance,
+  formatRouteDuration,
+  formatRouteTollFare
+} from "@/lib/kakao/directions";
 
-const MY_LOCATION = { cx: 130, cy: 510 };
+/** 모바일 하단 시트 스냅 — 이름만 · 50% · 55%(지도 45%) · 거의 전체 */
+type MobileSheetSnap = "peek" | "half" | "default" | "full";
+const MOBILE_SHEET_SNAP_ORDER: MobileSheetSnap[] = ["peek", "half", "default", "full"];
+const MOBILE_SHEET_PEEK_PX = 92;
+/** 스냅별 시트 높이 % (peek 은 px 전용) */
+const MOBILE_SHEET_SNAP_PCT: Record<Exclude<MobileSheetSnap, "peek">, number> = {
+  half: 50,
+  default: 55, // 보이는 지도 ≈ 45%
+  full: 92
+};
 
-const BLOCKS = [
-  [100,145,85,80],[100,255,85,90],[100,375,85,65],[100,460,85,65],
-  [215,145,90,80],[215,375,90,65],[215,465,90,65],
-  [335,145,90,80],[335,375,90,65],[335,465,90,65],
-  [460,255,70,90],[460,375,70,65],[460,465,70,65],
-  [565,145,80,80],[565,255,80,90],[565,375,80,65],[565,465,80,65],
-  [675,145,70,80],[675,255,70,90],
-  [780,145,75,80],[780,255,75,90],[780,375,75,65],[780,465,75,65],
-  [885,145,70,80],[885,255,70,90],[885,375,70,65],[885,465,70,65],
-];
+function sheetSnapToPercent(snap: MobileSheetSnap, containerH: number): number {
+  if (snap === "peek") {
+    const h = Math.max(containerH, 1);
+    return Math.min(92, Math.max(8, (MOBILE_SHEET_PEEK_PX / h) * 100));
+  }
+  return MOBILE_SHEET_SNAP_PCT[snap];
+}
+
+function nearestMobileSheetSnap(heightPct: number, containerH: number): MobileSheetSnap {
+  let best: MobileSheetSnap = "default";
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const snap of MOBILE_SHEET_SNAP_ORDER) {
+    const dist = Math.abs(sheetSnapToPercent(snap, containerH) - heightPct);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = snap;
+    }
+  }
+  return best;
+}
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────
+// 지도 화면: 사이드바(검색/필터/목록) + KakaoMap. usePlaceSearch·useMyLocation 훅으로
+// DB/카카오 검색 결과와 내 위치를 지도에 반영하고, 선택한 장소의 상세 패널을 보여준다.
 export default function Map() {
   const searchParams = useSearchParams();
   const initialTheme = searchParams.get("theme");
-  const initialFilter = searchParams.get("filter");   // "hot"
-  const initialPlaceId = searchParams.get("place");   // place id
+  const initialQuery = searchParams.get("query")?.trim() ?? "";
+  const initialContentId = searchParams.get("contentId");
+  const mapOnly = searchParams.get("mode") === "map";
 
-  const [showFilters, setShowFilters] = useState(!!initialTheme);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [hotFilter, setHotFilter] = useState(initialFilter === "hot");
-  const [filters, setFilters] = useState<Filters>(() => ({
-    ...DEFAULT_FILTERS,
-    themes: initialTheme && THEMES.includes(initialTheme) ? [initialTheme] : [],
-  }));
-  const [detailId, setDetailId] = useState<number | null>(
-    initialPlaceId ? Number(initialPlaceId) : null
-  );
-  const [navTarget, setNavTarget] = useState<Place | null>(null);
+  // 모바일(및 mapOnly) 하단 시트 — 오버레이 높이 스냅(peek / 50% / 55% / full).
+  // 핸들이 시트와 같이 움직이므로 window 리스너로 드래그 추적한다.
+  const [mobileSheetSnap, setMobileSheetSnap] = useState<MobileSheetSnap>("default");
+  const [sheetDragPct, setSheetDragPct] = useState<number | null>(null);
+  const sheetDragRef = useRef<{ startY: number; startPct: number } | null>(null);
+  const sheetDragLatestPctRef = useRef(0);
+  const mobileSheetSnapRef = useRef<MobileSheetSnap>("default");
+  const sheetDragCleanupRef = useRef<(() => void) | null>(null);
+  const mapAreaRef = useRef<HTMLDivElement>(null);
 
-  const handleNavigate = (place: Place) => {
-    setNavTarget(place);
-    setDetailId(null);
+  useEffect(() => {
+    mobileSheetSnapRef.current = mobileSheetSnap;
+  }, [mobileSheetSnap]);
+
+  // 드래그 중 언마운트 시 window 리스너 누수 방지
+  useEffect(() => {
+    return () => {
+      sheetDragCleanupRef.current?.();
+      sheetDragCleanupRef.current = null;
+    };
+  }, []);
+
+  const resolveContainerHeight = () =>
+    mapAreaRef.current?.clientHeight ||
+    (typeof window !== "undefined" ? Math.max(window.innerHeight - 64, 1) : 640);
+
+  /** CSS 변수 — peek 은 px, 그 외·드래그 중은 % (SSR 시 window 불필요) */
+  const sheetHeightCss = useMemo(() => {
+    if (sheetDragPct != null) return `${sheetDragPct}%`;
+    if (mobileSheetSnap === "peek") return `${MOBILE_SHEET_PEEK_PX}px`;
+    return `${MOBILE_SHEET_SNAP_PCT[mobileSheetSnap]}%`;
+  }, [mobileSheetSnap, sheetDragPct]);
+
+  const handleSheetDragStart = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    // 이전 드래그가 남아 있으면 정리
+    sheetDragCleanupRef.current?.();
+
+    const containerHeight = resolveContainerHeight();
+    const startPct =
+      sheetDragPct != null ? sheetDragPct : sheetSnapToPercent(mobileSheetSnap, containerHeight);
+    sheetDragRef.current = { startY: e.clientY, startPct };
+    sheetDragLatestPctRef.current = startPct;
+    setSheetDragPct(startPct);
+
+    const onMove = (moveEvent: PointerEvent) => {
+      if (!sheetDragRef.current) return;
+      moveEvent.preventDefault();
+      const h = resolveContainerHeight();
+      const deltaPercent = ((sheetDragRef.current.startY - moveEvent.clientY) / h) * 100;
+      const next = Math.min(
+        92,
+        Math.max(sheetSnapToPercent("peek", h), sheetDragRef.current.startPct + deltaPercent)
+      );
+      sheetDragLatestPctRef.current = next;
+      setSheetDragPct(next);
+    };
+    const finish = () => {
+      const drag = sheetDragRef.current;
+      sheetDragRef.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      sheetDragCleanupRef.current = null;
+      if (!drag) {
+        setSheetDragPct(null);
+        return;
+      }
+      const h = resolveContainerHeight();
+      const pct = sheetDragLatestPctRef.current;
+      const moved = pct - drag.startPct;
+      const currentSnap = mobileSheetSnapRef.current;
+      let nextSnap: MobileSheetSnap;
+      if (Math.abs(moved) < 3) {
+        nextSnap = currentSnap;
+      } else if (Math.abs(moved) < 10) {
+        const idx = MOBILE_SHEET_SNAP_ORDER.indexOf(currentSnap);
+        nextSnap =
+          moved > 0
+            ? MOBILE_SHEET_SNAP_ORDER[Math.min(MOBILE_SHEET_SNAP_ORDER.length - 1, idx + 1)]
+            : MOBILE_SHEET_SNAP_ORDER[Math.max(0, idx - 1)];
+      } else {
+        nextSnap = nearestMobileSheetSnap(pct, h);
+      }
+      setMobileSheetSnap(nextSnap);
+      setSheetDragPct(null);
+    };
+    sheetDragCleanupRef.current = finish;
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
   };
 
-  const set = <K extends keyof Filters>(key: K, val: Filters[K]) =>
-    setFilters(prev => ({ ...prev, [key]: val }));
-  const toggleList = (key: "themes" | "accessibility", item: string) =>
-    setFilters(prev => {
-      const list = prev[key] as string[];
-      return { ...prev, [key]: list.includes(item) ? list.filter(x => x !== item) : [...list, item] };
+  const handleSheetHandleDoubleClick = () => {
+    setSheetDragPct(null);
+    setMobileSheetSnap((prev) => (prev === "full" ? "default" : "full"));
+  };
+
+  // 지도 영역 자체의 높이를 재서(헤더 등 제외) 시트가 가리는 실제 픽셀 높이를 구한다 —
+  // window.innerHeight 로 계산하면 과대 추정돼서 경로 안내 시 지도가 시트에 가려진 채 맞춰진다.
+  const [mapBottomOverlayPx, setMapBottomOverlayPx] = useState(0);
+  useEffect(() => {
+    const updateOverlay = () => {
+      const isMobile = mapOnly || window.innerWidth < 768; // Tailwind md 기준
+      if (!isMobile) {
+        setMapBottomOverlayPx(0);
+        return;
+      }
+      const containerHeight = mapAreaRef.current?.clientHeight ?? window.innerHeight;
+      if (sheetDragPct != null) {
+        setMapBottomOverlayPx(Math.round(containerHeight * (sheetDragPct / 100)));
+        return;
+      }
+      if (mobileSheetSnap === "peek") {
+        setMapBottomOverlayPx(Math.min(MOBILE_SHEET_PEEK_PX, containerHeight));
+        return;
+      }
+      setMapBottomOverlayPx(
+        Math.round(containerHeight * (MOBILE_SHEET_SNAP_PCT[mobileSheetSnap] / 100))
+      );
+    };
+    updateOverlay();
+    window.addEventListener("resize", updateOverlay);
+    return () => window.removeEventListener("resize", updateOverlay);
+  }, [mobileSheetSnap, sheetDragPct, mapOnly]);
+
+  // 지도 오른쪽 하단 "기능 목록" 드롭다운 — 코스 상세와 동일: 초기화/내 위치/확대·축소/테마 범례.
+  const [mapMenuOpen, setMapMenuOpen] = useState(false);
+  const mapMenuRef = useRef<HTMLDivElement>(null);
+  // 전체 화면을 덮는 배경 버튼 대신 document 클릭을 직접 듣고 메뉴 영역 바깥인지만 판정한다 —
+  // 그래야 드롭다운이 열려 있어도 지도 위 마우스휠/터치가 그대로 지도에 전달돼 확대·축소가 된다.
+  useEffect(() => {
+    if (!mapMenuOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (mapMenuRef.current && !mapMenuRef.current.contains(e.target as Node)) {
+        setMapMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [mapMenuOpen]);
+  const [showThemeLegend, setShowThemeLegend] = useState(false);
+  const [showZoomControl, setShowZoomControl] = useState(true);
+  // "초기화" 메뉴 항목용 — 값을 바꿀 때마다 resetViewTrigger 가 달라져서 지도가 대전 전체 화면으로 되돌아간다.
+  const [mapManualResetTrigger, setMapManualResetTrigger] = useState(0);
+
+  const { filters, set, toggleList, reset, activeCount } = useFilters({
+    themes: initialTheme ? [initialTheme] : []
+  });
+
+  const {
+    keyword,
+    setKeyword,
+    searchPlaces,
+    searchDetailId,
+    setSearchDetailId,
+    searchDetail,
+    isSearching,
+    areaCodes,
+    dongOptions,
+    likedIds,
+    refreshLiked,
+    tourismDetail,
+    isLoadingDetail,
+    handleSearch,
+    focusPlaceById,
+    topRatedPlaces,
+    hasActiveFilter,
+    mapResetTrigger,
+    searchPage,
+    setSearchPage,
+    searchTotal
+  } = usePlaceSearch({
+    accessibility: filters.accessibility,
+    gu: filters.gu,
+    dong: filters.dong,
+    favoritesOnly: filters.favoritesOnly,
+    headcount: filters.headcount,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    themes: filters.themes,
+    minRating: filters.minRating,
+    initialKeyword: initialQuery
+  });
+
+  useEffect(() => {
+    if (initialContentId) focusPlaceById(initialContentId);
+  }, [focusPlaceById, initialContentId]);
+
+  const {
+    location: myLocation,
+    status: myLocationStatus,
+    errorReason: myLocationError,
+    start: startMyLocation,
+    reset: resetMyLocation,
+    focusTrigger: focusMyLocationTrigger,
+    resetTrigger: myLocationResetTrigger
+  } = useMyLocation();
+
+  const [locationToastDismissed, setLocationToastDismissed] = useState(false);
+  const locationErrorCopy =
+    myLocationStatus === "error" ? getMyLocationErrorCopy(myLocationError) : null;
+  const showLocationErrorToast = Boolean(locationErrorCopy) && !locationToastDismissed;
+
+  useEffect(() => {
+    if (myLocationStatus !== "error") return;
+    const timer = window.setTimeout(() => setLocationToastDismissed(true), 5000);
+    return () => window.clearTimeout(timer);
+  }, [myLocationStatus, myLocationError]);
+
+  const handleStartMyLocation = () => {
+    setLocationToastDismissed(false);
+    startMyLocation();
+  };
+
+  // 내 위치 버튼 토글: 켜져 있으면 끄면서 대전 전체 화면으로, 꺼져 있으면 내 위치를 조회한다.
+  // 모바일에서는 시트 55%(지도 45%)로 맞춘 뒤 위치를 잡아, 보이는 지도 중앙에 오도록 한다.
+  const handleLocateClick = () => {
+    if (myLocationStatus === "active") {
+      resetMyLocation();
+    } else {
+      setSheetDragPct(null);
+      setMobileSheetSnap("default");
+      handleStartMyLocation();
+    }
+  };
+
+  const [routePath, setRoutePath] = useState<MapPathSegment[]>([]);
+  const [routeGuide, setRouteGuide] = useState<PlaceRouteGuideState | null>(null);
+  const [routeStops, setRouteStops] = useState<
+    { lat: number; lng: number; name?: string }[] | null
+  >(null);
+  const routeOptionsRef = useRef<RouteOption[] | null>(null);
+  const [selectedRouteId, setSelectedRouteId] = useState("0");
+  const routeRequestIdRef = useRef(0);
+  const pendingRouteModeRef = useRef<RouteMode | null>(null);
+  const handleStartRouteRef = useRef<(mode: RouteMode) => Promise<void>>(async () => {});
+
+  const handleSelectRoute = (id: string) => {
+    const options = routeOptionsRef.current;
+    if (!options) return;
+    const opt = options.find((r) => r.id === id);
+    if (!opt) return;
+    setSelectedRouteId(id);
+    setRoutePath([
+      buildRoutePathFromOption(
+        opt,
+        routeGuide?.mode ?? "car",
+        routeGuide?.mode === "walk" ? "#0d9488" : "#2563eb"
+      )
+    ]);
+    setRouteGuide((prev) =>
+      prev
+        ? {
+            ...prev,
+            distanceM: opt.distanceM,
+            durationSec: opt.durationSec,
+            tollFare: opt.tollFare,
+            selectedRouteId: id,
+            showTrafficLegend:
+              prev.mode === "car" && !opt.fallback && Boolean(opt.trafficChunks?.length)
+          }
+        : prev
+    );
+  };
+
+  const clearRouteGuide = () => {
+    routeRequestIdRef.current += 1;
+    pendingRouteModeRef.current = null;
+    routeOptionsRef.current = null;
+    setSelectedRouteId("0");
+    setRouteGuide(null);
+    setRoutePath([]);
+    setRouteStops(null);
+  };
+
+  const applyDirectionsResult = (
+    result: Awaited<ReturnType<typeof fetchDirections>>,
+    mode: RouteMode,
+    stops: { lat: number; lng: number; name?: string }[],
+    onOpenKakao: () => void
+  ) => {
+    const options = result.routes?.length ? result.routes : [pickRouteOption(result)];
+    const multi = options.length > 1 ? options : null;
+    routeOptionsRef.current = multi;
+    const primary = pickRouteOption(result, "0");
+    setSelectedRouteId(primary.id);
+    setRoutePath([
+      buildRoutePathFromOption(primary, mode, mode === "walk" ? "#0d9488" : "#2563eb")
+    ]);
+    const showTrafficLegend =
+      mode === "car" && !result.fallback && Boolean(primary.trafficChunks?.length);
+    setRouteGuide({
+      mode,
+      loading: false,
+      error: result.fallback ? "대략 경로예요. 정확한 안내는 카카오맵에서 시작하세요." : null,
+      distanceM: primary.distanceM,
+      durationSec: primary.durationSec,
+      tollFare: primary.tollFare,
+      routeOptions: multi,
+      selectedRouteId: primary.id,
+      onSelectRoute: handleSelectRoute,
+      showTrafficLegend,
+      onOpenKakao,
+      onClear: clearRouteGuide
+    });
+  };
+
+  const handleStartRoute = async (mode: RouteMode) => {
+    if (!searchDetail) {
+      pendingRouteModeRef.current = null;
+      return;
+    }
+
+    if (!myLocation || myLocationStatus !== "active") {
+      pendingRouteModeRef.current = mode;
+      handleStartMyLocation();
+      setRouteGuide({
+        mode,
+        loading: true,
+        error: null,
+        distanceM: null,
+        durationSec: null,
+        onOpenKakao: () => {},
+        onClear: clearRouteGuide
+      });
+      return;
+    }
+
+    pendingRouteModeRef.current = null;
+    const origin = {
+      lat: myLocation.lat,
+      lng: myLocation.lng,
+      name: "내 위치"
+    };
+    const destination = {
+      lat: searchDetail.lat,
+      lng: searchDetail.lng,
+      name: searchDetail.name
+    };
+    const stops = [origin, destination];
+    const requestId = ++routeRequestIdRef.current;
+    setRouteStops(stops);
+    setRouteGuide({
+      mode,
+      loading: true,
+      error: null,
+      distanceM: null,
+      durationSec: null,
+      onOpenKakao: () => openKakaoMapRoute(stops, mode),
+      onClear: clearRouteGuide
     });
 
-  const activeFilterCount = [
-    filters.accessibility.length > 0, filters.gu, filters.themes.length > 0, filters.headcount > 1,
-    filters.dateFrom || filters.dateTo, filters.minRating > 0, filters.favoritesOnly, hotFilter,
-  ].filter(Boolean).length;
+    try {
+      const result = await fetchDirections({ origin, destination, mode });
+      if (requestId !== routeRequestIdRef.current) return;
+      applyDirectionsResult(result, mode, stops, () => openKakaoMapRoute(stops, mode));
+    } catch (e) {
+      if (requestId !== routeRequestIdRef.current) return;
+      routeOptionsRef.current = null;
+      setSelectedRouteId("0");
+      setRoutePath([{ points: stops, color: "#94a3b8", dashed: true }]);
+      setRouteGuide({
+        mode,
+        loading: false,
+        error:
+          e instanceof Error
+            ? `${e.message} 카카오맵으로 안내할 수 있어요.`
+            : "경로 미리보기에 실패했어요. 카카오맵으로 안내할 수 있어요.",
+        distanceM: null,
+        durationSec: null,
+        onOpenKakao: () => openKakaoMapRoute(stops, mode),
+        onClear: clearRouteGuide
+      });
+    }
+  };
 
-  const visiblePlaces = hotFilter ? PLACES.filter(p => p.hot) : PLACES;
-  const detailPlace = PLACES.find(p => p.id === detailId);
+  useEffect(() => {
+    handleStartRouteRef.current = handleStartRoute;
+  });
+
+  // 경로안내 중 GPS가 준비되면 자동으로 길찾기 재시도
+  useEffect(() => {
+    const pending = pendingRouteModeRef.current;
+    if (!pending) return;
+
+    if (myLocationStatus === "active" && myLocation) {
+      const timer = window.setTimeout(() => {
+        void handleStartRouteRef.current(pending);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    if (myLocationStatus === "error") {
+      const timer = window.setTimeout(() => {
+        pendingRouteModeRef.current = null;
+        const copy = getMyLocationErrorCopy(myLocationError);
+        setRouteGuide((prev) =>
+          prev
+            ? {
+                ...prev,
+                loading: false,
+                error: `${copy.title} ${copy.help}`
+              }
+            : null
+        );
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [myLocation, myLocationStatus, myLocationError]);
+
+  const activeFilterCount = activeCount;
+  const resetFilters = () => {
+    reset();
+  };
+
+  const selectPlace = (id: string) => {
+    clearRouteGuide();
+    setSearchDetailId(id);
+    // 이름만 보이는 상태면 장소 상세를 볼 수 있게 기본 비율로 펼친다.
+    setSheetDragPct(null);
+    setMobileSheetSnap((snap) => (snap === "peek" ? "default" : snap));
+  };
+
+  const backFromDetail = () => {
+    clearRouteGuide();
+    setSearchDetailId(null);
+  };
+
+  // 필터/검색을 아무것도 안 켰을 때만 핫플레이스를 기본으로 보여준다.
+  // 필터를 켰는데 결과가 0개면(searchPlaces=[]) 그대로 빈 목록으로 둬서 "결과 없음"이 보이게 한다.
+  const displayPlaces = hasActiveFilter ? searchPlaces : topRatedPlaces;
+  const markerPlaces = hasActiveFilter ? searchPlaces : topRatedPlaces;
 
   return (
     <div
-      className="relative -mx-4 md:-mx-6 -mt-6 -mb-24 flex overflow-hidden"
+      className="relative -mx-4 -mt-6 -mb-24 flex overflow-hidden md:-mx-6"
       style={{ height: "calc(100vh - 64px)" }}
     >
-      {/* ── LEFT SIDEBAR (desktop only) ── */}
-      <aside className="hidden md:flex flex-col w-72 shrink-0 border-r border-gray-200 bg-white overflow-hidden relative">
-
-        {detailPlace ? (
-          /* 상세 패널 */
-          <PlaceDetailPanel place={detailPlace} onBack={() => setDetailId(null)} onNavigate={handleNavigate} />
-        ) : (
-          /* 목록 패널 */
-          <>
-            {/* Search */}
-            <div className="shrink-0 p-3 border-b border-gray-100">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="장소 검색"
-                  value={hotFilter ? "핫플레이스" : undefined}
-                  readOnly={hotFilter}
-                  onChange={() => {}}
-                  className={`w-full pl-9 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 ${
-                    hotFilter ? "pr-8 border-orange-300 bg-orange-50 text-orange-700 font-medium" : "pr-4 border-gray-200"
-                  }`}
-                />
-                {hotFilter && (
-                  <button
-                    onClick={() => setHotFilter(false)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-orange-400 hover:text-orange-600 transition-colors"
-                    aria-label="핫플레이스 필터 해제"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Filter toggle */}
-            <div className="shrink-0 border-b border-gray-100">
-              <div className="flex items-center">
-                <button onClick={() => setShowFilters(!showFilters)}
-                  className="flex-1 flex items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <SlidersHorizontal className="w-4 h-4" />
-                    <span>필터</span>
-                    {activeFilterCount > 0 && (
-                      <span className="w-4 h-4 bg-brand-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold">{activeFilterCount}</span>
-                    )}
-                  </div>
-                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showFilters ? "rotate-180" : ""}`} />
-                </button>
-                {activeFilterCount > 0 && (
-                  <button
-                    onClick={() => { setFilters(DEFAULT_FILTERS); setHotFilter(false); }}
-                    className="px-3 py-2.5 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors border-l border-gray-100 shrink-0"
-                  >
-                    초기화
-                  </button>
-                )}
-              </div>
-              {showFilters && (
-                <div className="px-3 pb-3 pt-2 border-t border-gray-100 overflow-y-auto" style={{ maxHeight: "45vh" }}>
-                  <FilterFields filters={filters} set={set} toggleList={toggleList} compact />
-                </div>
-              )}
-            </div>
-
-            {/* Place list */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 sticky top-0">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                  장소 {visiblePlaces.length}개
-                </span>
-              </div>
-              {visiblePlaces.map(place => (
-                <button key={place.id}
-                  onClick={() => setDetailId(place.id)}
-                  className="w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors group"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate group-hover:text-brand-700 transition-colors">{place.name}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium"
-                          style={{ background: place.bg, color: place.color }}>{place.category}</span>
-                        <div className="flex items-center gap-0.5 text-xs text-gray-500">
-                          <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />{place.rating}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-xs text-gray-400 shrink-0 mt-0.5">{place.distance}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+      {/* ── 검색 패널 — 데스크톱은 왼쪽 고정 사이드바, 모바일(및 mapOnly)은 코스 상세와 동일한
+          드래그 가능한 하단 시트. 검색 목록 ↔ 상세 전환도 PlaceSearchSidebar 가 내부에서 처리한다. ── */}
+      <aside
+        className={
+          mapOnly
+            ? "border-hairline absolute inset-x-0 bottom-0 z-30 flex h-[var(--sheet-h)] shrink-0 flex-col overflow-hidden rounded-t-2xl border-t bg-white shadow-2xl"
+            : "border-hairline absolute inset-x-0 bottom-0 z-30 flex h-[var(--sheet-h)] shrink-0 flex-col overflow-hidden rounded-t-2xl border-t bg-white shadow-2xl md:static md:inset-auto md:z-auto md:flex md:h-auto md:w-72 md:rounded-none md:border-t-0 md:border-r md:shadow-none"
+        }
+        style={{ "--sheet-h": sheetHeightCss } as CSSProperties}
+      >
+        {/* 하단 시트 핸들 — 드래그 후 peek/50%/55%/full 스냅. mapOnly 는 항상, 일반 모드는 모바일만. */}
+        <div
+          role="slider"
+          tabIndex={0}
+          aria-valuemin={0}
+          aria-valuemax={3}
+          aria-valuenow={MOBILE_SHEET_SNAP_ORDER.indexOf(mobileSheetSnap)}
+          aria-valuetext={
+            mobileSheetSnap === "peek"
+              ? "장소 이름만"
+              : mobileSheetSnap === "half"
+                ? "절반"
+                : mobileSheetSnap === "full"
+                  ? "거의 전체"
+                  : "기본(지도 45%)"
+          }
+          aria-label="검색·장소 정보 창 높이 조절"
+          className={`shrink-0 touch-none items-center justify-center py-3 active:cursor-grabbing ${mapOnly ? "flex" : "flex md:hidden"} cursor-grab`}
+          onPointerDown={handleSheetDragStart}
+          onDoubleClick={handleSheetHandleDoubleClick}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              const idx = MOBILE_SHEET_SNAP_ORDER.indexOf(mobileSheetSnap);
+              setMobileSheetSnap(
+                MOBILE_SHEET_SNAP_ORDER[Math.min(MOBILE_SHEET_SNAP_ORDER.length - 1, idx + 1)]
+              );
+            } else if (e.key === "ArrowDown") {
+              e.preventDefault();
+              const idx = MOBILE_SHEET_SNAP_ORDER.indexOf(mobileSheetSnap);
+              setMobileSheetSnap(MOBILE_SHEET_SNAP_ORDER[Math.max(0, idx - 1)]);
+            }
+          }}
+        >
+          <span className="bg-stone/40 h-1 w-10 rounded-full" aria-hidden />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <PlaceSearchSidebar
+            keyword={keyword}
+            setKeyword={setKeyword}
+            onSearch={handleSearch}
+            isSearching={isSearching}
+            filters={filters}
+            set={set}
+            toggleList={toggleList}
+            guOptions={areaCodes.map((a) => a.name)}
+            dongOptions={dongOptions}
+            activeCount={activeFilterCount}
+            onResetFilters={resetFilters}
+            defaultFilterOpen
+            places={displayPlaces}
+            searchCount={searchPlaces.length}
+            hasActiveFilter={hasActiveFilter}
+            onSelectPlace={selectPlace}
+            searchPage={searchPage}
+            searchTotal={searchTotal}
+            onSearchPageChange={setSearchPage}
+            searchDetail={searchDetail}
+            tourismDetail={tourismDetail}
+            isLoadingDetail={isLoadingDetail}
+            onBackFromDetail={backFromDetail}
+            onLikeChange={refreshLiked}
+            onStartRoute={handleStartRoute}
+            routeGuide={routeGuide}
+          />
+        </div>
       </aside>
 
       {/* ── MAP AREA ── */}
-      <div className="flex-1 relative overflow-hidden">
-
-        {/* Mobile search + filter bar */}
-        <div className="md:hidden absolute top-3 left-3 right-3 z-20 flex gap-2">
-          <div className="flex-1 relative bg-white rounded-xl shadow-lg border border-gray-100">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input type="text" placeholder="장소 검색"
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm bg-transparent focus:outline-none" />
-          </div>
-          <button onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className={`relative px-3 rounded-xl shadow-lg transition-colors ${showMobileFilters ? "bg-brand-700 text-white" : "bg-brand-600 text-white hover:bg-brand-700"}`}>
-            <Filter className="w-4 h-4" />
-            {activeFilterCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">{activeFilterCount}</span>
-            )}
-          </button>
-        </div>
-
-        {/* Mobile filter panel */}
-        {showMobileFilters && (
-          <div className="md:hidden absolute top-16 left-3 right-3 z-30 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 max-h-[60vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-bold text-gray-800">필터</p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => { setFilters(DEFAULT_FILTERS); setHotFilter(false); }} className="text-xs text-red-400 hover:text-red-600 underline">초기화</button>
-                <button onClick={() => setShowMobileFilters(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
-              </div>
-            </div>
-            <FilterFields filters={filters} set={set} toggleList={toggleList} />
-          </div>
-        )}
-
-        {/* SVG Map */}
-        <svg viewBox="0 0 1000 700" className="w-full h-full" preserveAspectRatio="xMidYMid slice"
-          onClick={() => setDetailId(null)}>
-          <rect width="1000" height="700" fill="#f2efe9" />
-          <rect x="245" y="160" width="185" height="155" rx="8" fill="#c8e6c9" />
-          <rect x="470" y="90" width="175" height="155" rx="8" fill="#c8e6c9" />
-          <rect x="685" y="385" width="145" height="115" rx="8" fill="#c8e6c9" />
-          <path d="M 152 0 C 144 110,170 195,160 305 C 150 390,128 445,150 535 C 162 582,156 642,146 700" stroke="#aedcf8" strokeWidth="26" fill="none" strokeLinecap="round" />
-          <path d="M 0 458 C 52 442,104 462,150 452" stroke="#aedcf8" strokeWidth="18" fill="none" strokeLinecap="round" />
-          <line x1="0" y1="130" x2="1000" y2="130" stroke="#fff" strokeWidth="14" />
-          <line x1="0" y1="360" x2="1000" y2="360" stroke="#fff" strokeWidth="16" />
-          <line x1="0" y1="540" x2="1000" y2="540" stroke="#fff" strokeWidth="12" />
-          <line x1="200" y1="0" x2="200" y2="700" stroke="#fff" strokeWidth="12" />
-          <line x1="440" y1="0" x2="440" y2="700" stroke="#fff" strokeWidth="16" />
-          <line x1="660" y1="0" x2="660" y2="700" stroke="#fff" strokeWidth="12" />
-          <line x1="870" y1="0" x2="870" y2="700" stroke="#fff" strokeWidth="10" />
-          <line x1="0" y1="240" x2="1000" y2="240" stroke="#fff" strokeWidth="7" />
-          <line x1="0" y1="450" x2="1000" y2="450" stroke="#fff" strokeWidth="7" />
-          <line x1="0" y1="630" x2="1000" y2="630" stroke="#fff" strokeWidth="6" />
-          <line x1="90" y1="0" x2="90" y2="700" stroke="#fff" strokeWidth="6" />
-          <line x1="320" y1="0" x2="320" y2="700" stroke="#fff" strokeWidth="7" />
-          <line x1="550" y1="0" x2="550" y2="700" stroke="#fff" strokeWidth="7" />
-          <line x1="760" y1="0" x2="760" y2="700" stroke="#fff" strokeWidth="7" />
-          <line x1="960" y1="0" x2="960" y2="700" stroke="#fff" strokeWidth="5" />
-          <line x1="200" y1="360" x2="440" y2="130" stroke="#fff" strokeWidth="9" />
-          <line x1="660" y1="360" x2="870" y2="130" stroke="#fff" strokeWidth="8" />
-          <line x1="200" y1="360" x2="90" y2="540" stroke="#fff" strokeWidth="7" />
-          {BLOCKS.map(([x,y,w,h],i) => <rect key={i} x={x} y={y} width={w} height={h} rx={2} fill="#e2ddd6" pointerEvents="none" />)}
-          <text x="337" y="244" fontSize="12" fill="#388e3c" fontFamily="sans-serif" textAnchor="middle" fontWeight="600" pointerEvents="none">한밭수목원</text>
-          <text x="557" y="170" fontSize="12" fill="#388e3c" fontFamily="sans-serif" textAnchor="middle" fontWeight="600" pointerEvents="none">엑스포과학공원</text>
-          <text x="757" y="447" fontSize="11" fill="#388e3c" fontFamily="sans-serif" textAnchor="middle" pointerEvents="none">대청호</text>
-          <text x="148" y="295" fontSize="11" fill="#5ba8d4" fontFamily="sans-serif" textAnchor="middle" transform="rotate(-80 148 295)" pointerEvents="none">갑천</text>
-          <text x="72" y="450" fontSize="11" fill="#5ba8d4" fontFamily="sans-serif" textAnchor="middle" pointerEvents="none">유등천</text>
-          <text x="620" y="122" fontSize="11" fill="#bbb" fontFamily="sans-serif" textAnchor="middle" pointerEvents="none">충남대로</text>
-          <text x="620" y="350" fontSize="11" fill="#bbb" fontFamily="sans-serif" textAnchor="middle" pointerEvents="none">대덕대로</text>
-          {/* 경로 선 */}
-          {navTarget && (() => {
-            const dest = PLACES.find(p => p.id === navTarget.id);
-            if (!dest) return null;
-            const cpx = (MY_LOCATION.cx + dest.cx) / 2;
-            const cpy = Math.min(MY_LOCATION.cy, dest.cy - 14) - 60;
-            return (
-              <path
-                d={`M ${MY_LOCATION.cx} ${MY_LOCATION.cy} Q ${cpx} ${cpy} ${dest.cx} ${dest.cy - 14}`}
-                stroke="#2563eb" strokeWidth="3.5" strokeDasharray="10 6"
-                fill="none" strokeLinecap="round" opacity="0.85"
-              />
-            );
-          })()}
-
-          {/* 현재 위치 마커 */}
-          <circle cx={MY_LOCATION.cx} cy={MY_LOCATION.cy} r="20" fill="#3b82f6" opacity="0.12" />
-          <circle cx={MY_LOCATION.cx} cy={MY_LOCATION.cy} r="12" fill="#3b82f6" opacity="0.2" />
-          <circle cx={MY_LOCATION.cx} cy={MY_LOCATION.cy} r="7" fill="#2563eb" />
-          <circle cx={MY_LOCATION.cx} cy={MY_LOCATION.cy} r="3" fill="white" />
-          <text x={MY_LOCATION.cx} y={MY_LOCATION.cy + 22} fontSize="10" fill="#1d4ed8"
-            fontFamily="sans-serif" textAnchor="middle" fontWeight="600">현재 위치</text>
-
-          {PLACES.map(({ id, cx, cy, color }) => {
-            const sel = detailId === id;
-            const isNav = navTarget?.id === id;
-            return (
-              <g key={id} onClick={e => { e.stopPropagation(); setDetailId(id); }} style={{ cursor: "pointer" }}>
-                {sel && <circle cx={cx} cy={cy - 14} r={28} fill={color} opacity="0.15" />}
-                {sel && <circle cx={cx} cy={cy - 14} r={20} fill={color} opacity="0.2" />}
-                {isNav && <circle cx={cx} cy={cy - 14} r={24} fill="#2563eb" opacity="0.15" />}
-                <ellipse cx={cx} cy={cy + 4} rx={9} ry={5} fill="rgba(0,0,0,0.2)" />
-                <circle cx={cx} cy={cy - 14} r={13} fill={color} />
-                <polygon points={`${cx - 7},${cy - 5} ${cx + 7},${cy - 5} ${cx},${cy + 6}`} fill={color} />
-                <circle cx={cx} cy={cy - 14} r={5} fill="white" />
-              </g>
-            );
+      <div ref={mapAreaRef} className="relative flex-1 overflow-hidden">
+        <KakaoMap
+          markers={markerPlaces.map((sp): MapMarker => {
+            if (sp.source === "kakao") {
+              // 눈물방울 핀(카카오 옐로우 배경 + 파란 중앙 점)으로 카카오 검색 결과임을 표시.
+              return {
+                id: sp.id,
+                lat: sp.lat,
+                lng: sp.lng,
+                color: "#FEE500",
+                borderColor: "#2563EB",
+                shape: "teardrop"
+              };
+            }
+            if (filters.favoritesOnly && likedIds.has(sp.id)) {
+              return { id: sp.id, lat: sp.lat, lng: sp.lng, color: "#ef4444", shape: "heart" };
+            }
+            return {
+              id: sp.id,
+              lat: sp.lat,
+              lng: sp.lng,
+              color: getCategoryColor(sp.categoryCode)
+            };
           })}
-        </svg>
+          selectedId={searchDetailId}
+          onSelect={(id) => selectPlace(id)}
+          onDeselect={() => {
+            backFromDetail();
+          }}
+          myLocation={myLocation}
+          focusMyLocationTrigger={focusMyLocationTrigger}
+          resetViewTrigger={mapResetTrigger + myLocationResetTrigger + mapManualResetTrigger}
+          showZoomControl={showZoomControl}
+          path={routePath}
+          fitPathKey={
+            routeGuide && !routeGuide.loading
+              ? `${routeGuide.mode}-${routeGuide.distanceM ?? "x"}-${selectedRouteId}-${routePath.length}`
+              : null
+          }
+          pathSummary={
+            routeGuide &&
+            !routeGuide.loading &&
+            routeGuide.distanceM != null &&
+            routeGuide.durationSec != null
+              ? {
+                  distanceM: routeGuide.distanceM,
+                  durationSec: routeGuide.durationSec,
+                  tollFare: routeGuide.tollFare ?? 0
+                }
+              : null
+          }
+          bottomOverlayPx={mapBottomOverlayPx}
+        />
 
-        {/* Mobile detail overlay */}
-        {detailPlace && (
-          <div className="md:hidden absolute inset-0 z-40 bg-white overflow-y-auto">
-            <PlaceDetailPanel place={detailPlace} onBack={() => setDetailId(null)} onNavigate={handleNavigate} />
-          </div>
-        )}
-
-        {/* Zoom controls */}
-        <div className="absolute top-3 right-3 flex flex-col gap-1 z-10">
-          <button className="w-8 h-8 bg-white border border-gray-200 rounded-lg shadow-md flex items-center justify-center text-gray-700 hover:bg-gray-50 font-bold text-lg leading-none">+</button>
-          <button className="w-8 h-8 bg-white border border-gray-200 rounded-lg shadow-md flex items-center justify-center text-gray-700 hover:bg-gray-50 font-bold text-lg leading-none">−</button>
-        </div>
-
-        {/* 경로 안내 정보 바 */}
-        {navTarget && !detailPlace && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white rounded-2xl shadow-xl border border-blue-100 px-4 py-3 flex items-center gap-4 min-w-[260px]">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-50 shrink-0">
-              <Navigation className="w-5 h-5 text-blue-500" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] text-gray-400 font-medium">목적지</p>
-              <p className="text-sm font-bold text-gray-800 truncate">{navTarget.name}</p>
-            </div>
-            <div className="text-center shrink-0">
-              <p className="text-[10px] text-gray-400 font-medium">거리</p>
-              <p className="text-sm font-semibold text-blue-600">{navTarget.distance}</p>
-            </div>
+        {routeGuide && !searchDetail ? (
+          <div className="border-hairline bg-background absolute bottom-20 left-3 z-20 max-w-xs rounded-2xl border p-3 shadow-lg md:bottom-4">
+            <p className="text-ink text-xs font-semibold">
+              {routeGuide.mode === "walk" ? "도보" : "자동차"} 경로
+              {routeGuide.loading ? " 불러오는 중…" : ""}
+            </p>
+            {routeGuide.distanceM != null && routeGuide.durationSec != null ? (
+              <p className="text-stone mt-1 text-xs">
+                {formatRouteDistance(routeGuide.distanceM)} ·{" "}
+                {formatRouteDuration(routeGuide.durationSec)}
+                {routeGuide.tollFare != null && routeGuide.tollFare > 0
+                  ? ` · ${formatRouteTollFare(routeGuide.tollFare)}`
+                  : ""}
+              </p>
+            ) : null}
+            {routeGuide.mode === "car" &&
+            routeGuide.routeOptions &&
+            routeGuide.routeOptions.length > 1 &&
+            routeGuide.onSelectRoute ? (
+              <div className="mt-2">
+                <RouteOptionPicker
+                  options={routeGuide.routeOptions}
+                  selectedId={routeGuide.selectedRouteId ?? "0"}
+                  onSelect={routeGuide.onSelectRoute}
+                  disabled={routeGuide.loading}
+                />
+              </div>
+            ) : null}
+            {routeGuide.showTrafficLegend ? (
+              <div className="mt-2">
+                <TrafficLegend />
+              </div>
+            ) : null}
             <button
-              onClick={() => setNavTarget(null)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0"
-              aria-label="경로 안내 종료"
+              type="button"
+              onClick={() => routeStops && openKakaoMapRoute(routeStops, routeGuide.mode)}
+              className="bg-brand-700 mt-2 w-full rounded-lg py-2 text-xs font-semibold text-white"
             >
-              <X className="w-4 h-4" />
+              카카오맵에서 안내 시작
             </button>
           </div>
+        ) : null}
+        {showLocationErrorToast && locationErrorCopy ? (
+          <div
+            id="map-location-error"
+            role="alert"
+            className="border-hairline bg-background absolute right-4 z-[60] w-[min(16rem,calc(100%-2rem))] rounded-2xl border p-3.5 shadow-lg"
+            style={{ bottom: mapBottomOverlayPx + 16 + 56 }}
+          >
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-ink text-sm font-semibold tracking-[-0.01em]">
+                  {locationErrorCopy.title}
+                </p>
+                <p className="text-stone mt-1 text-xs leading-relaxed">{locationErrorCopy.help}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLocationToastDismissed(true)}
+                className="text-stone hover:text-ink hover:bg-surface-soft -mt-0.5 -mr-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors"
+                aria-label="안내 닫기"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* 테마 색상 범례 — 확대/축소 컨트롤(카카오 기본 줌 컨트롤, 데스크톱에서만 오른쪽 위에 뜸)이
+              켜져 있을 땐 윗변을 맞추고 바로 왼쪽에, 꺼져 있으면(모바일도 마찬가지) 오른쪽 끝에 붙인다. */}
+        {showThemeLegend && (
+          <div
+            className={`border-hairline absolute top-0.5 right-3 z-[55] rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "md:right-11" : ""}`}
+          >
+            <p className="text-steel mb-1.5 text-[11px] font-semibold">테마 색상</p>
+            <div className="space-y-1">
+              {Object.entries(LCLSSYSTM1_COLORS).map(([code, color]) => (
+                <div key={code} className="flex items-center gap-1.5 text-xs text-gray-700">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: color }}
+                  />
+                  {LCLSSYSTM1_LABELS[code] ?? code}
+                </div>
+              ))}
+              {/* 카카오 검색 결과 마커는 카카오 브랜드 옐로우(#FEE500)로 표시된다 */}
+              <div className="flex items-center gap-1.5 text-xs text-gray-700">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: "#FEE500" }}
+                />
+                카카오
+              </div>
+            </div>
+          </div>
         )}
+
+        {/* 지도 기능 드롭다운 — 초기화 / 내 위치 / 확대·축소 / 테마 범례.
+              모바일(및 mapOnly)에선 검색 패널이 하단 시트로 뜨므로, 그 시트 바로 위에 버튼이 오도록
+              mapBottomOverlayPx(시트가 가리는 높이)만큼 띄운다. 데스크톱은 overlay가 0이라
+              기존 bottom-4(16px)와 동일하게 유지된다. */}
+        <div
+          ref={mapMenuRef}
+          className="absolute right-4 z-[61]"
+          style={{ bottom: mapBottomOverlayPx + 16 }}
+        >
+          {mapMenuOpen && (
+            <div className="border-hairline absolute right-0 bottom-14 w-32 overflow-hidden rounded-xl border bg-white py-1 shadow-lg">
+              <button
+                type="button"
+                onClick={() => setMapManualResetTrigger((n) => n + 1)}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <RotateCcw className="h-4 w-4 shrink-0 text-gray-500" />
+                초기화
+              </button>
+              <button
+                type="button"
+                onClick={handleLocateClick}
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <span className="flex items-center gap-2">
+                  <LocateFixed
+                    className={`h-4 w-4 shrink-0 text-gray-500 ${myLocationStatus === "locating" ? "animate-pulse" : ""}`}
+                  />
+                  내 위치
+                </span>
+                {myLocationStatus === "active" && (
+                  <Check className="text-brand-600 h-4 w-4 shrink-0" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowZoomControl((v) => !v)}
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <span className="flex items-center gap-2">
+                  <ZoomIn className="h-4 w-4 shrink-0 text-gray-500" />
+                  확대/축소
+                </span>
+                {showZoomControl && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowThemeLegend((v) => !v)}
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <span className="flex items-center gap-2">
+                  <Palette className="h-4 w-4 shrink-0 text-gray-500" />
+                  테마 범례
+                </span>
+                {showThemeLegend && <Check className="text-brand-600 h-4 w-4 shrink-0" />}
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setMapMenuOpen((v) => !v)}
+            className={`flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-colors ${
+              myLocationStatus === "error"
+                ? "border-error/30 text-error border bg-white hover:bg-red-50"
+                : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+            aria-label="지도 기능 목록"
+            aria-expanded={mapMenuOpen}
+            aria-describedby={showLocationErrorToast ? "map-location-error" : undefined}
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
+        </div>
       </div>
     </div>
   );
+}
+
+function getMyLocationErrorCopy(errorReason: MyLocationErrorReason): {
+  title: string;
+  help: string;
+} {
+  if (errorReason === "denied") {
+    return {
+      title: "위치 권한이 꺼져 있어요",
+      help: "브라우저에서 위치 권한을 켜면 내 위치를 지도에 표시할 수 있어요."
+    };
+  }
+  if (errorReason === "outside_daejeon") {
+    return {
+      title: "대전 밖 위치예요",
+      help: "내 위치는 대전 안에서만 표시해요. 위치 없이도 장소 검색은 가능해요."
+    };
+  }
+  return {
+    title: "위치를 다시 확인해 주세요",
+    help: "위치를 확인하지 못했어요. 위치 없이 계속 둘러볼 수 있어요."
+  };
 }
