@@ -10,9 +10,6 @@ public class DelegationService extends
     public void onCreate() {
         super.onCreate();
 
-        
             registerExtraCommandHandler(new LocationDelegationExtraCommandHandler());
-        
     }
 }
-
