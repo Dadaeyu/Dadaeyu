@@ -1,6 +1,7 @@
 export const ALLOWED_IMAGE_HOSTS = new Set(["tong.visitkorea.or.kr"]);
 export const ALLOWED_IMAGE_CONTENT_TYPES = new Set([
   "image/avif",
+  "image/bmp",
   "image/gif",
   "image/jpeg",
   "image/jpg",

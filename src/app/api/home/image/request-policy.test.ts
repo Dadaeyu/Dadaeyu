@@ -92,6 +92,18 @@ test("홈 이미지 프록시는 upstream content-type과 declared 8MB 제한을
   );
 });
 
+test("홈 이미지 프록시는 한국관광공사의 BMP 대표 사진을 허용한다", () => {
+  assert.equal(
+    validateHomeImageResponse({
+      contentLength: 1_768_194,
+      contentType: "image/bmp",
+      hasBody: true,
+      ok: true
+    }),
+    null
+  );
+});
+
 test("홈 이미지 프록시는 stream을 8MB 한도 안에서만 결합한다", async () => {
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
