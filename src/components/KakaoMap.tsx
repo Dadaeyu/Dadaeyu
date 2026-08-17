@@ -622,8 +622,9 @@ export default function KakaoMap({
 
   /**
    * 내 위치를 "시트에 가려지지 않은 지도 영역"의 세로 중앙에 둔다.
-   * 전체 컨테이너 기준 panTo 만 하면 시트 때문에 핀이 아래로 치우친다.
-   * projection 으로 목표 픽셀 → 새 중심 좌표를 계산하고, 실패 시 setBounds(bottom padding) 로 폴백.
+   * 전체 컨테이너 기준 setCenter 만 하면 시트 때문에 핀이 아래로 치우친다.
+   * 1) setBounds bottom padding (경로 안내와 동일, 가장 안정적)
+   * 2) projection + panBy 폴백
    */
   const centerLatLngInVisibleMap = (
     map: kakao.maps.Map,
@@ -638,38 +639,26 @@ export default function KakaoMap({
       return;
     }
 
-    const container = containerRef.current;
-    if (container) {
-      try {
-        // 1) 먼저 중심으로 두고 스케일/투영을 맞춘 뒤
-        map.setCenter(latlng);
-        map.relayout();
-        const proj = map.getProjection();
-        const h = container.clientHeight;
-        const w = container.clientWidth;
-        // 보이는 영역(상단 h - overlay)의 세로 중앙 픽셀
-        const visibleCenterY = (h - bottomOverlay) / 2;
-        // 현재 latlng 는 컨테이너 기하 중심(h/2) 근처. 목표 픽셀과의 차이만큼 중심을 이동.
-        const current = proj.containerPointFromCoords(latlng);
-        // latlng 를 visibleCenterY 에 두려면, 지도 중심을 (현재 중심 픽셀 + (current.y - visibleCenterY)) 로
-        // → 새 중심이 될 컨테이너 좌표는 기하 중심에서 (current.y - visibleCenterY) 만큼 아래
-        const offsetY = current.y - visibleCenterY;
-        const newCenterPoint = new K.Point(w / 2, h / 2 + offsetY);
-        const newCenter = proj.coordsFromContainerPoint(newCenterPoint);
-        map.setCenter(newCenter);
-        return;
-      } catch {
-        // projection 미지원 등 — setBounds 폴백
-      }
+    try {
+      const bounds = new K.LatLngBounds();
+      bounds.extend(latlng);
+      const level = map.getLevel();
+      // bottom padding = 시트 높이 → 점이 남은 상단 영역의 중앙에 가깝게 배치됨
+      map.setBounds(bounds, 40, 28, bottomOverlay + 20, 28);
+      map.setLevel(level, { animate: false });
+      return;
+    } catch {
+      // setBounds 실패 시 panBy
     }
 
-    // 폴백: 경로 맞춤과 동일하게 bottom padding 으로 보이는 영역 중앙에 맞춤
-    const bounds = new K.LatLngBounds();
-    bounds.extend(latlng);
-    // 단일 점은 bounds 가 너무 작아 줌이 과할 수 있어 현재 레벨 유지 + setBounds
-    const level = map.getLevel();
-    map.setBounds(bounds, 48, 32, bottomOverlay + 24, 32);
-    map.setLevel(level, { animate: false });
+    try {
+      map.setCenter(latlng);
+      map.relayout();
+      // 중심을 아래로 밀어 핀이 화면 위쪽(보이는 영역 중앙)으로 올라가게 함
+      map.panBy(0, Math.round(bottomOverlay / 2));
+    } catch {
+      map.setCenter(latlng);
+    }
   };
 
   // [내 위치로 이동] focusMyLocationTrigger가 바뀔 때 1회만 이동
@@ -678,21 +667,16 @@ export default function KakaoMap({
     if (fitPathKey != null && fitPathKey !== "") return;
     if (!focusMyLocationTrigger || !myLocation || !mapRef.current || !window.kakao?.maps) return;
     const K = window.kakao.maps;
-    const map = mapRef.current;
     const latlng = new K.LatLng(myLocation.lat, myLocation.lng);
 
-    // 시트 스냅(55%) 반영 직후 overlay 가 한 프레임 늦을 수 있어 짧게 재시도
+    // 시트 높이 state 반영 직후 한 번 더 맞춤 (루프 없이 2회만)
     const apply = () => {
       if (!mapRef.current) return;
       centerLatLngInVisibleMap(mapRef.current, latlng, bottomOverlayPxRef.current);
     };
     apply();
-    const t1 = window.setTimeout(apply, 120);
-    const t2 = window.setTimeout(apply, 320);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
+    const t1 = window.setTimeout(apply, 200);
+    return () => window.clearTimeout(t1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusMyLocationTrigger, mapInitCount]);
 

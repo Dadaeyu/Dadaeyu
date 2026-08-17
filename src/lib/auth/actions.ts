@@ -15,7 +15,6 @@ const OAUTH_PROVIDERS: Record<OAuthProvider, string> = {
 
 export interface SignUpProfile {
   nickname: string;
-  phone: string;
   theme_preferences?: string[];
   accessibility_needs?: string[];
 }
@@ -57,7 +56,6 @@ export async function signUpWithEmail(
     options: {
       data: {
         nickname: profile.nickname,
-        phone: profile.phone,
         ...(profile.theme_preferences?.length
           ? { theme_preferences: profile.theme_preferences }
           : {}),
@@ -300,9 +298,4 @@ export function isOAuthUser(user: {
   }
   const provider = user.app_metadata?.provider;
   return !!provider && provider !== "email";
-}
-
-/** 이메일 가입자 여부 (가입 시 휴대폰 필수 → phone 존재로 구분) */
-export function isEmailSignupMember(member: { phone?: string | null } | null): boolean {
-  return !!member?.phone;
 }

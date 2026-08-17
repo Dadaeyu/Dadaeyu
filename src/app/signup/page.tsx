@@ -6,9 +6,7 @@ import AuthLayout from "@/components/AuthLayout";
 import OAuthButtons, { AuthDivider, AuthLinks } from "@/components/AuthForms";
 import NicknameField from "@/components/NicknameField";
 import EmailField from "@/components/EmailField";
-import PhoneField, { isPhoneReady } from "@/components/PhoneField";
 import { getNicknameSubmitError, isNicknameAvailable } from "@/lib/supabase/member";
-import { normalizePhone } from "@/lib/auth/phone";
 import { normalizeEmail } from "@/lib/auth/email";
 import {
   getPasswordValidationError,
@@ -35,7 +33,6 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [nickname, setNickname] = useState("");
-  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [nicknameCanSubmit, setNicknameCanSubmit] = useState(false);
@@ -46,8 +43,7 @@ function SignupForm() {
   const passwordValid = isPasswordValid(password);
   const passwordsMatch = password === passwordConfirm && passwordValid;
   const passwordError = password ? getPasswordValidationError(password) : null;
-  const phoneReady = isPhoneReady(phone);
-  const canSubmit = emailCanSubmit && nicknameCanSubmit && passwordsMatch && phoneReady && !loading;
+  const canSubmit = emailCanSubmit && nicknameCanSubmit && passwordsMatch && !loading;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -73,10 +69,6 @@ function SignupForm() {
     }
     if (password !== passwordConfirm) {
       setMessage("비밀번호가 일치하지 않습니다.");
-      return;
-    }
-    if (!phoneReady) {
-      setMessage("올바른 휴대폰 번호를 입력해 주세요.");
       return;
     }
 
@@ -107,27 +99,11 @@ function SignupForm() {
         return;
       }
 
-      const phoneRes = await fetch("/api/auth/check-phone", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalizePhone(phone) })
-      });
-      if (!phoneRes.ok) {
-        setMessage("휴대폰 번호 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
-      }
-      const phoneData = await phoneRes.json();
-      if (!phoneData.available) {
-        setMessage("이미 가입된 휴대폰 번호입니다.");
-        return;
-      }
-
       const signupResult = await signUpWithEmail(
         submittedEmail,
         password,
         {
           nickname: trimmedNick,
-          phone: normalizePhone(phone),
           ...(themes.length > 0 ? { theme_preferences: themes } : {}),
           ...(accessNeeds.length > 0 ? { accessibility_needs: accessNeeds } : {})
         },
@@ -217,17 +193,6 @@ function SignupForm() {
             value={nickname}
             onChange={setNickname}
             onCanSubmitChange={setNicknameCanSubmit}
-            inputClassName="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-gray-500">
-            휴대폰 <span className="font-normal text-gray-400">(이메일 찾기용)</span>
-          </label>
-          <PhoneField
-            value={phone}
-            onChange={setPhone}
             inputClassName="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>

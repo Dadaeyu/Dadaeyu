@@ -15,7 +15,7 @@ function phoneFromUserMetadata(user: User): string | null {
   return raw || null;
 }
 
-/** 이메일 가입(닉네임·휴대폰 이미 입력)은 온보딩 단계 생략 */
+/** 이메일 가입(닉네임 이미 입력)은 온보딩 단계 생략 */
 export async function completeEmailSignupOnboardingIfNeeded(user: User): Promise<void> {
   if (isOAuthUser(user)) return;
 
@@ -31,13 +31,13 @@ export async function completeEmailSignupOnboardingIfNeeded(user: User): Promise
   const phone = member.phone ?? phoneFromUserMetadata(user);
   const nickname = member.nickname?.trim();
 
-  if (!nickname || !phone) return;
+  if (!nickname) return;
 
   await admin
     .from("tb_members")
     .update({
       onboarding_completed: true,
-      ...(member.phone ? {} : { phone })
+      ...(phone && !member.phone ? { phone } : {})
     })
     .eq("id", user.id);
 
