@@ -15,6 +15,13 @@ Expected private files for later release tasks:
 - `dadaeyu-upload.jks` - upload keystore for `kr.dadaeyu.app`
 - `credentials.env` - local password variables used only by release commands
 
+The checked-in Bubblewrap manifest uses the relative path
+`../../private/android-signing/dadaeyu-upload.jks`, which resolves from
+`Dadaeyou/android-twa/` in the normal checkout. An isolated Git worktree at a
+different directory must pass the absolute private key path to the Bubblewrap
+build command; it must not rewrite the tracked manifest with a user-specific
+absolute path.
+
 Back up the upload/update key and password offline outside Git. Losing the upload key or password can block future app updates, or require a Play upload key reset only when the app and account are eligible for that reset path. Backup copies must stay outside the repository and outside any Git-tracked directory.
 
 Do not create real signing secrets in the repository. Do not commit keystores, password files, `local.properties`, Android SDK/JDK downloads, Gradle build directories, APKs, AABs, or APKS archives.

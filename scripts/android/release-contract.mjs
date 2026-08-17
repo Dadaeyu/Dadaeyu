@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 export const ANDROID_RELEASE_CONTRACT = Object.freeze({
   host: "dadaeyu.vercel.app",
   packageName: "kr.dadaeyu.app",
@@ -10,6 +13,31 @@ export const ANDROID_RELEASE_CONTRACT = Object.freeze({
 });
 
 const SHA256_FINGERPRINT_PATTERN = /^[0-9A-F]{2}(?::[0-9A-F]{2}){31}$/u;
+
+export function readAndroidProjectContract(projectRoot) {
+  const twaManifest = JSON.parse(
+    readFileSync(join(projectRoot, "android-twa/twa-manifest.json"), "utf8")
+  );
+  const androidGradleSource = readFileSync(
+    join(projectRoot, "android-twa/app/build.gradle"),
+    "utf8"
+  );
+  const assetLinksPath = join(projectRoot, "public/.well-known/assetlinks.json");
+
+  return {
+    twaManifest: {
+      host: twaManifest.host,
+      packageId: twaManifest.packageId,
+      versionCode: twaManifest.appVersionCode,
+      versionName: twaManifest.appVersionName
+    },
+    androidGradle: {
+      compileSdk: readGradleInteger(androidGradleSource, /compileSdkVersion\s+(\d+)/u),
+      targetSdk: readGradleInteger(androidGradleSource, /targetSdkVersion\s+(\d+)/u)
+    },
+    assetLinks: existsSync(assetLinksPath) ? JSON.parse(readFileSync(assetLinksPath, "utf8")) : []
+  };
+}
 
 export function validateAndroidReleaseContract(contract) {
   const errors = [];
@@ -93,6 +121,11 @@ function hasSha256Fingerprint(fingerprints) {
     fingerprints.length > 0 &&
     fingerprints.every((fingerprint) => SHA256_FINGERPRINT_PATTERN.test(fingerprint))
   );
+}
+
+function readGradleInteger(source, pattern) {
+  const match = source.match(pattern);
+  return match ? Number.parseInt(match[1], 10) : undefined;
 }
 
 function formatReceived(value) {

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { validateAndroidReleaseContract } from "./release-contract.mjs";
+import { readAndroidProjectContract, validateAndroidReleaseContract } from "./release-contract.mjs";
+
+const PROJECT_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const VALID_SHA256_FINGERPRINT =
   "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99";
@@ -66,4 +69,19 @@ test("Android release contract reports every TWA launch contract drift", () => {
     "Expected assetlinks[0].target.package_name kr.dadaeyu.app, received com.example.app.",
     "Expected assetlinks[0].target.sha256_cert_fingerprints to contain SHA-256 fingerprints."
   ]);
+});
+
+test("generated Android project matches the TWA package, version, and SDK contract", () => {
+  const contract = readAndroidProjectContract(PROJECT_ROOT);
+
+  assert.deepEqual(contract.twaManifest, {
+    host: "dadaeyu.vercel.app",
+    packageId: "kr.dadaeyu.app",
+    versionCode: 1,
+    versionName: "1.0.0"
+  });
+  assert.deepEqual(contract.androidGradle, {
+    compileSdk: 36,
+    targetSdk: 36
+  });
 });
