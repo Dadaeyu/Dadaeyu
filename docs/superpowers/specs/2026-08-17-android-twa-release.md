@@ -2,12 +2,12 @@
 
 ## 목표
 
-현재 Vercel에서 운영하는 다대유 Next.js 웹앱을 다시 작성하지 않고 Android Trusted Web Activity(TWA)로 감싸 휴대폰 직접 설치용 APK와 Google Play 업로드용 AAB를 만든다. Android 앱 식별자는 `kr.dadaeyu.app`을 사용하되, 첫 Play Console 업로드 전까지는 변경할 수 있는 값으로 취급한다.
+현재 Vercel에서 운영하는 다대유 Next.js 웹앱을 다시 작성하지 않고 Android Trusted Web Activity(TWA)로 감싸 휴대폰 직접 설치용 APK와 Google Play 업로드용 AAB를 만든다. Android 앱 식별자는 `com.dadaeyou.app`을 사용하되, 첫 Play Console 업로드 전까지는 변경할 수 있는 값으로 취급한다.
 
 ## 확정 범위
 
 - 운영 웹 주소: `https://dadaeyu.vercel.app`
-- Android application ID: `kr.dadaeyu.app`
+- Android application ID: `com.dadaeyou.app`
 - 앱 표시 이름: `다대유`
 - 패키징 방식: Bubblewrap 기반 TWA
 - 초기 버전: `versionCode 1`, `versionName 1.0.0`
@@ -21,7 +21,7 @@ Android 프로젝트는 웹앱과 경계를 분명히 하기 위해 저장소의
 
 앱 실행 흐름은 다음과 같다.
 
-1. Android 런처가 `kr.dadaeyu.app`을 연다.
+1. Android 런처가 `com.dadaeyou.app`을 연다.
 2. TWA가 `https://dadaeyu.vercel.app/`을 요청한다.
 3. 브라우저가 운영 주소의 Digital Asset Links와 앱 서명을 검증한다.
 4. 검증이 성공하면 브라우저 주소창 없이 전체 화면으로 웹앱을 표시한다.
@@ -59,7 +59,7 @@ Bubblewrap 1.24.1의 현재 생성 템플릿은 `compileSdkVersion 36`이지만 
 ## 검증 기준
 
 - 기존 웹 테스트가 변경 전후 모두 통과한다.
-- Android 프로젝트에서 application ID가 `kr.dadaeyu.app`이다.
+- Android 프로젝트에서 application ID가 `com.dadaeyou.app`이다.
 - `compileSdk`와 `targetSdk`가 모두 36이다.
 - 키와 비밀번호가 Git 추적 파일에 포함되지 않는다.
 - `assetlinks.json`이 올바른 package name과 SHA-256 fingerprint 형식을 가진다.
