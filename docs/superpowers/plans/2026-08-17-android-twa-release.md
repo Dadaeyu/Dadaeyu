@@ -2,7 +2,7 @@
 
 > **실행 방식:** 격리된 `codex/android-twa-release` worktree에서 순서대로 구현하고 각 단계의 검증을 통과한 뒤 다음 단계로 이동한다.
 
-**목표:** `https://dadaeyu.vercel.app`을 여는 `kr.dadaeyu.app` TWA 프로젝트를 만들고, 비공개 업로드 키로 서명된 APK와 AAB를 생성한다.
+**목표:** `https://dadaeyu.vercel.app`을 여는 `com.dadaeyou.app` TWA 프로젝트를 만들고, 비공개 업로드 키로 서명된 APK와 AAB를 생성한다.
 
 **구조:** Next.js는 PWA와 Digital Asset Links를 담당하고 `android-twa/`는 Bubblewrap이 생성한 표준 Android 프로젝트를 담당한다. 서명 재료는 저장소 밖 `../private/android-signing/`에 보관하며 Git에는 구성과 검증 도구만 남긴다.
 
@@ -52,7 +52,7 @@
 
 1. Bubblewrap CLI 1.24.1과 필요한 JDK 17/Android command-line tools를 준비한다.
 2. 로컬에서 제공하는 현재 PWA 매니페스트를 입력으로 프로젝트를 생성한다.
-3. 생성된 `twa-manifest.json`을 `dadaeyu.vercel.app`, `kr.dadaeyu.app`, `다대유`, `1.0.0`, `versionCode 1`로 고정한다.
+3. 생성된 `twa-manifest.json`을 `dadaeyu.vercel.app`, `com.dadaeyou.app`, `다대유`, `1.0.0`, `versionCode 1`로 고정한다.
 4. Gradle의 `compileSdkVersion`과 `targetSdkVersion`을 36으로 보정한다.
 5. 런처와 스플래시에 기존 PWA 아이콘을 사용한다.
 6. 릴리스 계약 테스트로 package/host/SDK 값을 확인한다.
@@ -68,7 +68,7 @@
 **작업**
 
 1. 강한 임의 비밀번호를 생성해 권한 `600`인 비공개 파일에 저장한다.
-2. `keytool`로 `kr.dadaeyu.app` 업로드 키를 생성한다.
+2. `keytool`로 `com.dadaeyou.app` 업로드 키를 생성한다.
 3. SHA-256 fingerprint를 추출한다.
 4. package name과 로컬 APK fingerprint가 들어간 `assetlinks.json`을 작성한다.
 5. JSON 파싱, fingerprint 형식, tracked secret 부재 테스트를 통과시킨다.
@@ -109,6 +109,6 @@
 1. Vercel production이 어느 Git 브랜치를 추적하는지 확인한다.
 2. 운영 반영 승인 뒤 최신 PWA·정책·assetlinks 경로를 배포한다.
 3. 각 URL이 HTTPS `200`, 올바른 content type, 무리디렉션인지 확인한다.
-4. Play Console에 앱을 만들고 첫 AAB 업로드 직전에 `kr.dadaeyu.app`을 마지막으로 확인한다.
+4. Play Console에 앱을 만들고 첫 AAB 업로드 직전에 `com.dadaeyou.app`을 마지막으로 확인한다.
 5. Play App Signing의 SHA-256을 받아 `assetlinks.json`에 두 번째 fingerprint로 추가하고 재배포한다.
 6. 내부 테스트에서 실제 Play 설치본의 전체 화면 TWA 검증을 완료한다.
