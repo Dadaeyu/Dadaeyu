@@ -17,10 +17,12 @@ Expected private files for later release tasks:
 
 The checked-in Bubblewrap manifest uses the relative path
 `../../private/android-signing/dadaeyu-upload.jks`, which resolves from
-`Dadaeyou/android-twa/` in the normal checkout. An isolated Git worktree at a
-different directory must pass the absolute private key path to the Bubblewrap
-build command; it must not rewrite the tracked manifest with a user-specific
-absolute path.
+`Dadaeyou/android-twa/` to the repository sibling directory
+`dadaeyu/private/android-signing/dadaeyu-upload.jks` in the normal checkout.
+The two `..` segments are intentional: one leaves `android-twa/`, and the other
+leaves `Dadaeyou/`. An isolated Git worktree at a different directory must pass
+the absolute private key path to the Bubblewrap build command; it must not
+rewrite the tracked manifest with a user-specific absolute path.
 
 Back up the upload/update key and password offline outside Git. Losing the upload key or password can block future app updates, or require a Play upload key reset only when the app and account are eligible for that reset path. Backup copies must stay outside the repository and outside any Git-tracked directory.
 
@@ -38,6 +40,8 @@ The `android-twa/` directory is the only repository location intended for the ge
 - `android-twa/*.apks`
 
 The signed direct-install APK and Play upload AAB are expected to be regenerated locally from the checked-in Android project and private signing directory. They are not source files.
+The local `private/android-release/` path is also ignored defensively if a
+checkout is ever created directly above that directory.
 
 ## Current Release Artifacts
 
@@ -106,6 +110,7 @@ git check-ignore jdk/jdk-17.zip
 git check-ignore jdk-17_macos-aarch64_bin.tar.gz
 git check-ignore openjdk-17.0.10_macos-aarch64_bin.tar.gz
 git check-ignore private/android-signing/anything.txt
+git check-ignore private/android-release/checksums.sha256
 git status --short
 ```
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
@@ -18,9 +19,13 @@ const validContract = {
     packageId: "kr.dadaeyu.app",
     versionCode: 1,
     versionName: "1.0.0",
+    signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
     fingerprints: [VALID_SHA256_FINGERPRINT]
   },
   androidGradle: {
+    applicationId: "kr.dadaeyu.app",
+    versionCode: 1,
+    versionName: "1.0.0",
     compileSdk: 36,
     targetSdk: 36
   },
@@ -44,9 +49,13 @@ test("Android release contract reports every TWA launch contract drift", () => {
       host: "example.com",
       packageId: "com.example.app",
       versionCode: 2,
-      versionName: "2.0.0"
+      versionName: "2.0.0",
+      signingKeyPath: "android-twa/dadaeyu-upload.jks"
     },
     androidGradle: {
+      applicationId: "com.example.app",
+      versionCode: 2,
+      versionName: "2.0.0",
       compileSdk: 35,
       targetSdk: 35
     },
@@ -67,6 +76,10 @@ test("Android release contract reports every TWA launch contract drift", () => {
     "Expected Android package kr.dadaeyu.app, received com.example.app.",
     "Expected versionCode 1, received 2.",
     "Expected versionName 1.0.0, received 2.0.0.",
+    "Expected signing key path ../../private/android-signing/dadaeyu-upload.jks, received android-twa/dadaeyu-upload.jks.",
+    "Expected Gradle applicationId kr.dadaeyu.app, received com.example.app.",
+    "Expected Gradle versionCode 1, received 2.",
+    "Expected Gradle versionName 1.0.0, received 2.0.0.",
     "Expected compileSdk 36, received 35.",
     "Expected targetSdk 36, received 35.",
     "Expected assetlinks[0].relation to include delegate_permission/common.handle_all_urls.",
@@ -84,11 +97,15 @@ test("generated Android project matches the TWA package, version, and SDK contra
     packageId: "kr.dadaeyu.app",
     versionCode: 1,
     versionName: "1.0.0",
+    signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
     fingerprints: [
       "8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C"
     ]
   });
   assert.deepEqual(contract.androidGradle, {
+    applicationId: "kr.dadaeyu.app",
+    versionCode: 1,
+    versionName: "1.0.0",
     compileSdk: 36,
     targetSdk: 36
   });
@@ -103,4 +120,11 @@ test("tracked Android project and Digital Asset Links satisfy the release contra
     contract.assetLinks[0].target.sha256_cert_fingerprints
   );
   assert.deepEqual(findTrackedAndroidReleaseSecrets(PROJECT_ROOT), []);
+  assert.equal(
+    execFileSync("git", ["check-ignore", "private/android-release/checksums.sha256"], {
+      cwd: PROJECT_ROOT,
+      encoding: "utf8"
+    }).trim(),
+    "private/android-release/checksums.sha256"
+  );
 });

@@ -7,6 +7,7 @@ export const ANDROID_RELEASE_CONTRACT = Object.freeze({
   packageName: "kr.dadaeyu.app",
   versionCode: 1,
   versionName: "1.0.0",
+  signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
   compileSdk: 36,
   targetSdk: 36,
   assetLinksRelation: "delegate_permission/common.handle_all_urls",
@@ -31,11 +32,15 @@ export function readAndroidProjectContract(projectRoot) {
       packageId: twaManifest.packageId,
       versionCode: twaManifest.appVersionCode,
       versionName: twaManifest.appVersionName,
+      signingKeyPath: twaManifest.signingKey?.path,
       fingerprints: Array.isArray(twaManifest.fingerprints)
         ? twaManifest.fingerprints.map((fingerprint) => fingerprint.value)
         : []
     },
     androidGradle: {
+      applicationId: readGradleString(androidGradleSource, /applicationId\s+"([^"]+)"/u),
+      versionCode: readGradleInteger(androidGradleSource, /versionCode\s+(\d+)/u),
+      versionName: readGradleString(androidGradleSource, /versionName\s+"([^"]+)"/u),
       compileSdk: readGradleInteger(androidGradleSource, /compileSdkVersion\s+(\d+)/u),
       targetSdk: readGradleInteger(androidGradleSource, /targetSdkVersion\s+(\d+)/u)
     },
@@ -54,6 +59,7 @@ export function findTrackedAndroidReleaseSecrets(projectRoot) {
   return trackedFiles.filter(
     (path) =>
       path.startsWith("private/android-signing/") ||
+      path.startsWith("private/android-release/") ||
       /(?:^|\/)(?:credentials\.env|local\.properties)$/iu.test(path) ||
       /\.(?:jks|keystore|apk|aab|apks)$/iu.test(path)
   );
@@ -88,6 +94,38 @@ export function validateAndroidReleaseContract(contract) {
   if (twaManifest.versionName !== expected.versionName) {
     errors.push(
       `Expected versionName ${expected.versionName}, received ${formatReceived(twaManifest.versionName)}.`
+    );
+  }
+
+  if (twaManifest.signingKeyPath !== expected.signingKeyPath) {
+    errors.push(
+      `Expected signing key path ${expected.signingKeyPath}, received ${formatReceived(
+        twaManifest.signingKeyPath
+      )}.`
+    );
+  }
+
+  if (androidGradle.applicationId !== expected.packageName) {
+    errors.push(
+      `Expected Gradle applicationId ${expected.packageName}, received ${formatReceived(
+        androidGradle.applicationId
+      )}.`
+    );
+  }
+
+  if (androidGradle.versionCode !== expected.versionCode) {
+    errors.push(
+      `Expected Gradle versionCode ${expected.versionCode}, received ${formatReceived(
+        androidGradle.versionCode
+      )}.`
+    );
+  }
+
+  if (androidGradle.versionName !== expected.versionName) {
+    errors.push(
+      `Expected Gradle versionName ${expected.versionName}, received ${formatReceived(
+        androidGradle.versionName
+      )}.`
     );
   }
 
@@ -146,6 +184,10 @@ function hasSha256Fingerprint(fingerprints) {
 function readGradleInteger(source, pattern) {
   const match = source.match(pattern);
   return match ? Number.parseInt(match[1], 10) : undefined;
+}
+
+function readGradleString(source, pattern) {
+  return source.match(pattern)?.[1];
 }
 
 function formatReceived(value) {
