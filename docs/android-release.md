@@ -12,7 +12,7 @@ Use this directory for the upload key and password file:
 
 Expected private files for later release tasks:
 
-- `dadaeyu-upload.jks` - upload keystore for `kr.dadaeyu.app`
+- `dadaeyu-upload.jks` - upload keystore for `com.dadaeyou.app`
 - `credentials.env` - local password variables used only by release commands
 
 The checked-in Bubblewrap manifest uses the relative path
@@ -38,6 +38,7 @@ The `android-twa/` directory is the only repository location intended for the ge
 - `android-twa/*.apk`
 - `android-twa/*.aab`
 - `android-twa/*.apks`
+- `android-twa/*.idsig`
 
 The signed direct-install APK and Play upload AAB are expected to be regenerated locally from the checked-in Android project and private signing directory. They are not source files.
 The local `private/android-release/` path is also ignored defensively if a
@@ -47,15 +48,17 @@ checkout is ever created directly above that directory.
 
 The locally generated `1.0.0` release is stored outside Git:
 
-- Installable APK: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-release.apk`
-- Play upload AAB: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-release.aab`
-- Checksum file: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/checksums.sha256`
+- Installable APK: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-com.dadaeyou.app-release.apk`
+- Play upload AAB: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-com.dadaeyou.app-release.aab`
+- Checksum file: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/checksums-com.dadaeyou.app.sha256`
+
+Older `kr.dadaeyu.app` artifacts remain archived in the same private directory. Do not upload those older files to the Play Console for this application.
 
 Current SHA-256 checksums:
 
 ```text
-b0b8f81e433544db7e56fec6997e2ff11804e0915c7d73f7a6c9531f6307fe24  dadaeyu-1.0.0-release.apk
-0978fad5840b2558e1a4b5d41980451dc15b084dac1f83a29db99909b0805a4c  dadaeyu-1.0.0-release.aab
+9b24055bca44bacdfbb0ddc162da42c182d3c8e763b921ba380e402dc9c8b86d  dadaeyu-1.0.0-com.dadaeyou.app-release.aab
+d55e675c4da5b36b8cb2372b86d316d1ef7e9d6bf7c8eb10221ef3f45ab083dd  dadaeyu-1.0.0-com.dadaeyou.app-release.apk
 ```
 
 Both artifacts are signed by the upload certificate whose SHA-256 fingerprint is:
@@ -64,14 +67,14 @@ Both artifacts are signed by the upload certificate whose SHA-256 fingerprint is
 8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C
 ```
 
-The APK contains package `kr.dadaeyu.app`, `versionCode 1`, `versionName 1.0.0`, `compileSdk 36`, and `targetSdk 36`. Its only app-requested runtime capabilities are fine/coarse location for location delegation; notification permission is not included.
+The APK contains package `com.dadaeyou.app`, `versionCode 1`, `versionName 1.0.0`, `compileSdk 36`, and `targetSdk 36`. Its only app-requested runtime capabilities are fine/coarse location for location delegation; notification permission is not included.
 
 ## Install The APK
 
 With a USB-debugging-enabled Android device connected:
 
 ```sh
-/Users/ijehyeog/Library/Android/sdk/platform-tools/adb install -r /Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-release.apk
+/Users/ijehyeog/Library/Android/sdk/platform-tools/adb install -r /Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-com.dadaeyou.app-release.apk
 ```
 
 Alternatively, transfer the APK to the phone, open it, and temporarily allow that file app to install unknown apps. The AAB cannot be installed directly; upload it to Play Console for internal testing or production distribution.
@@ -80,16 +83,17 @@ No authorized Android device was connected during this build, so automatic insta
 
 ## Production Web Prerequisite
 
-On 2026-08-17, the production home returned `200`, but the following paths returned `404`:
+The package-ID change updates `public/.well-known/assetlinks.json` to
+`com.dadaeyou.app`. Deploy this source change before testing the new APK and
+confirm that `/`, `/manifest.webmanifest`, `/sw.js`, `/offline.html`,
+`/privacy`, `/account-deletion`, and `/.well-known/assetlinks.json` return the
+intended content over HTTPS without redirects.
 
-- `/manifest.webmanifest`
-- `/sw.js`
-- `/offline.html`
-- `/privacy`
-- `/account-deletion`
-- `/.well-known/assetlinks.json`
-
-The APK is installable now, but Chrome cannot verify the TWA association until the current web app and `assetlinks.json` are deployed. Before that deployment the app can open as a Custom Tab with browser UI instead of a verified full-screen TWA. Play submission should wait until these routes return the intended files over HTTPS.
+The upload-key fingerprint currently authorizes the directly installed APK.
+After the AAB is uploaded, also add the Play App Signing SHA-256 fingerprint to
+the same `sha256_cert_fingerprints` array and deploy again. Until the relevant
+fingerprint and package ID are live, the app can fall back to a Custom Tab with
+browser UI instead of a verified full-screen TWA.
 
 ## Verification Contract
 
