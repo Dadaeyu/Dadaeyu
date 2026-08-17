@@ -39,6 +39,54 @@ The `android-twa/` directory is the only repository location intended for the ge
 
 The signed direct-install APK and Play upload AAB are expected to be regenerated locally from the checked-in Android project and private signing directory. They are not source files.
 
+## Current Release Artifacts
+
+The locally generated `1.0.0` release is stored outside Git:
+
+- Installable APK: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-release.apk`
+- Play upload AAB: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-release.aab`
+- Checksum file: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/checksums.sha256`
+
+Current SHA-256 checksums:
+
+```text
+b0b8f81e433544db7e56fec6997e2ff11804e0915c7d73f7a6c9531f6307fe24  dadaeyu-1.0.0-release.apk
+0978fad5840b2558e1a4b5d41980451dc15b084dac1f83a29db99909b0805a4c  dadaeyu-1.0.0-release.aab
+```
+
+Both artifacts are signed by the upload certificate whose SHA-256 fingerprint is:
+
+```text
+8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C
+```
+
+The APK contains package `kr.dadaeyu.app`, `versionCode 1`, `versionName 1.0.0`, `compileSdk 36`, and `targetSdk 36`. Its only app-requested runtime capabilities are fine/coarse location for location delegation; notification permission is not included.
+
+## Install The APK
+
+With a USB-debugging-enabled Android device connected:
+
+```sh
+/Users/ijehyeog/Library/Android/sdk/platform-tools/adb install -r /Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-release.apk
+```
+
+Alternatively, transfer the APK to the phone, open it, and temporarily allow that file app to install unknown apps. The AAB cannot be installed directly; upload it to Play Console for internal testing or production distribution.
+
+No authorized Android device was connected during this build, so automatic installation was not performed.
+
+## Production Web Prerequisite
+
+On 2026-08-17, the production home returned `200`, but the following paths returned `404`:
+
+- `/manifest.webmanifest`
+- `/sw.js`
+- `/offline.html`
+- `/privacy`
+- `/account-deletion`
+- `/.well-known/assetlinks.json`
+
+The APK is installable now, but Chrome cannot verify the TWA association until the current web app and `assetlinks.json` are deployed. Before that deployment the app can open as a Custom Tab with browser UI instead of a verified full-screen TWA. Play submission should wait until these routes return the intended files over HTTPS.
+
 ## Verification Contract
 
 Before release work continues, verify the boundary with Git rather than source-only checks:
