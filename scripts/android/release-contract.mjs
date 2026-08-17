@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 
 export const ANDROID_RELEASE_CONTRACT = Object.freeze({
   host: "dadaeyu.vercel.app",
@@ -29,7 +30,10 @@ export function readAndroidProjectContract(projectRoot) {
       host: twaManifest.host,
       packageId: twaManifest.packageId,
       versionCode: twaManifest.appVersionCode,
-      versionName: twaManifest.appVersionName
+      versionName: twaManifest.appVersionName,
+      fingerprints: Array.isArray(twaManifest.fingerprints)
+        ? twaManifest.fingerprints.map((fingerprint) => fingerprint.value)
+        : []
     },
     androidGradle: {
       compileSdk: readGradleInteger(androidGradleSource, /compileSdkVersion\s+(\d+)/u),
@@ -37,6 +41,22 @@ export function readAndroidProjectContract(projectRoot) {
     },
     assetLinks: existsSync(assetLinksPath) ? JSON.parse(readFileSync(assetLinksPath, "utf8")) : []
   };
+}
+
+export function findTrackedAndroidReleaseSecrets(projectRoot) {
+  const trackedFiles = execFileSync("git", ["ls-files", "-z"], {
+    cwd: projectRoot,
+    encoding: "utf8"
+  })
+    .split("\0")
+    .filter(Boolean);
+
+  return trackedFiles.filter(
+    (path) =>
+      path.startsWith("private/android-signing/") ||
+      /(?:^|\/)(?:credentials\.env|local\.properties)$/iu.test(path) ||
+      /\.(?:jks|keystore|apk|aab|apks)$/iu.test(path)
+  );
 }
 
 export function validateAndroidReleaseContract(contract) {

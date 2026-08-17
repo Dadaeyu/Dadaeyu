@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { readAndroidProjectContract, validateAndroidReleaseContract } from "./release-contract.mjs";
+import {
+  findTrackedAndroidReleaseSecrets,
+  readAndroidProjectContract,
+  validateAndroidReleaseContract
+} from "./release-contract.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -13,7 +17,8 @@ const validContract = {
     host: "dadaeyu.vercel.app",
     packageId: "kr.dadaeyu.app",
     versionCode: 1,
-    versionName: "1.0.0"
+    versionName: "1.0.0",
+    fingerprints: [VALID_SHA256_FINGERPRINT]
   },
   androidGradle: {
     compileSdk: 36,
@@ -78,7 +83,10 @@ test("generated Android project matches the TWA package, version, and SDK contra
     host: "dadaeyu.vercel.app",
     packageId: "kr.dadaeyu.app",
     versionCode: 1,
-    versionName: "1.0.0"
+    versionName: "1.0.0",
+    fingerprints: [
+      "8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C"
+    ]
   });
   assert.deepEqual(contract.androidGradle, {
     compileSdk: 36,
@@ -90,4 +98,9 @@ test("tracked Android project and Digital Asset Links satisfy the release contra
   const contract = readAndroidProjectContract(PROJECT_ROOT);
 
   assert.deepEqual(validateAndroidReleaseContract(contract), []);
+  assert.deepEqual(
+    contract.twaManifest.fingerprints,
+    contract.assetLinks[0].target.sha256_cert_fingerprints
+  );
+  assert.deepEqual(findTrackedAndroidReleaseSecrets(PROJECT_ROOT), []);
 });
