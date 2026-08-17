@@ -85,3 +85,9 @@ test("generated Android project matches the TWA package, version, and SDK contra
     targetSdk: 36
   });
 });
+
+test("tracked Android project and Digital Asset Links satisfy the release contract", () => {
+  const contract = readAndroidProjectContract(PROJECT_ROOT);
+
+  assert.deepEqual(validateAndroidReleaseContract(contract), []);
+});

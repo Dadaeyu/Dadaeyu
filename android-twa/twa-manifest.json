@@ -53,7 +53,12 @@
   "fullScopeUrl": "https://dadaeyu.vercel.app/",
   "minSdkVersion": 21,
   "orientation": "any",
-  "fingerprints": [],
+  "fingerprints": [
+    {
+      "name": "Upload key",
+      "value": "8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C"
+    }
+  ],
   "additionalTrustedOrigins": [],
   "retainedBundles": [],
   "protocolHandlers": [],
