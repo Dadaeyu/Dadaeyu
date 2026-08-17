@@ -10,7 +10,7 @@
 
 ---
 
-## 1. 릴리스 계약 테스트 추가
+## Task 1: 릴리스 계약 테스트 추가
 
 **파일**
 
@@ -25,7 +25,7 @@
 3. 검증 유틸리티를 최소 구현한다.
 4. `npm run test:android-release` 스크립트를 추가하고 테스트 통과를 확인한다.
 
-## 2. 비밀정보와 산출물 경계 고정
+## Task 2: 비밀정보와 산출물 경계 고정
 
 **파일**
 
@@ -39,7 +39,7 @@
 2. 저장소 밖 `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-signing/`에 키와 비밀번호 파일을 둘 계약을 문서화한다.
 3. `git check-ignore`와 `git status`로 비밀·산출물 제외를 확인한다.
 
-## 3. Bubblewrap Android 프로젝트 생성
+## Task 3: Bubblewrap Android 프로젝트 생성
 
 **파일**
 
@@ -57,7 +57,7 @@
 5. 런처와 스플래시에 기존 PWA 아이콘을 사용한다.
 6. 릴리스 계약 테스트로 package/host/SDK 값을 확인한다.
 
-## 4. 업로드 키 생성과 Digital Asset Links 추가
+## Task 4: 업로드 키 생성과 Digital Asset Links 추가
 
 **파일**
 
@@ -73,7 +73,7 @@
 4. package name과 로컬 APK fingerprint가 들어간 `assetlinks.json`을 작성한다.
 5. JSON 파싱, fingerprint 형식, tracked secret 부재 테스트를 통과시킨다.
 
-## 5. APK와 AAB 빌드
+## Task 5: APK와 AAB 빌드
 
 **파일**
 
@@ -88,7 +88,7 @@
 4. APK의 인증서 SHA-256이 `assetlinks.json`과 일치하는지 확인한다.
 5. AAB 서명을 `jarsigner -verify`로 확인한다.
 
-## 6. 전체 검증과 전달 준비
+## Task 6: 전체 검증과 전달 준비
 
 **파일**
 
@@ -102,7 +102,7 @@
 4. 현재 production의 필수 URL 상태를 다시 확인하고 404가 남아 있으면 APK가 Custom Tab으로 열릴 수 있음을 명시한다.
 5. 실제 휴대폰이 USB 디버깅으로 연결되어 있고 `adb`가 있으면 설치한다. 그렇지 않으면 APK를 휴대폰으로 옮겨 설치할 수 있도록 전달한다.
 
-## 7. 외부 운영 단계
+## Task 7: 외부 운영 단계
 
 이 단계는 로컬 빌드와 분리한다.
 
