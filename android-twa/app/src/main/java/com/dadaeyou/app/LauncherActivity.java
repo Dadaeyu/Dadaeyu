@@ -24,9 +24,7 @@ import android.os.Bundle;
 
 public class LauncherActivity
         extends com.google.androidbrowserhelper.trusted.LauncherActivity {
-    
 
-    
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,8 +44,6 @@ public class LauncherActivity
     protected Uri getLaunchingUrl() {
         // Get the original launch Url.
         Uri uri = super.getLaunchingUrl();
-
-        
 
         return uri;
     }
