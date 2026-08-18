@@ -715,13 +715,17 @@ export default function KakaoMap({
   }, [resetViewTrigger, mapInitCount]);
 
   // 하단 시트에 가려지지 않은 "보이는 영역"의 지도 경계 — 검색 결과가 지금 화면에 보이는지 판단할 때 쓴다.
-  const getVisibleBounds = (map: kakao.maps.Map, bottomOverlay: number): kakao.maps.LatLngBounds => {
+  const getVisibleBounds = (
+    map: kakao.maps.Map,
+    bottomOverlay: number
+  ): kakao.maps.LatLngBounds => {
     const K = window.kakao.maps;
     if (bottomOverlay <= 0) return map.getBounds();
     const container = containerRef.current;
     if (!container) return map.getBounds();
     try {
       const proj = map.getProjection();
+      if (!proj.coordsFromContainerPoint) return map.getBounds();
       const w = container.clientWidth;
       const visibleH = container.clientHeight - bottomOverlay;
       if (visibleH <= 0) return map.getBounds();
