@@ -7,6 +7,7 @@ declare namespace kakao.maps {
     constructor();
     extend(latlng: LatLng): void;
     isEmpty(): boolean;
+    contain(latlng: LatLng): boolean;
   }
 
   class Point {
@@ -31,6 +32,7 @@ declare namespace kakao.maps {
     ): void;
     setLevel(level: number, options?: { animate?: boolean }): void;
     getLevel(): number;
+    getBounds(): LatLngBounds;
     relayout(): void;
     getProjection(): MapProjection;
     addControl(control: object, position: number): void;

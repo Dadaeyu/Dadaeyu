@@ -246,6 +246,7 @@ export default function Map() {
     handleSearch,
     focusPlaceById,
     topRatedPlaces,
+    isLoadingTopRated,
     hasActiveFilter,
     mapResetTrigger,
     searchPage,
@@ -581,6 +582,7 @@ export default function Map() {
             places={displayPlaces}
             searchCount={searchPlaces.length}
             hasActiveFilter={hasActiveFilter}
+            isLoadingTopRated={isLoadingTopRated}
             onSelectPlace={selectPlace}
             searchPage={searchPage}
             searchTotal={searchTotal}
@@ -628,7 +630,8 @@ export default function Map() {
           }}
           myLocation={myLocation}
           focusMyLocationTrigger={focusMyLocationTrigger}
-          resetViewTrigger={mapResetTrigger + myLocationResetTrigger + mapManualResetTrigger}
+          resetViewTrigger={myLocationResetTrigger + mapManualResetTrigger}
+          autoResetViewTrigger={mapResetTrigger}
           showZoomControl={showZoomControl}
           path={routePath}
           fitPathKey={
@@ -719,11 +722,11 @@ export default function Map() {
           </div>
         ) : null}
 
-        {/* 테마 색상 범례 — 확대/축소 컨트롤(카카오 기본 줌 컨트롤, 데스크톱에서만 오른쪽 위에 뜸)이
-              켜져 있을 땐 윗변을 맞추고 바로 왼쪽에, 꺼져 있으면(모바일도 마찬가지) 오른쪽 끝에 붙인다. */}
+        {/* 테마 색상 범례 — 확대/축소 컨트롤(카카오 기본 줌 컨트롤, 오른쪽 위에 뜸, 모바일도 토글로 켤 수 있음)이
+              켜져 있을 땐 화면 크기와 상관없이 윗변을 맞추고 바로 왼쪽에, 꺼져 있으면 오른쪽 끝에 붙인다. */}
         {showThemeLegend && (
           <div
-            className={`border-hairline absolute top-0.5 right-3 z-[55] rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "md:right-11" : ""}`}
+            className={`border-hairline absolute top-0.5 right-3 z-[55] rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "right-11" : ""}`}
           >
             <p className="text-steel mb-1.5 text-[11px] font-semibold">테마 색상</p>
             <div className="space-y-1">

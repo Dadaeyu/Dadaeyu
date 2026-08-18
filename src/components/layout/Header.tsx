@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Settings } from "lucide-react";
+import { LogIn, LogOut, Settings } from "lucide-react";
 import { DesktopNav } from "./Navigation";
 import AccessibilitySettings from "../AccessibilitySettings";
 import { Button } from "../ui/Button";
@@ -106,9 +106,12 @@ export default function Header() {
               variant="ghost"
               size="sm"
               asChild
-              className="inline-flex min-h-11 min-w-[3.25rem] px-3 sm:min-h-12"
+              className="inline-flex min-h-11 min-w-11 px-2 sm:min-h-12 sm:min-w-[3.25rem] sm:px-3"
             >
-              <Link href={`/login?next=${encodeURIComponent(pathname)}`}>로그인</Link>
+              <Link href={`/login?next=${encodeURIComponent(pathname)}`} aria-label="로그인">
+                <LogIn className="h-4 w-4 sm:hidden" />
+                <span className="hidden sm:inline">로그인</span>
+              </Link>
             </Button>
           )}
           <Button
