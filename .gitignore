@@ -40,9 +40,37 @@ yarn-error.log*
 *.crt
 *.cert
 *.jks
+*.keystore
 service-account*.json
 firebase-adminsdk*.json
 supabase-service-role*.json
+local.properties
+keystore.properties
+signing.properties
+credentials.env
+
+# android local tooling, signing, and release outputs
+/private/android-signing/
+/private/android-release/
+/android-sdk/
+/android-sdk-*/
+/android-commandlinetools*/
+/android-commandlinetools*.zip
+/commandlinetools*/
+/commandlinetools*.zip
+/jdk/
+/jdk-*/
+/jdk*.zip
+/jdk*.tar.gz
+/openjdk*.zip
+/openjdk*.tar.gz
+/.gradle/
+/android-twa/.gradle/
+/android-twa/build/
+/android-twa/app/build/
+*.apk
+*.aab
+*.apks
 
 # keep non-secret env templates trackable
 !.env.example

@@ -177,33 +177,41 @@ export default function Map() {
     setMobileSheetSnap((prev) => (prev === "full" ? "default" : "full"));
   };
 
-  // 지도 영역 자체의 높이를 재서(헤더 등 제외) 시트가 가리는 실제 픽셀 높이를 구한다 —
-  // window.innerHeight 로 계산하면 과대 추정돼서 경로 안내 시 지도가 시트에 가려진 채 맞춰진다.
-  const [mapBottomOverlayPx, setMapBottomOverlayPx] = useState(0);
+  // 지도 영역 높이만 측정하고, 시트가 가리는 픽셀은 아래에서 파생한다.
+  // (effect 안에서 setMapBottomOverlayPx 를 반복 호출하면 resize/relayout 과 맞물려
+  //  Maximum update depth exceeded 가 날 수 있음)
+  const [mapAreaHeightPx, setMapAreaHeightPx] = useState(0);
+  const [isMobileSheetLayout, setIsMobileSheetLayout] = useState(mapOnly);
   useEffect(() => {
-    const updateOverlay = () => {
-      const isMobile = mapOnly || window.innerWidth < 768; // Tailwind md 기준
-      if (!isMobile) {
-        setMapBottomOverlayPx(0);
-        return;
-      }
-      const containerHeight = mapAreaRef.current?.clientHeight ?? window.innerHeight;
-      if (sheetDragPct != null) {
-        setMapBottomOverlayPx(Math.round(containerHeight * (sheetDragPct / 100)));
-        return;
-      }
-      if (mobileSheetSnap === "peek") {
-        setMapBottomOverlayPx(Math.min(MOBILE_SHEET_PEEK_PX, containerHeight));
-        return;
-      }
-      setMapBottomOverlayPx(
-        Math.round(containerHeight * (MOBILE_SHEET_SNAP_PCT[mobileSheetSnap] / 100))
-      );
+    const measure = () => {
+      const mobile = mapOnly || window.innerWidth < 768;
+      setIsMobileSheetLayout((prev) => (prev === mobile ? prev : mobile));
+      const h = mapAreaRef.current?.clientHeight ?? 0;
+      setMapAreaHeightPx((prev) => (prev === h ? prev : h));
     };
-    updateOverlay();
-    window.addEventListener("resize", updateOverlay);
-    return () => window.removeEventListener("resize", updateOverlay);
-  }, [mobileSheetSnap, sheetDragPct, mapOnly]);
+    measure();
+    window.addEventListener("resize", measure);
+    const el = mapAreaRef.current;
+    const ro =
+      el && typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => measure()) : null;
+    if (el && ro) ro.observe(el);
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro?.disconnect();
+    };
+  }, [mapOnly]);
+
+  const mapBottomOverlayPx = useMemo(() => {
+    if (!isMobileSheetLayout) return 0;
+    const containerHeight = mapAreaHeightPx > 0 ? mapAreaHeightPx : 1;
+    if (sheetDragPct != null) {
+      return Math.round(containerHeight * (sheetDragPct / 100));
+    }
+    if (mobileSheetSnap === "peek") {
+      return Math.min(MOBILE_SHEET_PEEK_PX, containerHeight);
+    }
+    return Math.round(containerHeight * (MOBILE_SHEET_SNAP_PCT[mobileSheetSnap] / 100));
+  }, [isMobileSheetLayout, mapAreaHeightPx, sheetDragPct, mobileSheetSnap]);
 
   // 지도 오른쪽 하단 "기능 목록" 드롭다운 — 코스 상세와 동일: 초기화/내 위치/확대·축소/테마 범례.
   const [mapMenuOpen, setMapMenuOpen] = useState(false);

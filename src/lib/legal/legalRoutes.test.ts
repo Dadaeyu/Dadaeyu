@@ -31,7 +31,6 @@ test("공통 정책 푸터는 일반 화면에만 노출한다", () => {
     "/signup",
     "/signup/check-email",
     "/forgot-password",
-    "/find-email",
     "/auth/confirm",
     "/auth/reset-password",
     "/map",

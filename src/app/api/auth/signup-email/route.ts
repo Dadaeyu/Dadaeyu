@@ -4,8 +4,6 @@ import { normalizeEmail } from "@/lib/auth/email";
 
 import { getSafeNextPath } from "@/lib/auth/paths";
 
-import { normalizePhone } from "@/lib/auth/phone";
-
 import { normalizeNickname } from "@/lib/supabase/member";
 
 import { buildTokenHashConfirmUrl } from "@/lib/auth/email-confirm-link";
@@ -24,7 +22,6 @@ export async function POST(request: Request) {
 
     profile?: {
       nickname?: string;
-      phone?: string;
       theme_preferences?: string[];
       accessibility_needs?: string[];
     };
@@ -60,7 +57,6 @@ export async function POST(request: Request) {
 
   const nickname = normalizeNickname(body.profile?.nickname ?? "");
 
-  const phone = normalizePhone(body.profile?.phone ?? "");
   const themePreferences = Array.isArray(body.profile?.theme_preferences)
     ? body.profile.theme_preferences.filter(
         (v): v is string => typeof v === "string" && v.trim().length > 0
@@ -72,7 +68,7 @@ export async function POST(request: Request) {
       )
     : [];
 
-  if (!email || !password || !nickname || !phone) {
+  if (!email || !password || !nickname) {
     return jsonError("가입 정보가 올바르지 않습니다.", "invalid_request", 400);
   }
 
@@ -87,7 +83,6 @@ export async function POST(request: Request) {
 
     profile: {
       nickname,
-      phone,
       ...(themePreferences.length > 0 ? { theme_preferences: themePreferences } : {}),
       ...(accessibilityNeeds.length > 0 ? { accessibility_needs: accessibilityNeeds } : {})
     }

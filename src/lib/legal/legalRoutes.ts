@@ -4,7 +4,7 @@ export const LEGAL_LINKS = [
 ] as const;
 
 const PUBLIC_LEGAL_PATHS = new Set<string>(LEGAL_LINKS.map(({ href }) => href));
-const INLINE_LEGAL_LINK_PATHS = new Set(["/login", "/signup", "/forgot-password", "/find-email"]);
+const INLINE_LEGAL_LINK_PATHS = new Set(["/login", "/signup", "/forgot-password"]);
 
 export function isPublicLegalPath(pathname: string): boolean {
   return PUBLIC_LEGAL_PATHS.has(pathname);

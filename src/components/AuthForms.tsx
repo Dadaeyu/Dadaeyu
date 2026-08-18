@@ -78,10 +78,6 @@ export function AuthLinks({ variant }: { variant: "login" | "signup" }) {
           <Link href="/forgot-password" className="hover:text-brand-600">
             비밀번호 찾기
           </Link>
-          <span className="text-gray-300">|</span>
-          <Link href="/find-email" className="hover:text-brand-600">
-            이메일 찾기
-          </Link>
         </p>
       </div>
     );

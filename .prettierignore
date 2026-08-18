@@ -3,3 +3,4 @@ node_modules/
 public/
 out/
 build/
+android-twa/app/src/main/res/raw/web_app_manifest.json

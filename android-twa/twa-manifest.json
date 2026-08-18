@@ -1,0 +1,69 @@
+{
+  "packageId": "com.dadaeyou.app",
+  "host": "dadaeyu.vercel.app",
+  "name": "다대유",
+  "launcherName": "다대유",
+  "display": "standalone",
+  "themeColor": "#0F2847",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#FFFFFF",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://dadaeyu.vercel.app/icons/pwa-512x512.png",
+  "maskableIconUrl": "https://dadaeyu.vercel.app/icons/pwa-maskable-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "../../private/android-signing/dadaeyu-upload.jks",
+    "alias": "dadaeyu-upload"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "지도에서 장소 찾기",
+      "shortName": "지도",
+      "url": "https://dadaeyu.vercel.app/map",
+      "chosenIconUrl": "https://dadaeyu.vercel.app/icons/pwa-192x192.png"
+    },
+    {
+      "name": "여행 코스 보기",
+      "shortName": "코스",
+      "url": "https://dadaeyu.vercel.app/course",
+      "chosenIconUrl": "https://dadaeyu.vercel.app/icons/pwa-192x192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://dadaeyu.vercel.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": true
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://dadaeyu.vercel.app/",
+  "minSdkVersion": 21,
+  "orientation": "any",
+  "fingerprints": [
+    {
+      "name": "Upload key",
+      "value": "8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1.0.0"
+}
