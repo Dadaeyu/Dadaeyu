@@ -638,41 +638,27 @@ export default function KakaoMap({
   /**
    * 내 위치를 "시트에 가려지지 않은 지도 영역"의 세로 중앙에 둔다.
    * 전체 컨테이너 기준 setCenter 만 하면 시트 때문에 핀이 아래로 치우친다.
-   * 1) setBounds bottom padding (경로 안내와 동일, 가장 안정적)
-   * 2) projection + panBy 폴백
+   * setBounds는 실제 넓이가 있는 경로(fitPathKey)를 맞출 때는 안정적이지만, 여기서 다루는
+   * 점 하나(넓이 0인 bounds)에는 top/bottom padding을 비대칭으로 줘도 무시하고 그냥 기하
+   * 중심에 놓아버리는 경우가 있어(카카오 SDK 특성) — 시트 높이만큼 뒤로 panBy 하는 방식이
+   * 훨씬 안정적으로 동작한다.
    */
   const centerLatLngInVisibleMap = (
     map: kakao.maps.Map,
     latlng: kakao.maps.LatLng,
     bottomOverlay: number
   ) => {
-    const K = window.kakao.maps;
     map.relayout();
+    map.setCenter(latlng);
 
-    if (bottomOverlay <= 0) {
-      map.setCenter(latlng);
-      return;
-    }
+    if (bottomOverlay <= 0) return;
 
     try {
-      const bounds = new K.LatLngBounds();
-      bounds.extend(latlng);
-      const level = map.getLevel();
-      // bottom padding = 시트 높이 → 점이 남은 상단 영역의 중앙에 가깝게 배치됨
-      map.setBounds(bounds, 40, 28, bottomOverlay + 20, 28);
-      map.setLevel(level, { animate: false });
-      return;
-    } catch {
-      // setBounds 실패 시 panBy
-    }
-
-    try {
-      map.setCenter(latlng);
       map.relayout();
       // 중심을 아래로 밀어 핀이 화면 위쪽(보이는 영역 중앙)으로 올라가게 함
       map.panBy(0, Math.round(bottomOverlay / 2));
     } catch {
-      map.setCenter(latlng);
+      // panBy 실패 시 기하 중심이라도 유지 (이미 setCenter 됨)
     }
   };
 
