@@ -185,7 +185,7 @@ function PlaceSection({
   return (
     <section
       className={cx(
-        "border-hairline overflow-hidden rounded-2xl border bg-white p-4 shadow-[0_16px_36px_-32px_rgba(18,64,54,0.55)] sm:p-6",
+        "border-hairline bg-background overflow-hidden rounded-2xl border p-4 shadow-[0_16px_36px_-32px_rgba(18,64,54,0.55)] sm:p-6",
         easyMode && "rounded-3xl border-[3px] border-[#102A43] bg-white p-4 shadow-none sm:p-6"
       )}
       aria-labelledby={titleId}
@@ -211,11 +211,11 @@ function PlaceSection({
             key={place.id}
             href={`/map?contentId=${encodeURIComponent(place.id)}`}
             className={cx(
-              "border-hairline group hover:border-brand-200 focus-visible:outline-brand-600 overflow-hidden rounded-xl border bg-white text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-3",
+              "border-hairline group hover:border-brand-200 focus-visible:outline-brand-600 bg-background overflow-hidden rounded-xl border text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-3",
               !easyMode &&
-                "hover:bg-brand-50/35 grid min-h-[7rem] grid-cols-[6.75rem_minmax(0,1fr)] shadow-[0_14px_30px_-28px_rgba(19,44,38,0.75)] sm:block sm:min-h-0",
+                "hover:bg-surface grid min-h-[7rem] grid-cols-[6.75rem_minmax(0,1fr)] shadow-[0_14px_30px_-28px_rgba(19,44,38,0.75)] sm:block sm:min-h-0",
               easyMode &&
-                "min-h-16 rounded-2xl border-[3px] border-[#102A43] shadow-[0_6px_0_#102A43]"
+                "min-h-16 rounded-2xl border-[3px] border-[#102A43] bg-white shadow-[0_6px_0_#102A43]"
             )}
           >
             <span
@@ -253,8 +253,8 @@ function PlaceSection({
               ) : null}
               <span
                 className={cx(
-                  "text-brand-800 bg-brand-50 mt-2 inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold sm:mt-3",
-                  easyMode && "text-base text-[#102A43]"
+                  "text-brand-800 bg-brand-50 dark:bg-brand-900/35 dark:text-brand-200 mt-2 inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold sm:mt-3",
+                  easyMode && "dark:bg-brand-50 text-base text-[#102A43] dark:text-[#102A43]"
                 )}
                 role="img"
                 aria-label={
@@ -299,7 +299,7 @@ function CourseSection({
       className={cx(
         easyMode
           ? "border-hairline max-w-full min-w-0 overflow-hidden rounded-3xl border-[3px] border-[#102A43] bg-white p-4 sm:p-6"
-          : "max-w-full min-w-0 overflow-hidden rounded-[1.35rem] border border-[#b7d8c8] bg-[#f3fbf6] p-4 shadow-[0_18px_42px_-34px_rgba(0,72,58,0.8)] sm:p-6"
+          : "border-hairline bg-surface max-w-full min-w-0 overflow-hidden rounded-[1.35rem] border p-4 shadow-[0_18px_42px_-34px_rgba(0,72,58,0.8)] sm:p-6"
       )}
       aria-labelledby="home-course-title"
     >
@@ -319,7 +319,7 @@ function CourseSection({
             className={cx(
               easyMode
                 ? "border-brand-100 group hover:border-brand-300 focus-visible:outline-brand-600 grid min-h-16 w-full min-w-0 overflow-hidden rounded-2xl border-[3px] border-[#102A43] bg-white text-left shadow-[0_6px_0_#102A43] transition-colors focus-visible:outline-2 focus-visible:outline-offset-3"
-                : "group focus-visible:outline-brand-600 hover:border-brand-300 grid w-full min-w-0 overflow-hidden rounded-[1.15rem] border border-[#88bda3] bg-white text-left shadow-[0_20px_44px_-34px_rgba(0,72,58,0.85)] transition-colors hover:bg-[#fbfefc] focus-visible:outline-2 focus-visible:outline-offset-3",
+                : "border-hairline bg-background group focus-visible:outline-brand-600 hover:border-brand-300 hover:bg-surface grid w-full min-w-0 overflow-hidden rounded-[1.15rem] border text-left shadow-[0_20px_44px_-34px_rgba(0,72,58,0.85)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-3",
               !easyMode &&
                 (courses.length === 1
                   ? "sm:grid-cols-[minmax(17rem,0.76fr)_minmax(0,1fr)] xl:grid-cols-[minmax(24rem,0.82fr)_minmax(0,1fr)]"
@@ -363,12 +363,12 @@ function CourseSection({
               ) : null}
               <span
                 className={cx(
-                  "text-brand-800 mt-3 flex flex-wrap gap-2 text-xs font-semibold",
-                  easyMode && "text-base text-[#102A43]"
+                  "text-brand-800 dark:text-brand-200 mt-3 flex flex-wrap gap-2 text-xs font-semibold",
+                  easyMode && "text-base text-[#102A43] dark:text-[#102A43]"
                 )}
               >
                 <span
-                  className="border-hairline bg-brand-50 inline-flex items-center gap-1 rounded-full border px-2.5 py-1"
+                  className="border-hairline bg-brand-50 dark:bg-brand-900/35 inline-flex items-center gap-1 rounded-full border px-2.5 py-1"
                   role="img"
                   aria-label={`찜 ${course.like_count}개`}
                 >
@@ -376,7 +376,7 @@ function CourseSection({
                   <span aria-hidden="true">{course.like_count}</span>
                 </span>
                 <span
-                  className="border-hairline inline-flex items-center gap-1 rounded-full border bg-white px-2.5 py-1"
+                  className="border-hairline bg-background inline-flex items-center gap-1 rounded-full border px-2.5 py-1"
                   role="img"
                   aria-label={`평점 ${course.average_rating.toFixed(1)}점${
                     course.review_count ? `, 후기 ${course.review_count}개` : ""
@@ -389,7 +389,7 @@ function CourseSection({
                   </span>
                 </span>
                 <span
-                  className="border-hairline inline-flex items-center gap-1 rounded-full border bg-white px-2.5 py-1"
+                  className="border-hairline bg-background inline-flex items-center gap-1 rounded-full border px-2.5 py-1"
                   role="img"
                   aria-label={`장소 ${course.place_count || course.places.length}곳`}
                 >
@@ -399,8 +399,8 @@ function CourseSection({
               </span>
               <span
                 className={cx(
-                  "text-brand-800 mt-auto inline-flex items-center justify-end gap-2 pt-4 text-sm font-semibold",
-                  easyMode && "min-h-12 text-lg text-[#007A62]"
+                  "text-brand-800 dark:text-brand-200 mt-auto inline-flex items-center justify-end gap-2 pt-4 text-sm font-semibold",
+                  easyMode && "min-h-12 text-lg text-[#007A62] dark:text-[#007A62]"
                 )}
               >
                 코스 보기
@@ -428,7 +428,7 @@ function FestivalSection({
       className={cx(
         easyMode
           ? "rounded-3xl border-[3px] border-[#102A43] bg-white p-4 sm:p-6"
-          : "overflow-hidden rounded-2xl border border-[#d6d2c2] bg-[#fffdf7] p-4 shadow-[0_16px_38px_-32px_rgba(70,64,38,0.45)] sm:p-6"
+          : "border-hairline bg-surface overflow-hidden rounded-2xl border p-4 shadow-[0_16px_38px_-32px_rgba(70,64,38,0.45)] sm:p-6"
       )}
       aria-labelledby="home-festival-title"
     >
@@ -503,7 +503,7 @@ function FestivalCard({
           easyMode
             ? "border-hairline group hover:border-brand-200 focus-visible:outline-brand-600 block h-full w-full overflow-hidden rounded-2xl border-[3px] border-[#102A43] bg-white text-left shadow-[0_6px_0_#102A43] transition-colors focus-visible:outline-2 focus-visible:outline-offset-3"
             : cx(
-                "group hover:border-brand-200 focus-visible:outline-brand-600 grid h-full min-h-24 w-full overflow-hidden rounded-[1.15rem] border border-[#d8cfae] bg-white text-left shadow-[0_18px_38px_-32px_rgba(72,61,30,0.55)] transition-colors hover:bg-[#fffaf0] focus-visible:outline-2 focus-visible:outline-offset-3",
+                "border-hairline bg-background group hover:border-brand-200 hover:bg-surface focus-visible:outline-brand-600 grid h-full min-h-24 w-full overflow-hidden rounded-[1.15rem] border text-left shadow-[0_18px_38px_-32px_rgba(72,61,30,0.55)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-3",
                 wide
                   ? "sm:grid-cols-[minmax(16rem,0.76fr)_minmax(0,1fr)] xl:grid-cols-[minmax(24rem,0.82fr)_minmax(0,1fr)]"
                   : "sm:grid-cols-[minmax(13rem,0.95fr)_minmax(0,1fr)] lg:grid-cols-1"
@@ -529,8 +529,8 @@ function FestivalCard({
         <span className={cx("flex min-w-0 flex-1 flex-col p-4 sm:p-6", easyMode && "p-5")}>
           <span
             className={cx(
-              "text-brand-800 text-sm font-semibold",
-              easyMode && "text-base text-[#007A62]"
+              "text-brand-800 dark:text-brand-200 text-sm font-semibold",
+              easyMode && "text-base text-[#007A62] dark:text-[#007A62]"
             )}
           >
             {period}
@@ -553,8 +553,8 @@ function FestivalCard({
           ) : null}
           <span
             className={cx(
-              "text-brand-800 mt-auto inline-flex items-center gap-1 pt-2 text-sm font-semibold",
-              easyMode && "min-h-12 text-lg text-[#007A62]"
+              "text-brand-800 dark:text-brand-200 mt-auto inline-flex items-center gap-1 pt-2 text-sm font-semibold",
+              easyMode && "min-h-12 text-lg text-[#007A62] dark:text-[#007A62]"
             )}
           >
             행사 정보
@@ -586,10 +586,10 @@ function DiscoverySkeleton({ easyMode }: { easyMode: boolean }) {
           <div
             key={item}
             className={cx(
-              "border-hairline overflow-hidden rounded-xl border bg-white",
+              "border-hairline bg-background overflow-hidden rounded-xl border",
               !easyMode &&
                 "grid min-h-[7rem] grid-cols-[6.75rem_minmax(0,1fr)] shadow-[0_14px_30px_-28px_rgba(19,44,38,0.75)] sm:block sm:min-h-0",
-              easyMode && "rounded-2xl border-[3px] border-[#102A43]"
+              easyMode && "rounded-2xl border-[3px] border-[#102A43] bg-white"
             )}
           >
             <div
@@ -617,7 +617,7 @@ function DiscoverySkeleton({ easyMode }: { easyMode: boolean }) {
 function DiscoveryLoadNotice() {
   return (
     <p
-      className="border-hairline text-slate rounded-xl border bg-white px-4 py-3 text-sm leading-6 break-keep"
+      className="border-hairline bg-background text-steel rounded-xl border px-4 py-3 text-sm leading-6 break-keep"
       role="status"
     >
       일부 둘러보기 정보를 불러오지 못했어요. 확인된 장소와 축제 정보는 계속 볼 수 있어요.

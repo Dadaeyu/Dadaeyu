@@ -148,13 +148,15 @@ type CourseListReturn = {
   scrollY: number;
   filters?: Filters; // 카드 클릭 당시의 필터 값 — 뒤로가기 시 그대로 복원
   showFilters?: boolean; // 필터 패널 펼침/접힘 상태
+  sort?: CourseSort; // 카드 클릭 당시의 정렬 값 — 뒤로가기 시 그대로 복원
 };
 
 function saveCourseListReturn(
   tab: CourseListReturn["tab"],
   courseId: number,
   filters?: Filters,
-  showFilters?: boolean
+  showFilters?: boolean,
+  sort?: CourseSort
 ) {
   if (typeof window === "undefined") return;
   try {
@@ -163,7 +165,8 @@ function saveCourseListReturn(
       courseId,
       scrollY: window.scrollY,
       filters,
-      showFilters
+      showFilters,
+      sort
     };
     sessionStorage.setItem(COURSE_LIST_RETURN_KEY, JSON.stringify(payload));
   } catch {
@@ -405,7 +408,10 @@ export default function Course() {
   // "검색" 버튼을 눌러야 draft 가 실제 조회에 쓰이는 myFilters 로 반영된다.
   const [myFilterDraft, setMyFilterDraft] = useState<Filters>(myFilters);
   // 정렬은 필터와 달리 고르는 즉시 바로 반영된다(검색 버튼 없이).
-  const [mySort, setMySort] = useState<CourseSort>(DEFAULT_COURSE_SORT);
+  const [mySort, setMySort] = useState<CourseSort>(() => {
+    const saved = !id ? readCourseListReturn() : null;
+    return saved?.tab === "my" && saved.sort ? saved.sort : DEFAULT_COURSE_SORT;
+  });
   const myGuCode = sharedAreaCodes.find((a) => a.name === myFilters.gu)?.code ?? "";
   const myDraftGuCode = sharedAreaCodes.find((a) => a.name === myFilterDraft.gu)?.code ?? "";
   const [myDongOptions, setMyDongOptions] = useState<string[]>([]);
@@ -632,7 +638,10 @@ export default function Course() {
   // 로 반영된다(선택할 때마다 바로 검색되지 않도록).
   const [sharedFilterDraft, setSharedFilterDraft] = useState<Filters>(sharedFilters);
   // 정렬은 필터와 달리 고르는 즉시 바로 반영된다(검색 버튼 없이).
-  const [sharedSort, setSharedSort] = useState<CourseSort>(DEFAULT_COURSE_SORT);
+  const [sharedSort, setSharedSort] = useState<CourseSort>(() => {
+    const saved = !id ? readCourseListReturn() : null;
+    return saved?.tab === "shared" && saved.sort ? saved.sort : DEFAULT_COURSE_SORT;
+  });
   // 조회에 실제로 쓰이는 건 "적용된" 필터(sharedFilters) 기준 코드.
   const sharedGuCode = sharedAreaCodes.find((a) => a.name === sharedFilters.gu)?.code ?? "";
   // 반면 동 선택지는 필터 패널에서 "구"를 고르는 즉시(검색 누르기 전이라도) 바뀌어야 하므로
@@ -1171,7 +1180,8 @@ export default function Course() {
                         "shared",
                         course.course_id,
                         sharedFilters,
-                        showSharedFilters
+                        showSharedFilters,
+                        sharedSort
                       )
                     }
                     className="block"
@@ -1181,13 +1191,17 @@ export default function Course() {
                         <h3 className="text-ink truncate font-semibold">{course.course_nm}</h3>
                       </div>
                       <div className="flex shrink-0 items-center gap-3">
-                        <div className="flex items-center gap-1 text-sm">
-                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                          <span className="text-gray-700">{course.average_rating.toFixed(1)}</span>
+                        <div className="flex items-center gap-1">
+                          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                          <span className="text-sm font-semibold text-gray-800">
+                            {course.average_rating.toFixed(1)}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-1 text-sm text-gray-400">
-                          <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" />
-                          <span>{course.like_count}</span>
+                        <div className="flex items-center gap-1">
+                          <Heart className="h-4 w-4 fill-red-400 text-red-400" />
+                          <span className="text-sm font-semibold text-gray-800">
+                            {course.like_count}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1554,7 +1568,13 @@ export default function Course() {
                     href={`/course/${course.course_id}`}
                     data-course-id={course.course_id}
                     onClick={() =>
-                      saveCourseListReturn("my", course.course_id, myFilters, showMyFilters)
+                      saveCourseListReturn(
+                        "my",
+                        course.course_id,
+                        myFilters,
+                        showMyFilters,
+                        mySort
+                      )
                     }
                     className="block"
                   >
@@ -1566,15 +1586,17 @@ export default function Course() {
                         </Badge>
                       </div>
                       <div className="flex shrink-0 items-center gap-3">
-                        <div className="flex items-center gap-1 text-sm">
-                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                          <span className="text-gray-700">
+                        <div className="flex items-center gap-1">
+                          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                          <span className="text-sm font-semibold text-gray-800">
                             {(courseRatings[course.course_id] ?? 0).toFixed(1)}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1 text-sm text-gray-400">
-                          <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" />
-                          <span>{courseLikeCounts[course.course_id] ?? 0}</span>
+                        <div className="flex items-center gap-1">
+                          <Heart className="h-4 w-4 fill-red-400 text-red-400" />
+                          <span className="text-sm font-semibold text-gray-800">
+                            {courseLikeCounts[course.course_id] ?? 0}
+                          </span>
                         </div>
                         <button
                           onClick={(e) => handleDeleteCourse(e, course.course_id)}
@@ -2024,6 +2046,9 @@ function CourseDetail({ id }: { id: string }) {
   // 지도 확대/축소·위치를 초기 상태로 되돌리는 버튼용 — 값을 바꿀 때마다 fitPathKey 가 달라져서
   // (다른 조건이 그대로여도) 강제로 다시 fit 되게 한다.
   const [mapResetNonce, setMapResetNonce] = useState(0);
+  // "장소 추가" 검색 중엔 fitPathKey를 비워 코스 경로 맞춤이 카메라를 가로채지 않게 하므로,
+  // 그 상태에서 초기화 버튼은 KakaoMap의 resetViewTrigger(항상 초기 화면으로)로 대신 처리한다.
+  const [searchMapResetTrigger, setSearchMapResetTrigger] = useState(0);
   // 지도 오른쪽 하단 "기능 목록" 드롭다운 — 지도 초기화/테마 색상 범례/내 위치.
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
   const mapMenuRef = useRef<HTMLDivElement>(null);
@@ -2266,7 +2291,9 @@ function CourseDetail({ id }: { id: string }) {
   // 상세의 "내 코스에 추가" → 현재 활성 Day 에 장소 추가 후 폼으로 복귀
   const addPlaceFromSearch = () => {
     const sp = ps.searchDetail;
-    if (!sp) return;
+    // 카카오 검색 결과는 tb_place에 없어 place_id가 없으므로 코스에 저장할 수 없다
+    // (버튼 자체를 숨기지만, 방어적으로 한 번 더 막는다).
+    if (!sp || sp.source === "kakao") return;
     // sp.id 는 contentid 다. tb_course_detail.place_id 는 tb_place.place_id(내부 PK)를 참조하므로
     // 반드시 sp.placeId(카카오 출처는 없음)를 써야 한다 — contentid 를 넣으면 FK 위반으로 insert 가 실패한다.
     setEditDays((days) =>
@@ -2494,6 +2521,27 @@ function CourseDetail({ id }: { id: string }) {
     // 회색(다른 Day) 노드와 겹칠 때 색 있는(지금 보는 Day) 노드가 항상 위로 오게 한다.
     zIndex: m.isActiveDay ? 4 : 2
   }));
+
+  // "장소 추가" 검색 패널이 열려 있을 때는 지도 화면과 똑같이 검색 결과 자체를 지도에 마커로
+  // 보여준다(기존엔 검색 중엔 지도에 아무 표시도 없이 기존 코스 마커만 그대로였음).
+  const searchResultMarkers: MapMarker[] = psDisplayPlaces.map((sp) => {
+    if (sp.source === "kakao") {
+      return {
+        id: sp.id,
+        lat: sp.lat,
+        lng: sp.lng,
+        color: "#FEE500",
+        borderColor: "#2563EB",
+        shape: "teardrop"
+      };
+    }
+    return {
+      id: sp.id,
+      lat: sp.lat,
+      lng: sp.lng,
+      color: getCategoryColor(sp.categoryCode)
+    };
+  });
 
   // 경로선 — 지금 보는 Day만 원래 초록색 실선, 나머지 Day는 회색 실선으로 죽여둔다.
   // Day 가 바뀌는 경계(Day1 마지막 장소 → Day2 첫 장소)는 항상 옅은 회색 점선.
@@ -2830,6 +2878,7 @@ function CourseDetail({ id }: { id: string }) {
             places={psDisplayPlaces}
             searchCount={ps.searchPlaces.length}
             hasActiveFilter={ps.hasActiveFilter}
+            isLoadingTopRated={ps.isLoadingTopRated}
             onSelectPlace={ps.setSearchDetailId}
             searchPage={ps.searchPage}
             searchTotal={ps.searchTotal}
@@ -3227,9 +3276,9 @@ function CourseDetail({ id }: { id: string }) {
                         {courseData.rating.toFixed(1)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 text-sm text-gray-600" title="즐겨찾기">
+                    <div className="flex items-center gap-1" title="즐겨찾기">
                       <Heart className="h-4 w-4 fill-red-400 text-red-400" />
-                      <span>{likeCount}</span>
+                      <span className="text-sm font-semibold text-gray-800">{likeCount}</span>
                     </div>
                   </div>
                 </div>
@@ -3274,34 +3323,6 @@ function CourseDetail({ id }: { id: string }) {
                         <span>{formatDateOnly(courseData.startDate)}</span>
                         <span className="text-gray-300">~</span>
                         <span>{formatDateOnly(courseData.endDate)}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Meta */}
-                  {!isOwned && !isAiPreview && (
-                    <div className="shrink-0 border-b border-gray-100 px-4 py-3">
-                      <div className="mb-2 flex items-center gap-3 text-sm text-gray-600">
-                        <div className="flex items-center gap-1">
-                          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                          <span className="font-semibold text-gray-800">
-                            {courseData.rating.toFixed(1)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Heart className="h-3.5 w-3.5" />
-                          <span>{courseData.likes}</span>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {courseData.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="bg-brand-100 text-brand-700 rounded-full px-2 py-0.5 text-xs"
-                          >
-                            {tag}
-                          </span>
-                        ))}
                       </div>
                     </div>
                   )}
@@ -3524,28 +3545,41 @@ function CourseDetail({ id }: { id: string }) {
       {/* ── MAP AREA ── (모바일 편집 시 지도는 그대로 보이고 편집 패널이 하단 시트로 뜸) */}
       <div ref={mapAreaRef} className="relative flex-1 overflow-hidden">
         <KakaoMap
-          markers={mapMarkers}
-          selectedId={selectedMarkerId}
+          markers={placeSearchOpen ? searchResultMarkers : mapMarkers}
+          selectedId={placeSearchOpen ? ps.searchDetailId : selectedMarkerId}
           onSelect={(id) => {
+            if (placeSearchOpen) {
+              ps.setSearchDetailId(id);
+              return;
+            }
             const src = markerSources.find((m) => m.markerId === id);
             if (!src) return;
             setSelectedSearchPlace(src.item);
           }}
           onDeselect={() => {
+            if (placeSearchOpen) {
+              ps.setSearchDetailId(null);
+              return;
+            }
             setSelectedSearchPlace(null);
           }}
-          path={dayGuidePath ?? coursePath}
+          path={placeSearchOpen ? [] : (dayGuidePath ?? coursePath)}
           onPathClick={(day) => setActiveDay(day)}
+          // "장소 추가" 검색 중엔 코스 경로가 아니라 검색 결과가 카메라를 맡아야 하므로 fitPathKey를
+          // 비워서(resetViewTrigger/autoResetViewTrigger가 대신 카메라를 움직인다) 지도 화면과
+          // 동일하게 동작하게 한다.
           // 안내 모드가 아니면 처음 코스를 볼 때도 경로 전체가 (바텀시트에 안 가려진 영역 안에)
           // 보이도록 한 번 맞춘다 — 안 그러면 기본 지도 중심에서 시작해 경로가 시트에 가려지거나
           // 화면 밖에 있을 수 있다. mapResetNonce 를 키에 포함해서, 다른 조건이 그대로여도
           // "초기 상태로" 버튼을 누르면 강제로 다시 fit 되게 한다.
           fitPathKey={
-            dayGuideMode && dayGuidePath && !dayGuideLoading
-              ? `guide-${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}-${dayGuideSelectedRouteId}`
-              : mapMarkers.length > 0
-                ? `course-${id}-${mapMarkers.length}-${mapResetNonce}`
-                : null
+            placeSearchOpen
+              ? null
+              : dayGuideMode && dayGuidePath && !dayGuideLoading
+                ? `guide-${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}-${dayGuideSelectedRouteId}`
+                : mapMarkers.length > 0
+                  ? `course-${id}-${mapMarkers.length}-${mapResetNonce}`
+                  : null
           }
           pathSummary={
             dayGuideMode &&
@@ -3563,14 +3597,16 @@ function CourseDetail({ id }: { id: string }) {
           bottomOverlayPx={mapBottomOverlayPx}
           myLocation={myLocation}
           focusMyLocationTrigger={focusMyLocationTrigger}
+          resetViewTrigger={placeSearchOpen ? searchMapResetTrigger : 0}
+          autoResetViewTrigger={placeSearchOpen ? ps.mapResetTrigger : 0}
           showZoomControl={showZoomControl}
         />
 
-        {/* 테마 색상 범례 — 확대/축소 컨트롤(카카오 기본 줌 컨트롤, 데스크톱에서만 오른쪽 위에 뜸)이
-            켜져 있을 땐 윗변을 맞추고 바로 왼쪽에, 꺼져 있으면(모바일도 마찬가지) 오른쪽 끝에 붙인다. */}
+        {/* 테마 색상 범례 — 확대/축소 컨트롤(카카오 기본 줌 컨트롤, 오른쪽 위에 뜸, 모바일도 토글로 켤 수 있음)이
+            켜져 있을 땐 화면 크기와 상관없이 윗변을 맞추고 바로 왼쪽에, 꺼져 있으면 오른쪽 끝에 붙인다. */}
         {showThemeLegend && (
           <div
-            className={`border-hairline absolute top-0.5 right-3 z-[55] rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "md:right-11" : ""}`}
+            className={`border-hairline absolute top-0.5 right-3 z-[55] rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "right-11" : ""}`}
           >
             <p className="text-steel mb-1.5 text-[11px] font-semibold">테마 색상</p>
             <div className="space-y-1">
@@ -3609,6 +3645,10 @@ function CourseDetail({ id }: { id: string }) {
               <button
                 type="button"
                 onClick={() => {
+                  if (placeSearchOpen) {
+                    setSearchMapResetTrigger((n) => n + 1);
+                    return;
+                  }
                   if (dayGuideMode) clearDayGuide();
                   setSelectedSearchPlace(null);
                   setMapResetNonce((n) => n + 1);

@@ -162,6 +162,7 @@ export function usePlaceSearch({
   }, []);
 
   const [topRatedPlaces, setTopRatedPlaces] = useState<SearchPlace[]>([]);
+  const [isLoadingTopRated, setIsLoadingTopRated] = useState(true);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -170,6 +171,9 @@ export function usePlaceSearch({
       .then(setTopRatedPlaces)
       .catch((error: unknown) => {
         if (!isAbortError(error)) setTopRatedPlaces([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingTopRated(false);
       });
 
     return () => controller.abort();
@@ -276,6 +280,10 @@ export function usePlaceSearch({
         setSearchResult({ key: searchKey, places, total });
         setSearchDetailId(null);
         if (liked) setLikedPlaces(liked);
+        // "결과가 하나라도 지금 화면에 보이면 리셋하지 않는다"는 판단은 여기서 총 결과 개수만
+        // 보고는 할 수 없다(27개가 있어도 전부 화면 밖일 수 있음) — 실제 지도 뷰포트를 아는
+        // KakaoMap 쪽(autoResetViewTrigger)에서 마커 좌표 기준으로 판단하므로, 여기선 새 검색마다
+        // 그냥 트리거만 올린다.
         if (isNewSearch && !skipReset) setMapResetTrigger((count) => count + 1);
       })
       .catch((error: unknown) => {
@@ -385,6 +393,7 @@ export function usePlaceSearch({
     handleSearch,
     focusPlaceById,
     topRatedPlaces,
+    isLoadingTopRated,
     hasActiveFilter,
     mapResetTrigger,
     searchPage,

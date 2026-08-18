@@ -22,6 +22,9 @@ export async function POST(request: Request) {
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "파일이 없습니다." }, { status: 400 });
     }
+    if (!file.type.startsWith("image/")) {
+      return NextResponse.json({ error: "이미지 파일만 첨부할 수 있습니다." }, { status: 400 });
+    }
 
     const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
     const path = `${user.id}/${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;

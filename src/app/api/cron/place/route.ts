@@ -85,11 +85,14 @@ export async function GET(request: Request) {
       const nextUrl = `https://${selfHost}/api/cron/place?chain=${chain + 1}`;
       after(async () => {
         try {
-          // 다음 호출이 실제로 시작되는 것만 확인하면 되고, 그 결과(=하위 체인 전체)까지
-          // 기다릴 필요는 없다 — 짧은 타임아웃으로 "요청을 던졌다"만 보장한다.
+          // 다음 호출의 결과(=하위 체인 전체)까지 기다릴 필요는 없지만, 커넥션을 너무 일찍
+          // 끊으면(예: 5초 타임아웃) Vercel이 아직 40초짜리 작업을 하던 다음 함수 실행 자체를
+          // 중간에 죽여버릴 수 있다 — 그러면 매 체인 호출이 몇 초짜리로만 끊겨 detail 처리량이
+          // 크게 줄어든다. 다음 호출이 스스로의 시간 예산(TIME_BUDGET_MS)을 다 쓰고 응답할
+          // 때까지 넉넉히 기다려서, 커넥션이 그보다 먼저 끊기지 않게 한다.
           await fetch(nextUrl, {
             headers: { Authorization: `Bearer ${cronSecret}` },
-            signal: AbortSignal.timeout(5000)
+            signal: AbortSignal.timeout(maxDuration * 1000 - 2000)
           });
         } catch {
           // 다음 호출을 못 걸었어도 조용히 넘어간다 — 최악의 경우 다음날 크론이 처음부터 다시 훑는다.

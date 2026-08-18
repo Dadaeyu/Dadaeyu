@@ -53,13 +53,7 @@ export default function SearchResultList({
                 <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500">
                   {sp.average_rating !== undefined && (
                     <div className="flex items-center gap-1">
-                      <Star
-                        className={`h-3 w-3 ${
-                          sp.average_rating != null
-                            ? "fill-yellow-400 text-yellow-400"
-                            : "text-gray-300"
-                        }`}
-                      />
+                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
                       <span>
                         {sp.average_rating != null ? sp.average_rating.toFixed(1) : "0.0"}
                       </span>
@@ -67,9 +61,7 @@ export default function SearchResultList({
                   )}
                   {sp.like_count !== undefined && (
                     <div className="flex items-center gap-1">
-                      <Heart
-                        className={`h-3 w-3 ${sp.like_count > 0 ? "fill-red-400 text-red-400" : "text-gray-300"}`}
-                      />
+                      <Heart className="h-3 w-3 fill-red-400 text-red-400" />
                       <span>{sp.like_count}</span>
                     </div>
                   )}

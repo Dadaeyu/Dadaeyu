@@ -109,7 +109,7 @@ export function MobileNav() {
       className="border-hairline bg-background/95 fixed right-0 bottom-0 left-0 z-50 border-t backdrop-blur-md md:hidden"
       aria-label="주 메뉴"
     >
-      <div className="mobile-nav-list flex items-stretch justify-around px-1 py-1">
+      <div className="mobile-nav-list flex items-stretch justify-around px-1 py-2">
         {allItems.map(({ path, label, icon: Icon }) => {
           const active = isActive(path);
           return (
