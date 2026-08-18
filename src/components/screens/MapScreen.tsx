@@ -731,10 +731,13 @@ export default function Map() {
         ) : null}
 
         {/* 테마 색상 범례 — 확대/축소 컨트롤(카카오 기본 줌 컨트롤, 오른쪽 위에 뜸, 모바일도 토글로 켤 수 있음)이
-              켜져 있을 땐 화면 크기와 상관없이 윗변을 맞추고 바로 왼쪽에, 꺼져 있으면 오른쪽 끝에 붙인다. */}
+              켜져 있을 땐 화면 크기와 상관없이 윗변을 맞추고 바로 왼쪽에, 꺼져 있으면 오른쪽 끝에 붙인다.
+              z-index는 상단 헤더(z-40)와 모바일 하단 시트 패널(z-30)보다도 낮게 둬서, 줌 컨트롤과
+              마찬가지로 페이지를 스크롤해 지도가 헤더 아래로 넘어가거나 시트에 가리면 범례도 자연스럽게
+              같이 가려지게 한다. */}
         {showThemeLegend && (
           <div
-            className={`border-hairline absolute top-0.5 right-3 z-[55] rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "right-11" : ""}`}
+            className={`border-hairline absolute top-0.5 right-3 z-20 rounded-xl border bg-white/90 p-2.5 shadow-lg backdrop-blur-sm ${showZoomControl ? "right-11" : ""}`}
           >
             <p className="text-steel mb-1.5 text-[11px] font-semibold">테마 색상</p>
             <div className="space-y-1">
