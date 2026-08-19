@@ -46,19 +46,19 @@ checkout is ever created directly above that directory.
 
 ## Current Release Artifacts
 
-The locally generated `1.0.0` release is stored outside Git:
+The locally generated `1.0.1` (`versionCode 2`) release is stored outside Git:
 
-- Installable APK: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-com.dadaeyou.app-release.apk`
-- Play upload AAB: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-com.dadaeyou.app-release.aab`
-- Checksum file: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/checksums-com.dadaeyou.app.sha256`
+- Installable APK: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.1-com.dadaeyou.app-release.apk`
+- Play upload AAB: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.1-com.dadaeyou.app-release.aab`
+- Checksum file: `/Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/checksums-1.0.1-com.dadaeyou.app.sha256`
 
-Older `kr.dadaeyu.app` artifacts remain archived in the same private directory. Do not upload those older files to the Play Console for this application.
+Older `1.0.0` and `kr.dadaeyu.app` artifacts remain archived in the same private directory. Do not upload those older files to the Play Console for this release.
 
 Current SHA-256 checksums:
 
 ```text
-9b24055bca44bacdfbb0ddc162da42c182d3c8e763b921ba380e402dc9c8b86d  dadaeyu-1.0.0-com.dadaeyou.app-release.aab
-d55e675c4da5b36b8cb2372b86d316d1ef7e9d6bf7c8eb10221ef3f45ab083dd  dadaeyu-1.0.0-com.dadaeyou.app-release.apk
+ec02bb0d329db54fda35645f3707a5fd58bd1dba5e90a62cd001fc13a8f394e5  dadaeyu-1.0.1-com.dadaeyou.app-release.aab
+288fd0613da536ac564499ae8c998773b4f732173e182ad0cc50255e21c901c3  dadaeyu-1.0.1-com.dadaeyou.app-release.apk
 ```
 
 Both artifacts are signed by the upload certificate whose SHA-256 fingerprint is:
@@ -67,14 +67,14 @@ Both artifacts are signed by the upload certificate whose SHA-256 fingerprint is
 8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C
 ```
 
-The APK contains package `com.dadaeyou.app`, `versionCode 1`, `versionName 1.0.0`, `compileSdk 36`, and `targetSdk 36`. Its only app-requested runtime capabilities are fine/coarse location for location delegation; notification permission is not included.
+The APK contains package `com.dadaeyou.app`, `versionCode 2`, `versionName 1.0.1`, `compileSdk 36`, and `targetSdk 36`. Its only app-requested runtime capabilities are fine/coarse location for location delegation; notification permission is not included.
 
 ## Install The APK
 
 With a USB-debugging-enabled Android device connected:
 
 ```sh
-/Users/ijehyeog/Library/Android/sdk/platform-tools/adb install -r /Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.0-com.dadaeyou.app-release.apk
+/Users/ijehyeog/Library/Android/sdk/platform-tools/adb install -r /Users/ijehyeog/Desktop/workspace/project/dadaeyu/private/android-release/dadaeyu-1.0.1-com.dadaeyou.app-release.apk
 ```
 
 Alternatively, transfer the APK to the phone, open it, and temporarily allow that file app to install unknown apps. The AAB cannot be installed directly; upload it to Play Console for internal testing or production distribution.
