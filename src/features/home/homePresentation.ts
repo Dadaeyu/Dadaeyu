@@ -1,3 +1,14 @@
+export function buildHomePlaceMapHref(place: { id: string; title: string }) {
+  const params = new URLSearchParams();
+  const contentId = place.id.trim();
+  const query = place.title.trim();
+
+  if (contentId) params.set("contentId", contentId);
+  if (query) params.set("query", query);
+
+  return `/map?${params.toString()}`;
+}
+
 export function shouldShowHomePlaceImage(source: string | null, failedSource: string | null) {
   return Boolean(source && source !== failedSource);
 }

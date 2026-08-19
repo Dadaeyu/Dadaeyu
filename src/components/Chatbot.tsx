@@ -2,7 +2,15 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
+import type { TourismSharedCourse } from "@/lib/supabase/types";
+import { HomePlaceImage } from "@/features/home/HomePlaceImage";
+import {
+  buildInternalPlaceMapHref,
+  buildRelatedCourseQuery,
+  isCourseRecommendationRequest
+} from "@/lib/chat/discoveryLinks";
 import {
   formatChatAccessibilityText,
   formatChatDisplayText,
@@ -10,11 +18,15 @@ import {
 } from "@/lib/chat/presentation";
 import {
   Accessibility,
+  ArrowRight,
+  Heart,
   MapPin,
   MessageCircle,
   Mic,
   MicOff,
+  Route,
   Send,
+  Star,
   Volume2,
   VolumeX,
   X
@@ -30,6 +42,7 @@ type ChatResponse = {
     source: string;
   };
   places?: PlaceRecommendation[];
+  courses?: TourismSharedCourse[];
   chips: string[];
   confidence: Confidence;
   sources: string[];
@@ -43,6 +56,7 @@ type ChatResponse = {
 };
 
 type PlaceRecommendation = {
+  contentId: string | null;
   title: string;
   category: string | null;
   address: string | null;
@@ -558,7 +572,39 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
         throw new Error(errorMessage || "chat request failed");
       }
 
-      const data = (await response.json()) as ChatResponse;
+      let data = (await response.json()) as ChatResponse;
+      const contentIds = (data.places ?? []).flatMap((place) =>
+        place.contentId ? [place.contentId] : []
+      );
+      const courseRequested = isCourseRecommendationRequest(text);
+
+      if (contentIds.length || courseRequested) {
+        try {
+          const relatedResponse = await fetch(buildRelatedCourseQuery(contentIds), {
+            credentials: "same-origin",
+            cache: "no-store"
+          });
+          const relatedPayload = relatedResponse.ok
+            ? ((await relatedResponse.json()) as { items?: TourismSharedCourse[] })
+            : null;
+          let courses = relatedPayload?.items ?? [];
+
+          if (!courses.length && courseRequested && contentIds.length) {
+            const fallbackResponse = await fetch(buildRelatedCourseQuery([]), {
+              credentials: "same-origin",
+              cache: "no-store"
+            });
+            const fallbackPayload = fallbackResponse.ok
+              ? ((await fallbackResponse.json()) as { items?: TourismSharedCourse[] })
+              : null;
+            courses = fallbackPayload?.items ?? [];
+          }
+
+          if (courses.length) data = { ...data, courses };
+        } catch {
+          // 코스 연결 실패가 장소 답변까지 막지 않게 한다.
+        }
+      }
       const assistantMessageId = nextId();
       setMessages((current) => [
         ...current,
@@ -998,17 +1044,15 @@ function PlaceRecommendationList({ places }: { places: PlaceRecommendation[] }) 
                   </dl>
                 ) : null}
 
-                {place.address || place.latitude ? (
-                  <a
-                    href={buildMapSearchUrl(place)}
-                    target="_blank"
-                    rel="noreferrer"
+                {place.address || place.latitude || place.contentId ? (
+                  <Link
+                    href={buildInternalPlaceMapHref(place)}
                     className="border-brand-200 text-brand-800 hover:border-brand-400 hover:bg-brand-50 mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-[12px] font-extrabold transition-colors"
-                    aria-label={`${formatChatDisplayText(place.title)} 지도에서 보기`}
+                    aria-label={`${formatChatDisplayText(place.title)} 다대유 지도에서 보기`}
                   >
                     <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-                    지도에서 위치 확인
-                  </a>
+                    다대유 지도에서 보기
+                  </Link>
                 ) : null}
               </div>
 
@@ -1103,14 +1147,76 @@ function getPlaceCheckItems(place: PlaceRecommendation) {
   ];
 }
 
-function buildMapSearchUrl(place: PlaceRecommendation) {
-  if (place.latitude && place.longitude) {
-    return `https://map.naver.com/p/search/${encodeURIComponent(
-      `${place.latitude},${place.longitude}`
-    )}`;
-  }
+function CourseRecommendationList({ courses }: { courses: TourismSharedCourse[] }) {
+  return (
+    <section className="mt-5 border-t border-gray-100 pt-5" aria-label="추천 공개 코스">
+      <div className="mb-3">
+        <h3 className="text-[15px] font-extrabold text-gray-950">함께 둘러보기 좋은 코스</h3>
+        <p className="mt-1 text-[12px] leading-relaxed font-semibold text-gray-500">
+          다대유에 공개된 코스 중에서 골랐어요.
+        </p>
+      </div>
 
-  return `https://map.naver.com/p/search/${encodeURIComponent(place.address || place.title)}`;
+      <div className="grid gap-3">
+        {courses.map((course) => {
+          const image = course.places.find((place) => place.firstimage)?.firstimage ?? null;
+          const placeTrail = course.places
+            .slice(0, 3)
+            .map((place) => place.title)
+            .join(" · ");
+
+          return (
+            <Link
+              key={course.course_id}
+              href={`/course/${course.course_id}`}
+              className="group border-hairline hover:border-brand-300 focus-visible:outline-brand-600 grid min-h-28 grid-cols-[7rem_minmax(0,1fr)] overflow-hidden rounded-2xl border bg-white shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+              aria-label={`${course.course_nm} 코스 자세히 보기`}
+            >
+              <span className="bg-surface relative block min-h-28 overflow-hidden">
+                <HomePlaceImage
+                  src={image}
+                  fallbackSources={course.places.map((place) => place.firstimage)}
+                  alt={course.course_nm}
+                  compactFallback
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transform-none"
+                />
+              </span>
+
+              <span className="flex min-w-0 flex-col p-3.5">
+                <strong className="line-clamp-2 text-[14px] leading-snug font-extrabold text-gray-950">
+                  {course.course_nm}
+                </strong>
+                {placeTrail ? (
+                  <span className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed font-semibold text-gray-500">
+                    {placeTrail}
+                  </span>
+                ) : null}
+                <span className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-extrabold text-gray-600">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-800">
+                    <Star className="h-3 w-3" aria-hidden="true" />
+                    {course.average_rating.toFixed(1)}
+                    {course.review_count ? ` · 후기 ${course.review_count}` : ""}
+                  </span>
+                  <span className="bg-brand-50 text-brand-800 inline-flex items-center gap-1 rounded-full px-2 py-1">
+                    <Heart className="h-3 w-3" aria-hidden="true" />
+                    {course.like_count}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1">
+                    <Route className="h-3 w-3" aria-hidden="true" />
+                    {course.place_count || course.places.length}곳
+                  </span>
+                </span>
+                <span className="text-brand-800 mt-auto inline-flex items-center justify-end gap-1 pt-2 text-[12px] font-extrabold">
+                  코스 자세히 보기
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function AssistantMessage({
@@ -1168,6 +1274,8 @@ function AssistantMessage({
         ) : null}
 
         {response.places?.length ? <PlaceRecommendationList places={response.places} /> : null}
+
+        {response.courses?.length ? <CourseRecommendationList courses={response.courses} /> : null}
 
         {response.chips.length > 0 ? (
           <div className="mt-4 border-t border-gray-100 pt-3">

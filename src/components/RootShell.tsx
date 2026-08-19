@@ -16,6 +16,7 @@ import NoticeModal, {
 } from "@/components/NoticeModal";
 import { LegalLinks } from "@/components/legal/LegalLinks";
 import { NavigationProgress } from "@/components/NavigationProgress";
+import { GuestWelcomePrompt } from "@/components/auth/GuestWelcomePrompt";
 import { isPublicLegalPath, shouldShowGlobalLegalFooter } from "@/lib/legal/legalRoutes";
 import { cn } from "@/components/ui/utils";
 
@@ -44,6 +45,7 @@ export default function RootShell({
   const isLegalPage = isPublicLegalPath(pathname);
   const showGlobalLegalFooter = shouldShowGlobalLegalFooter(pathname);
   const [queue, setQueue] = useState<ActiveNotice[]>([]);
+  const [noticeResolvedPath, setNoticeResolvedPath] = useState<string | null>(null);
 
   // 브라우저 첫 진입 시 지도 필터 옵션(접근성/테마)을 미리 받아 전역 캐시에 저장.
   useEffect(() => {
@@ -52,7 +54,10 @@ export default function RootShell({
 
   useEffect(() => {
     if (!isHomePage) {
-      queueMicrotask(() => setQueue([]));
+      queueMicrotask(() => {
+        setQueue([]);
+        setNoticeResolvedPath(pathname);
+      });
       return;
     }
 
@@ -69,13 +74,16 @@ export default function RootShell({
         setQueue(
           notices.filter((notice) => isDisplayableNotice(notice) && !isSnoozedToday(notice.id))
         );
+        setNoticeResolvedPath(pathname);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setNoticeResolvedPath(pathname);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [isHomePage]);
+  }, [isHomePage, pathname]);
 
   const currentNotice = queue[0] ?? null;
 
@@ -130,6 +138,11 @@ export default function RootShell({
                 }}
               />
             )}
+
+            <GuestWelcomePrompt
+              key={pathname}
+              blocked={isHomePage && (noticeResolvedPath !== pathname || Boolean(currentNotice))}
+            />
           </>
         </PlacesProvider>
       </AccessibilityProvider>

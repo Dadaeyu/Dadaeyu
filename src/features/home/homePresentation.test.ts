@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildHomePlaceMapHref,
   cleanHomePresentationText,
   formatHomeDetailValue,
   formatHomeEventPeriod,
@@ -11,6 +12,13 @@ import {
   shouldShowHomePlaceImage,
   summarizeHomeEvidence
 } from "./homePresentation.ts";
+
+test("홈 장소 지도 링크는 정확한 장소 ID와 검색 대체값을 함께 전달한다", () => {
+  assert.equal(
+    buildHomePlaceMapHref({ id: " 12345 ", title: " 한밭수목원 " }),
+    "/map?contentId=12345&query=%ED%95%9C%EB%B0%AD%EC%88%98%EB%AA%A9%EC%9B%90"
+  );
+});
 
 test("추천 장소는 입력 순서를 유지한 대표 1곳과 보조 최대 3곳으로 나눈다", () => {
   assert.deepEqual(splitHomeRecommendationPlaces(["a", "b", "c", "d", "e"]), {

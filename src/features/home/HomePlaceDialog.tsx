@@ -38,6 +38,7 @@ import {
   type RankedHomePlace
 } from "@/features/home/homeData";
 import {
+  buildHomePlaceMapHref,
   formatHomeDetailValue,
   formatHomeEventPeriod,
   shouldShowHomeParkingDetail,
@@ -100,6 +101,7 @@ export function HomePlaceDialog({
   const eventPeriod = formatHomeEventPeriod(place.eventStartDate, place.eventEndDate);
   const showParkingDetail = shouldShowHomeParkingDetail(place.parking);
   const phoneHref = place.phone ? `tel:${place.phone.replace(/[^\d+]/g, "")}` : null;
+  const mapHref = buildHomePlaceMapHref(place);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -129,7 +131,7 @@ export function HomePlaceDialog({
 
   const sharePlace = async () => {
     setShareStatus(null);
-    const shareUrl = `${window.location.origin}/map?query=${encodeURIComponent(place.title)}`;
+    const shareUrl = `${window.location.origin}${mapHref}`;
     try {
       if (navigator.share) {
         await navigator.share({
@@ -413,7 +415,7 @@ export function HomePlaceDialog({
             className={`grid gap-2 ${phoneHref ? "grid-cols-[minmax(0,1fr)_auto_auto]" : "grid-cols-[minmax(0,1fr)_auto]"}`}
           >
             <Link
-              href={`/map?query=${encodeURIComponent(place.title)}`}
+              href={mapHref}
               className="bg-brand-800 hover:bg-brand-900 flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl px-3 text-center leading-tight font-semibold whitespace-nowrap text-white transition-colors sm:px-4"
             >
               <span className="sm:hidden">지도 보기</span>

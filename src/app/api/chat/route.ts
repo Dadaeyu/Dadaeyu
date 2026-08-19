@@ -31,6 +31,7 @@ import { reserveChatUsage, ChatUsageError } from "@/lib/chat/server/usage";
 import { createFixedWindowRateLimiter } from "@/lib/server/fixed-window-rate-limit";
 import { readBoundedRequestBody } from "@/lib/server/read-bounded-request-body";
 import { createTimeoutSignal } from "@/lib/server/timeout-signal";
+import { getKnowledgeContentId } from "@/lib/chat/discoveryLinks";
 
 type Confidence = "high" | "medium" | "low";
 
@@ -55,6 +56,7 @@ type ChatResponse = {
 };
 
 type PlaceCard = {
+  contentId: string | null;
   title: string;
   category: string | null;
   address: string | null;
@@ -1050,6 +1052,9 @@ function buildPlaceCards(rows: KnowledgeRow[]): PlaceCard[] {
       const title = formatChatDisplayText(
         getFirstTextFromRows(placeRows, (row) => getRowText(row, "title")) || "제목 없음"
       );
+      const contentId = getFirstTextFromRows(placeRows, (row) =>
+        getKnowledgeContentId(row.metadata)
+      );
       const category = cleanOptionalChatText(getBestPlaceCategory(placeRows));
       const address = cleanOptionalChatText(getFirstTextFromRows(placeRows, getRowAddress));
       const tel = cleanOptionalChatText(getFirstTextFromRows(placeRows, getRowTel));
@@ -1061,6 +1066,7 @@ function buildPlaceCards(rows: KnowledgeRow[]): PlaceCard[] {
       ).slice(0, 6);
 
       return {
+        contentId,
         title,
         category,
         address,
