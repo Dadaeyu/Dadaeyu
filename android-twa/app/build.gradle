@@ -33,7 +33,9 @@ def twaManifest = [
     navigationDividerColor: '#000000', // The navbar divider color.
     navigationDividerColorDark: '#000000', // The dark navbar divider color.
     backgroundColor: '#FFFFFF', // The color used for the splash screen background.
-    enableNotifications: false, // The web app does not currently delegate notifications.
+    // DelegationService(위치 위임 핸들러가 등록된 곳)는 이 플래그로 활성/비활성이 결정된다.
+    // 실제 푸시 알림 위임은 아직 안 쓰지만, 위치 위임이 같은 서비스를 타고 가기 때문에 켜둬야 한다.
+    enableNotifications: true,
     // Every shortcut must include the following fields:
     // - name: String that will show up in the shortcut.
     // - short_name: Shorter string used if |name| is too long.
