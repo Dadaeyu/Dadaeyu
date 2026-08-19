@@ -26,6 +26,7 @@ const MAX_CHAIN_DEPTH = 100;
 // 못하도록, CRON_SECRET 이 설정된 경우 이 헤더를 검증한다. 체이닝으로 스스로를 부를 때도
 // 같은 헤더를 실어 보내 인증을 통과시킨다.
 export async function GET(request: Request) {
+  const requestStartedAt = Date.now();
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
     const auth = request.headers.get("authorization");
@@ -85,18 +86,26 @@ export async function GET(request: Request) {
       const nextUrl = `https://${selfHost}/api/cron/place?chain=${chain + 1}`;
       after(async () => {
         try {
-          // 다음 호출의 결과(=하위 체인 전체)까지 기다릴 필요는 없지만, 커넥션을 너무 일찍
-          // 끊으면(예: 5초 타임아웃) Vercel이 아직 40초짜리 작업을 하던 다음 함수 실행 자체를
-          // 중간에 죽여버릴 수 있다 — 그러면 매 체인 호출이 몇 초짜리로만 끊겨 detail 처리량이
-          // 크게 줄어든다. 다음 호출이 스스로의 시간 예산(TIME_BUDGET_MS)을 다 쓰고 응답할
-          // 때까지 넉넉히 기다려서, 커넥션이 그보다 먼저 끊기지 않게 한다.
+          // fetch() 는 다음 함수를 "부르는" 즉시(TCP 연결 + 요청 전송) 다음 invocation 이 시작되고,
+          // 그 실행은 이 함수의 커넥션과 무관하게 독립적으로 자기 예산(TIME_BUDGET_MS)만큼 계속
+          // 돈다 — 그러니 우리가 응답을 오래 기다려줄 필요가 없다. 오히려 after() 안에서 대기하는
+          // 시간도 이 함수 자신의 maxDuration(60초) 예산에 그대로 포함되므로, 본작업이 이미 시간을
+          // 많이 썼는데 여기서도 오래 기다리면 이 함수 자체가 60초를 넘겨 타임아웃으로 죽는다
+          // (실제로 본작업 41초 + 대기 58초 = 99초로 죽은 사례가 있었다). 지금까지 쓴 시간을 빼고
+          // 남은 예산 안에서만, 그것도 짧게(요청이 실제로 전달됐는지 확인할 정도만) 기다린다.
+          const elapsedMs = Date.now() - requestStartedAt;
+          const remainingMs = maxDuration * 1000 - elapsedMs - 3000; // 3초는 안전 여유
+          const waitMs = Math.max(1000, Math.min(8000, remainingMs));
           await fetch(nextUrl, {
             headers: { Authorization: `Bearer ${cronSecret}` },
-            signal: AbortSignal.timeout(maxDuration * 1000 - 2000)
+            signal: AbortSignal.timeout(waitMs)
           });
         } catch {
-          // 다음 호출을 못 걸었어도 조용히 넘어간다 — 최악의 경우 다음날 크론이 처음부터 다시 훑는다.
-          console.error("[cron/place] 다음 체이닝 호출 실패 — 다음날 크론 때 재시도됨");
+          // 응답을 못 받았거나 시간 안에 못 기다렸어도, 요청 자체는 이미 전달돼 다음 invocation이
+          // 독립적으로 실행 중일 가능성이 높다 — 조용히 넘어간다. 최악의 경우 다음날 크론이 처음부터 다시 훑는다.
+          console.error(
+            "[cron/place] 다음 체이닝 호출 확인 실패(전달은 됐을 수 있음) — 다음날 크론 때 재시도됨"
+          );
         }
       });
     } else {
