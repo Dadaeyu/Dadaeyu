@@ -1,8 +1,8 @@
 "use client";
 
 // 장소 필터(접근성/인원수/테마/위치/일정/별점/즐겨찾기) 상태 훅과 필터 UI 필드 모음.
-import { useState } from "react";
-import { ChevronDown, Plus, Minus, Star, Heart } from "lucide-react";
+import { useId, useRef, useState } from "react";
+import { Calendar, ChevronDown, Plus, Minus, Star, Heart } from "lucide-react";
 import { useFilterOptions } from "@/lib/filterOptions";
 import { resolveEndAfterStartChange } from "@/lib/date-range";
 
@@ -85,6 +85,30 @@ export function FilterFields({
 }) {
   // 접근성 · 테마 옵션은 전역 캐시에서 가져온다 (브라우저 첫 진입 시 1회 조회).
   const { accessibility: accessOptions, themes: themeOptions } = useFilterOptions();
+  const dateFromId = useId();
+  const dateToId = useId();
+  const dateFromRef = useRef<HTMLInputElement>(null);
+  const dateToRef = useRef<HTMLInputElement>(null);
+
+  // 기기마다 date input의 "박스 어디를 눌러야 피커가 열리는지"가 달라서(어떤 기기는 달력
+  // 아이콘만 반응) 브라우저의 자체 클릭 판정에 의존하지 않고, 우리가 직접 그린 버튼을 눌렀을 때
+  // 코드로 showPicker()를 호출해 무조건 열리게 한다. showPicker를 지원하지 않는 구형
+  // 브라우저에서는 focus + click으로 폴백한다.
+  const openDatePicker = (ref: React.RefObject<HTMLInputElement | null>) => {
+    const el = ref.current;
+    if (!el) return;
+    const withPicker = el as HTMLInputElement & { showPicker?: () => void };
+    try {
+      if (typeof withPicker.showPicker === "function") {
+        withPicker.showPicker();
+        return;
+      }
+    } catch {
+      // showPicker가 있어도 상황에 따라 던질 수 있다 — 아래 폴백으로 넘어간다.
+    }
+    el.focus();
+    el.click();
+  };
 
   const xs = compact ? "text-xs" : "text-sm";
   const chip = (active: boolean) =>
@@ -210,30 +234,67 @@ export function FilterFields({
         <div className={compact ? "" : "w-56"}>
           <p className={`${xs} text-steel mb-1.5 font-semibold`}>일정</p>
           <div className="flex items-center gap-1">
-            <input
-              type="date"
-              value={filters.dateFrom}
-              max={filters.dateTo || undefined}
-              onChange={(e) => {
-                const dateFrom = e.target.value;
-                set("dateFrom", dateFrom);
-                const nextTo = resolveEndAfterStartChange(dateFrom, filters.dateTo, true);
-                if (nextTo !== filters.dateTo) set("dateTo", nextTo);
-              }}
-              className={`border-hairline h-10 flex-1 rounded-lg border px-2 ${xs} focus:ring-brand-500 min-w-0 focus:ring-2 focus:outline-none`}
-            />
+            {/* 기기마다 네이티브 date input의 "박스 어디를 눌러야 피커가 열리는지"가 달라서
+                (달력 아이콘만 반응하는 기기가 있음) 클릭 판정을 브라우저에 맡기지 않는다.
+                진짜 input은 opacity-0 + pointer-events-none으로 완전히 숨기고(레이아웃엔
+                남아 있어서 showPicker가 정상 동작함), 그 위에 직접 그린 버튼(텍스트+달력
+                아이콘)을 올려서 어디를 눌러도 openDatePicker()가 코드로 피커를 연다. */}
+            <div className="relative min-w-0 flex-1">
+              <input
+                ref={dateFromRef}
+                id={dateFromId}
+                type="date"
+                value={filters.dateFrom}
+                max={filters.dateTo || undefined}
+                onChange={(e) => {
+                  const dateFrom = e.target.value;
+                  set("dateFrom", dateFrom);
+                  const nextTo = resolveEndAfterStartChange(dateFrom, filters.dateTo, true);
+                  if (nextTo !== filters.dateTo) set("dateTo", nextTo);
+                }}
+                className="pointer-events-none absolute inset-0 h-10 w-full opacity-0"
+                tabIndex={-1}
+                aria-hidden
+              />
+              <button
+                type="button"
+                onClick={() => openDatePicker(dateFromRef)}
+                className={`border-hairline flex h-10 w-full items-center justify-between gap-1 rounded-lg border bg-white px-2 ${xs} focus:ring-brand-500 focus:ring-2 focus:outline-none`}
+              >
+                <span className={filters.dateFrom ? "text-ink" : "text-stone"}>
+                  {filters.dateFrom || "연도-월-일"}
+                </span>
+                <Calendar className="text-stone h-3.5 w-3.5 shrink-0" />
+              </button>
+            </div>
             <span className="text-stone shrink-0 text-xs">~</span>
-            <input
-              type="date"
-              value={filters.dateTo}
-              min={filters.dateFrom || undefined}
-              onChange={(e) => {
-                const dateTo = e.target.value;
-                if (filters.dateFrom && dateTo && dateTo < filters.dateFrom) return;
-                set("dateTo", dateTo);
-              }}
-              className={`border-hairline h-10 flex-1 rounded-lg border px-2 ${xs} focus:ring-brand-500 min-w-0 focus:ring-2 focus:outline-none`}
-            />
+            <div className="relative min-w-0 flex-1">
+              <input
+                ref={dateToRef}
+                id={dateToId}
+                type="date"
+                value={filters.dateTo}
+                min={filters.dateFrom || undefined}
+                onChange={(e) => {
+                  const dateTo = e.target.value;
+                  if (filters.dateFrom && dateTo && dateTo < filters.dateFrom) return;
+                  set("dateTo", dateTo);
+                }}
+                className="pointer-events-none absolute inset-0 h-10 w-full opacity-0"
+                tabIndex={-1}
+                aria-hidden
+              />
+              <button
+                type="button"
+                onClick={() => openDatePicker(dateToRef)}
+                className={`border-hairline flex h-10 w-full items-center justify-between gap-1 rounded-lg border bg-white px-2 ${xs} focus:ring-brand-500 focus:ring-2 focus:outline-none`}
+              >
+                <span className={filters.dateTo ? "text-ink" : "text-stone"}>
+                  {filters.dateTo || "연도-월-일"}
+                </span>
+                <Calendar className="text-stone h-3.5 w-3.5 shrink-0" />
+              </button>
+            </div>
           </div>
         </div>
 

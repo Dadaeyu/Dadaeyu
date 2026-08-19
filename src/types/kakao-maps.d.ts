@@ -7,6 +7,7 @@ declare namespace kakao.maps {
     constructor();
     extend(latlng: LatLng): void;
     isEmpty(): boolean;
+    contain(latlng: LatLng): boolean;
   }
 
   class Point {
@@ -31,6 +32,7 @@ declare namespace kakao.maps {
     ): void;
     setLevel(level: number, options?: { animate?: boolean }): void;
     getLevel(): number;
+    getBounds(): LatLngBounds;
     relayout(): void;
     getProjection(): MapProjection;
     addControl(control: object, position: number): void;
@@ -38,10 +40,14 @@ declare namespace kakao.maps {
   }
 
   interface MapProjection {
-    /** 지도 좌표 → 컨테이너 픽셀 */
-    containerPointFromCoords(latlng: LatLng): Point;
-    /** 컨테이너 픽셀 → 지도 좌표 */
-    coordsFromContainerPoint(point: Point): LatLng;
+    /** 지도 좌표 → 지도 내부 픽셀 좌표 */
+    pointFromCoords(latlng: LatLng): Point;
+    /** 지도 내부 픽셀 좌표 → 지도 좌표 */
+    coordsFromPoint(point: Point): LatLng;
+    /** 지도 좌표 → 컨테이너 픽셀 (지원 시) */
+    containerPointFromCoords?(latlng: LatLng): Point;
+    /** 컨테이너 픽셀 → 지도 좌표 (지원 시) */
+    coordsFromContainerPoint?(point: Point): LatLng;
   }
 
   class CustomOverlay {

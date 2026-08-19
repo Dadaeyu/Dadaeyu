@@ -38,6 +38,7 @@ interface Props {
   places: SearchPlace[];
   searchCount: number; // 실제 검색 결과 수
   hasActiveFilter: boolean; // true면 검색/필터가 켜진 상태 — 0개여도 핫플레이스로 대체하지 않는다.
+  isLoadingTopRated?: boolean; // 필터 없이 기본으로 보여주는 핫플레이스 최초 로딩 중
   onSelectPlace: (id: string) => void;
 
   // 검색 결과 페이징 (50개씩) — 넘기지 않으면 페이징 UI를 표시하지 않는다.
@@ -79,6 +80,7 @@ export default function PlaceSearchSidebar({
   places,
   searchCount,
   hasActiveFilter,
+  isLoadingTopRated = false,
   onSelectPlace,
   searchPage = 0,
   searchTotal = 0,
@@ -176,10 +178,10 @@ export default function PlaceSearchSidebar({
               : `핫플레이스 ${places.length}개`}
           </span>
         </div>
-        {isSearching ? (
+        {isSearching || (!hasActiveFilter && isLoadingTopRated) ? (
           <div className="flex items-center justify-center gap-2 py-10 text-xs text-gray-400">
             <span className="border-brand-500 h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-200 border-t-transparent" />
-            검색 중...
+            {hasActiveFilter ? "검색 중..." : "불러오는 중..."}
           </div>
         ) : places.length === 0 && hasActiveFilter ? (
           <div className="flex flex-col items-center justify-center gap-1 py-14 text-center text-gray-400">

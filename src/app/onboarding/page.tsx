@@ -12,7 +12,7 @@ import {
 } from "@/lib/supabase/member";
 import ThemePreferencePicker from "@/components/ThemePreferencePicker";
 import AccessibilityNeedsPicker from "@/components/AccessibilityNeedsPicker";
-import { getSafeNextPath, isEmailSignupMember } from "@/lib/auth/actions";
+import { getSafeNextPath, isOAuthUser } from "@/lib/auth/actions";
 import { AGE_GROUP_UI_OPTIONS, ageGroupFromLabel, genderFromLabel } from "@/lib/supabase/types";
 
 const GENDERS = ["남성", "여성", "비공개"] as const;
@@ -23,7 +23,7 @@ function OnboardingForm() {
   const next = getSafeNextPath(searchParams.get("next"), "/");
   const { user, member, preferences, refreshMember, loading: authLoading } = useAuth();
 
-  const skipNickname = isEmailSignupMember(member);
+  const skipNickname = Boolean(user && !isOAuthUser(user));
 
   const [nickname, setNickname] = useState("");
   const [genderLabel, setGenderLabel] = useState<(typeof GENDERS)[number]>("비공개");

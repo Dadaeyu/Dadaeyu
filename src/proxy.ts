@@ -6,7 +6,7 @@ import { isPublicLegalPath } from "@/lib/legal/legalRoutes";
 import { getPublicSupabaseConfig } from "@/lib/supabase/config";
 
 const PROTECTED_PATHS = ["/mypage", "/onboarding"];
-const AUTH_PATHS = ["/login", "/signup", "/forgot-password", "/find-email"];
+const AUTH_PATHS = ["/login", "/signup", "/forgot-password"];
 
 function isProtectedPath(pathname: string) {
   return PROTECTED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -22,7 +22,6 @@ function isOnboardingExempt(pathname: string) {
     pathname === "/signup" ||
     pathname === "/signup/check-email" ||
     pathname === "/forgot-password" ||
-    pathname === "/find-email" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/") ||
     isPublicLegalPath(pathname) ||

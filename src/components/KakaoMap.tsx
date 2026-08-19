@@ -69,8 +69,12 @@ interface Props {
   level?: number;
   myLocation?: { lat: number; lng: number } | null;
   focusMyLocationTrigger?: number;
-  // 값이 바뀔 때마다(0 제외) 지도를 초기 중심·줌(대전 전체가 보이는 화면)으로 되돌린다.
+  // 값이 바뀔 때마다(0 제외) 무조건 지도를 초기 중심·줌으로 되돌린다("초기화" 버튼 등 사용자가 직접 요청한 경우).
   resetViewTrigger?: number;
+  // 값이 바뀔 때마다(0 제외) "지금 안 가려진 화면에 보여줄 장소가 하나도 없을 때만" 초기 화면으로
+  // 되돌린다(검색/필터가 자동으로 트리거하는 리셋용) — 이미 보이는 장소가 있으면 사용자가 보던
+  // 확대/위치를 그대로 유지한다.
+  autoResetViewTrigger?: number;
   // 여러 구간의 경로선(코스 일정용). 구간별로 색상·점선 여부를 다르게 줄 수 있다.
   path?: MapPathSegment[];
   /** 경로선 구간(day 있는 것) 클릭 시 그 구간의 day 값을 전달한다. */
@@ -209,6 +213,7 @@ export default function KakaoMap({
   myLocation = null,
   focusMyLocationTrigger = 0,
   resetViewTrigger = 0,
+  autoResetViewTrigger = 0,
   path = [],
   onPathClick,
   fitPathKey = null,
@@ -277,7 +282,11 @@ export default function KakaoMap({
         const marker = markers.find((m) => m.id === selectedId);
         if (!marker) return;
         const K = window.kakao.maps;
-        map.setCenter(new K.LatLng(marker.lat, marker.lng));
+        centerLatLngInVisibleMap(
+          map,
+          new K.LatLng(marker.lat, marker.lng),
+          initialBottomOverlayPxRef.current ?? bottomOverlayPxRef.current
+        );
       }, 50);
     });
     ro.observe(el);
@@ -288,30 +297,23 @@ export default function KakaoMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapInitCount, selectedId, fitPathKey]);
 
-  // 확대/축소 +/- 컨트롤은 데스크탑에서만(모바일은 핀치 줌으로 충분해서 화면을 가리지 않게 뺀다),
-  // 그리고 showZoomControl=false 면 데스크탑에서도 숨긴다(지도 기능 드롭다운의 표시/미표시 토글용).
+  // 확대/축소 +/- 컨트롤 표시 여부 — 지도 기능 드롭다운의 "확대/축소" 토글로 켜고 끈다.
+  // (예전엔 모바일에서 핀치 줌으로 충분하다고 데스크탑에서만 보이게 막아뒀는데, 이제 그 토글
+  // 자체가 모바일에서도 선택적으로 켤 수 있는 기능이라 화면 크기로 다시 막지 않는다.)
   useEffect(() => {
     if (!mapRef.current || !window.kakao?.maps) return;
     const K = window.kakao.maps;
     const map = mapRef.current;
-    const mql = window.matchMedia("(min-width: 768px)");
 
-    const sync = (showControl: boolean) => {
-      if (showControl) {
-        if (!zoomControlRef.current) {
-          zoomControlRef.current = new K.ZoomControl();
-          map.addControl(zoomControlRef.current, K.ControlPosition.TOPRIGHT);
-        }
-      } else if (zoomControlRef.current) {
-        map.removeControl(zoomControlRef.current);
-        zoomControlRef.current = null;
+    if (showZoomControl) {
+      if (!zoomControlRef.current) {
+        zoomControlRef.current = new K.ZoomControl();
+        map.addControl(zoomControlRef.current, K.ControlPosition.TOPRIGHT);
       }
-    };
-
-    sync(mql.matches && showZoomControl);
-    const handleChange = (e: MediaQueryListEvent) => sync(e.matches && showZoomControl);
-    mql.addEventListener("change", handleChange);
-    return () => mql.removeEventListener("change", handleChange);
+    } else if (zoomControlRef.current) {
+      map.removeControl(zoomControlRef.current);
+      zoomControlRef.current = null;
+    }
   }, [mapInitCount, showZoomControl]);
 
   // 마커 동기화
@@ -374,6 +376,8 @@ export default function KakaoMap({
   }, [selectedId, markers]);
 
   // [줌-투-마커] selectedId 변경 시 해당 마커로 줌인 — 경로 맞춤 중이면 스킵
+  // 모바일 하단 시트가 떠 있으면 기하 중심이 아니라, 시트가 처음 뜬 기본 높이 기준으로
+  // "안 가려진 영역"의 중앙에 마커가 오도록 보정한다(사용자가 시트를 드래그해 늘려놔도 그 값은 안 씀).
   // fitPathKey는 deps에 넣지 않음: 안내 종료 시 마커로 다시 점프하지 않게
   useEffect(() => {
     if (fitPathKey != null && fitPathKey !== "") return;
@@ -381,8 +385,12 @@ export default function KakaoMap({
     const marker = markers.find((m) => m.id === selectedId);
     if (!marker) return;
     const K = window.kakao.maps;
-    mapRef.current.setCenter(new K.LatLng(marker.lat, marker.lng));
     mapRef.current.setLevel(5, { animate: true });
+    centerLatLngInVisibleMap(
+      mapRef.current,
+      new K.LatLng(marker.lat, marker.lng),
+      initialBottomOverlayPxRef.current ?? bottomOverlayPxRef.current
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, mapInitCount]);
 
@@ -616,75 +624,152 @@ export default function KakaoMap({
 
   // 하단 시트가 가리는 높이는 props 로 늦게 갱신될 수 있어, 보정 시 최신 값을 읽는다.
   const bottomOverlayPxRef = useRef(bottomOverlayPx);
+  // 장소를 눌러 줌인할 때는 "지금" 시트 높이(사용자가 드래그로 늘렸을 수도 있는)가 아니라,
+  // 시트가 처음 뜬 기본 높이 기준으로 안 가려진 영역 중앙에 맞춘다 — 한 번 잡히면 이후 드래그와
+  // 무관하게 고정.
+  const initialBottomOverlayPxRef = useRef<number | null>(null);
   useEffect(() => {
     bottomOverlayPxRef.current = bottomOverlayPx;
+    if (initialBottomOverlayPxRef.current == null && bottomOverlayPx > 0) {
+      initialBottomOverlayPxRef.current = bottomOverlayPx;
+    }
   }, [bottomOverlayPx]);
 
   /**
    * 내 위치를 "시트에 가려지지 않은 지도 영역"의 세로 중앙에 둔다.
-   * 전체 컨테이너 기준 panTo 만 하면 시트 때문에 핀이 아래로 치우친다.
-   * projection 으로 목표 픽셀 → 새 중심 좌표를 계산하고, 실패 시 setBounds(bottom padding) 로 폴백.
+   * 전체 컨테이너 기준 setCenter 만 하면 시트 때문에 핀이 아래로 치우친다.
+   * setBounds는 실제 넓이가 있는 경로(fitPathKey)를 맞출 때는 안정적이지만, 여기서 다루는
+   * 점 하나(넓이 0인 bounds)에는 top/bottom padding을 비대칭으로 줘도 무시하고 그냥 기하
+   * 중심에 놓아버리는 경우가 있어(카카오 SDK 특성) — 대신 projection으로 "보이는 영역 중앙에
+   * 오려면 지도 중심이 어디여야 하는지"를 직접 계산해서 그 좌표 하나로 panTo 한다.
+   * (예전엔 setCenter로 순간이동한 뒤 panBy로 한 번 더 밀었는데, 순간이동 직후 슬라이드가
+   * 붙어서 "휙" 튀는 것처럼 보였다 — 최종 목표 좌표를 미리 구해서 한 번에 부드럽게 이동한다.)
    */
   const centerLatLngInVisibleMap = (
     map: kakao.maps.Map,
     latlng: kakao.maps.LatLng,
     bottomOverlay: number
   ) => {
-    const K = window.kakao.maps;
     map.relayout();
 
     if (bottomOverlay <= 0) {
-      map.setCenter(latlng);
+      map.panTo(latlng);
       return;
     }
 
-    const container = containerRef.current;
-    if (container) {
-      try {
-        // 1) 먼저 중심으로 두고 스케일/투영을 맞춘 뒤
-        map.setCenter(latlng);
-        map.relayout();
-        const proj = map.getProjection();
-        const h = container.clientHeight;
-        const w = container.clientWidth;
-        // 보이는 영역(상단 h - overlay)의 세로 중앙 픽셀
-        const visibleCenterY = (h - bottomOverlay) / 2;
-        // 현재 latlng 는 컨테이너 기하 중심(h/2) 근처. 목표 픽셀과의 차이만큼 중심을 이동.
-        const current = proj.containerPointFromCoords(latlng);
-        // latlng 를 visibleCenterY 에 두려면, 지도 중심을 (현재 중심 픽셀 + (current.y - visibleCenterY)) 로
-        // → 새 중심이 될 컨테이너 좌표는 기하 중심에서 (current.y - visibleCenterY) 만큼 아래
-        const offsetY = current.y - visibleCenterY;
-        const newCenterPoint = new K.Point(w / 2, h / 2 + offsetY);
-        const newCenter = proj.coordsFromContainerPoint(newCenterPoint);
-        map.setCenter(newCenter);
-        return;
-      } catch {
-        // projection 미지원 등 — setBounds 폴백
-      }
+    try {
+      const K = window.kakao.maps;
+      const proj = map.getProjection();
+      const point = proj.pointFromCoords(latlng);
+      // 목표 지점보다 지도 중심을 아래(+y)에 두면, 상대적으로 목표 지점은 화면 위쪽(보이는
+      // 영역 중앙)에서 보이게 된다.
+      const shiftedPoint = new K.Point(point.x, point.y + Math.round(bottomOverlay / 2));
+      const target = proj.coordsFromPoint(shiftedPoint);
+      map.panTo(target);
+    } catch {
+      map.panTo(latlng);
     }
-
-    // 폴백: 경로 맞춤과 동일하게 bottom padding 으로 보이는 영역 중앙에 맞춤
-    const bounds = new K.LatLngBounds();
-    bounds.extend(latlng);
-    // 단일 점은 bounds 가 너무 작아 줌이 과할 수 있어 현재 레벨 유지 + setBounds
-    const level = map.getLevel();
-    map.setBounds(bounds, 48, 32, bottomOverlay + 24, 32);
-    map.setLevel(level, { animate: false });
   };
 
-  // [내 위치로 이동] focusMyLocationTrigger가 바뀔 때 1회만 이동
+  // [내 위치로 이동] focusMyLocationTrigger가 바뀔 때 1회만 이동.
+  // "내 위치" 버튼을 눌러 GPS를 새로 잡았을 때만 한 번 올라가는 트리거라, fitPathKey(코스 경로
+  // 맞춤)가 걸려 있어도 사용자가 명시적으로 요청한 이동이므로 항상 실행한다 — 그렇지 않으면
+  // 코스 상세처럼 지도에 마커가 있어 fitPathKey가 항상 설정된 화면에서는 "내 위치"가 아예 동작하지 않는다.
   // myLocation / fitPathKey를 deps에 넣지 않음 — GPS 갱신·안내 종료 시 카메라 재점프 방지
   useEffect(() => {
-    if (fitPathKey != null && fitPathKey !== "") return;
     if (!focusMyLocationTrigger || !myLocation || !mapRef.current || !window.kakao?.maps) return;
     const K = window.kakao.maps;
-    const map = mapRef.current;
     const latlng = new K.LatLng(myLocation.lat, myLocation.lng);
 
-    // 시트 스냅(55%) 반영 직후 overlay 가 한 프레임 늦을 수 있어 짧게 재시도
+    // 시트 높이 state 반영 직후 한 번 더 맞춤 (루프 없이 2회만)
     const apply = () => {
       if (!mapRef.current) return;
       centerLatLngInVisibleMap(mapRef.current, latlng, bottomOverlayPxRef.current);
+    };
+    apply();
+    const t1 = window.setTimeout(apply, 200);
+    return () => window.clearTimeout(t1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMyLocationTrigger, mapInitCount]);
+
+  // [지도 초기화 — 수동] resetViewTrigger가 바뀔 때("초기화" 버튼을 직접 눌렀을 때 등 사용자가
+  // 명시적으로 요청한 경우) 화면에 뭐가 보이든 상관없이 항상 대전 전체가 보이는 초기 화면으로 되돌린다.
+  // 모바일 하단 시트가 떠 있으면 기하 중심이 아니라 "보이는 영역"의 중앙에 오도록 보정한다.
+  useEffect(() => {
+    if (!resetViewTrigger || !mapRef.current || !window.kakao?.maps) return;
+    const K = window.kakao.maps;
+    const map = mapRef.current;
+
+    map.setLevel(MAP_LEVEL, { animate: false });
+    centerLatLngInVisibleMap(
+      map,
+      new K.LatLng(MAP_CENTER.lat, MAP_CENTER.lng),
+      bottomOverlayPxRef.current
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetViewTrigger, mapInitCount]);
+
+  // 하단 시트에 가려지지 않은 "보이는 영역"의 지도 경계 — 검색 결과가 지금 화면에 보이는지 판단할 때 쓴다.
+  const getVisibleBounds = (
+    map: kakao.maps.Map,
+    bottomOverlay: number
+  ): kakao.maps.LatLngBounds => {
+    const K = window.kakao.maps;
+    if (bottomOverlay <= 0) return map.getBounds();
+    const container = containerRef.current;
+    if (!container) return map.getBounds();
+    try {
+      const proj = map.getProjection();
+      if (!proj.coordsFromContainerPoint) return map.getBounds();
+      const w = container.clientWidth;
+      const visibleH = container.clientHeight - bottomOverlay;
+      if (visibleH <= 0) return map.getBounds();
+      const bounds = new K.LatLngBounds();
+      bounds.extend(proj.coordsFromContainerPoint(new K.Point(0, 0)));
+      bounds.extend(proj.coordsFromContainerPoint(new K.Point(w, visibleH)));
+      return bounds;
+    } catch {
+      return map.getBounds();
+    }
+  };
+
+  // [지도 초기화 — 자동] autoResetViewTrigger가 바뀔 때(검색·필터 변경으로 자동 트리거) 지금 안
+  // 가려진 화면에 표시할 장소가 하나도 없을 때만 초기 화면으로 되돌린다. 이미 보이는 장소가 있으면
+  // 사용자가 맞춰둔 확대/위치를 그대로 유지한다.
+  useEffect(() => {
+    if (!autoResetViewTrigger || !mapRef.current || !window.kakao?.maps) return;
+    const K = window.kakao.maps;
+    const map = mapRef.current;
+
+    const visibleBounds = getVisibleBounds(map, bottomOverlayPxRef.current);
+    const hasVisibleMarker = markers.some((marker) =>
+      visibleBounds.contain(new K.LatLng(marker.lat, marker.lng))
+    );
+    if (hasVisibleMarker) return;
+
+    map.setLevel(MAP_LEVEL, { animate: false });
+    centerLatLngInVisibleMap(
+      map,
+      new K.LatLng(MAP_CENTER.lat, MAP_CENTER.lng),
+      bottomOverlayPxRef.current
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoResetViewTrigger, mapInitCount]);
+
+  // 지도가 처음 만들어졌을 때도 같은 이유로 기본 위치(대전시청)를 보이는 영역 중앙에 맞춘다.
+  // 코스 경로 등을 바로 fit할 예정이면(fitPathKey) 그쪽이 카메라를 맡으므로 여기선 건드리지 않는다.
+  // bottomOverlayPx 는 부모(모바일 시트 높이 계산)가 한 프레임 늦게 줄 수 있어 잠깐 재시도한다.
+  useEffect(() => {
+    if (!mapInitCount || !mapRef.current || !window.kakao?.maps) return;
+    if (fitPathKey != null && fitPathKey !== "") return;
+    const K = window.kakao.maps;
+    const apply = () => {
+      if (!mapRef.current) return;
+      centerLatLngInVisibleMap(
+        mapRef.current,
+        new K.LatLng(center.lat, center.lng),
+        bottomOverlayPxRef.current
+      );
     };
     apply();
     const t1 = window.setTimeout(apply, 120);
@@ -694,15 +779,7 @@ export default function KakaoMap({
       window.clearTimeout(t2);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusMyLocationTrigger, mapInitCount]);
-
-  // [지도 초기화] resetViewTrigger가 바뀔 때(검색·필터 변경) 대전 전체가 보이는 초기 화면으로 되돌린다.
-  useEffect(() => {
-    if (!resetViewTrigger || !mapRef.current || !window.kakao?.maps) return;
-    const K = window.kakao.maps;
-    mapRef.current.setCenter(new K.LatLng(MAP_CENTER.lat, MAP_CENTER.lng));
-    mapRef.current.setLevel(MAP_LEVEL, { animate: true });
-  }, [resetViewTrigger, mapInitCount]);
+  }, [mapInitCount]);
 
   return (
     <>

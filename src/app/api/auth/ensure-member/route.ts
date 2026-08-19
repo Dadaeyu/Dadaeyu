@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { completeEmailSignupOnboardingIfNeeded } from "@/lib/auth/finish-auth-callback";
 import { ensureMemberExists } from "@/lib/supabase/ensure-member";
 
-/** members 보장 + 이메일 가입(닉네임·휴대폰 입력) 시 온보딩 자동 완료 */
+/** members 보장 + 이메일 가입(닉네임 입력) 시 온보딩 자동 완료 */
 export async function POST() {
   const supabase = await createClient();
   const {

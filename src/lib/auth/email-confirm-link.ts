@@ -27,7 +27,6 @@ export async function buildTokenHashConfirmUrl(
     password?: string;
     profile?: {
       nickname?: string;
-      phone?: string;
       theme_preferences?: string[];
       accessibility_needs?: string[];
     };
@@ -48,7 +47,6 @@ export async function buildTokenHashConfirmUrl(
       options: {
         data: {
           nickname: options.profile?.nickname,
-          phone: options.profile?.phone,
           ...(options.profile?.theme_preferences?.length
             ? { theme_preferences: options.profile.theme_preferences }
             : {}),

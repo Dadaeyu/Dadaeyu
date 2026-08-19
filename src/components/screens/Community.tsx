@@ -1220,6 +1220,7 @@ function CommunityWrite() {
             <input
               ref={fileInputRef}
               type="file"
+              accept="image/*"
               multiple
               hidden
               onChange={(e) => {
