@@ -385,7 +385,7 @@ export default function KakaoMap({
     const marker = markers.find((m) => m.id === selectedId);
     if (!marker) return;
     const K = window.kakao.maps;
-    mapRef.current.setLevel(5, { animate: false });
+    mapRef.current.setLevel(5, { animate: true });
     centerLatLngInVisibleMap(
       mapRef.current,
       new K.LatLng(marker.lat, marker.lng),
@@ -640,8 +640,10 @@ export default function KakaoMap({
    * 전체 컨테이너 기준 setCenter 만 하면 시트 때문에 핀이 아래로 치우친다.
    * setBounds는 실제 넓이가 있는 경로(fitPathKey)를 맞출 때는 안정적이지만, 여기서 다루는
    * 점 하나(넓이 0인 bounds)에는 top/bottom padding을 비대칭으로 줘도 무시하고 그냥 기하
-   * 중심에 놓아버리는 경우가 있어(카카오 SDK 특성) — 시트 높이만큼 뒤로 panBy 하는 방식이
-   * 훨씬 안정적으로 동작한다.
+   * 중심에 놓아버리는 경우가 있어(카카오 SDK 특성) — 대신 projection으로 "보이는 영역 중앙에
+   * 오려면 지도 중심이 어디여야 하는지"를 직접 계산해서 그 좌표 하나로 panTo 한다.
+   * (예전엔 setCenter로 순간이동한 뒤 panBy로 한 번 더 밀었는데, 순간이동 직후 슬라이드가
+   * 붙어서 "휙" 튀는 것처럼 보였다 — 최종 목표 좌표를 미리 구해서 한 번에 부드럽게 이동한다.)
    */
   const centerLatLngInVisibleMap = (
     map: kakao.maps.Map,
@@ -649,16 +651,23 @@ export default function KakaoMap({
     bottomOverlay: number
   ) => {
     map.relayout();
-    map.setCenter(latlng);
 
-    if (bottomOverlay <= 0) return;
+    if (bottomOverlay <= 0) {
+      map.panTo(latlng);
+      return;
+    }
 
     try {
-      map.relayout();
-      // 중심을 아래로 밀어 핀이 화면 위쪽(보이는 영역 중앙)으로 올라가게 함
-      map.panBy(0, Math.round(bottomOverlay / 2));
+      const K = window.kakao.maps;
+      const proj = map.getProjection();
+      const point = proj.pointFromCoords(latlng);
+      // 목표 지점보다 지도 중심을 아래(+y)에 두면, 상대적으로 목표 지점은 화면 위쪽(보이는
+      // 영역 중앙)에서 보이게 된다.
+      const shiftedPoint = new K.Point(point.x, point.y + Math.round(bottomOverlay / 2));
+      const target = proj.coordsFromPoint(shiftedPoint);
+      map.panTo(target);
     } catch {
-      // panBy 실패 시 기하 중심이라도 유지 (이미 setCenter 됨)
+      map.panTo(latlng);
     }
   };
 
