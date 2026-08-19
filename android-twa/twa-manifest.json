@@ -11,7 +11,7 @@
   "navigationDividerColor": "#000000",
   "navigationDividerColorDark": "#000000",
   "backgroundColor": "#FFFFFF",
-  "enableNotifications": false,
+  "enableNotifications": true,
   "startUrl": "/",
   "iconUrl": "https://dadaeyu.vercel.app/icons/pwa-512x512.png",
   "maskableIconUrl": "https://dadaeyu.vercel.app/icons/pwa-maskable-512x512.png",
