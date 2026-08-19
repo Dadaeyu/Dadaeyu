@@ -99,7 +99,8 @@ test("generated Android project matches the TWA package, version, and SDK contra
     versionName: "1.0.1",
     signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
     fingerprints: [
-      "8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C"
+      "8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C",
+      "50:D8:F3:CA:1A:41:73:30:13:84:0E:21:23:72:7C:1C:9B:3D:73:35:0C:DD:D1:34:01:CA:B4:54:38:5B:4E:57"
     ]
   });
   assert.deepEqual(contract.androidGradle, {
