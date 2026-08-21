@@ -92,7 +92,7 @@ export default function RootShell({
       <AccessibilityProvider>
         <PlacesProvider initialPlaces={places} initialDetails={placeDetails} fromDb={fromDb}>
           <>
-            <div className="bg-background flex min-h-screen flex-col">
+            <div className="bg-background flex min-h-dvh flex-col">
               <NavigationProgress />
               <a
                 href="#main"

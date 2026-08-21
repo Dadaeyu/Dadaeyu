@@ -50,6 +50,7 @@ import {
   LCLSSYSTM1_LABELS
 } from "@/lib/search/categoryColors";
 import { useMyLocation } from "@/hooks/useMyLocation";
+import { useLockBodyScroll } from "@/hooks/useLockBodyScroll";
 import { shareToKakaoTalk } from "@/lib/kakao/loadKakaoShare";
 import { fetchSharedCourses, type CourseSort } from "@/lib/supabase/courses";
 import type { TourismSharedCourse } from "@/lib/supabase/types";
@@ -340,6 +341,9 @@ function formatDotDate(value?: string | null): string {
 export default function Course() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : undefined;
+  // 코스 상세(지도 포함, calc(100dvh-64px) 고정 레이아웃)일 때만 body 스크롤을 잠근다 —
+  // 목록 화면은 일반 페이지 스크롤이 그대로 필요하다.
+  useLockBodyScroll(Boolean(id));
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, member, loading: authLoading } = useAuth();
@@ -2839,7 +2843,7 @@ function CourseDetail({ id }: { id: string }) {
   return (
     <div
       className="relative -mx-4 -mt-6 -mb-24 flex overflow-hidden md:-mx-6"
-      style={{ height: "calc(100vh - 64px)" }}
+      style={{ height: "calc(100dvh - 64px)" }}
     >
       {/* ── LEFT SIDEBAR (desktop) / 모바일 바텀시트 — 보기·편집·검색·상세 모두 이 패널 하나로 관리한다 ── */}
       <aside

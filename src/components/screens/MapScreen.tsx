@@ -21,6 +21,7 @@ import {
 } from "@/lib/search/categoryColors";
 import { usePlaceSearch } from "@/hooks/usePlaceSearch";
 import { useMyLocation, type MyLocationErrorReason } from "@/hooks/useMyLocation";
+import { useLockBodyScroll } from "@/hooks/useLockBodyScroll";
 import {
   fetchDirections,
   openKakaoMapRoute,
@@ -78,6 +79,7 @@ export default function Map() {
   const initialQuery = searchParams.get("query")?.trim() ?? "";
   const initialContentId = searchParams.get("contentId");
   const mapOnly = searchParams.get("mode") === "map";
+  useLockBodyScroll();
 
   // 모바일(및 mapOnly) 하단 시트 — 오버레이 높이 스냅(peek / 50% / 55% / full).
   // 핸들이 시트와 같이 움직이므로 window 리스너로 드래그 추적한다.
@@ -525,7 +527,7 @@ export default function Map() {
   return (
     <div
       className="relative -mx-4 -mt-6 -mb-24 flex overflow-hidden md:-mx-6"
-      style={{ height: "calc(100vh - 64px)" }}
+      style={{ height: "calc(100dvh - 64px)" }}
     >
       {/* ── 검색 패널 — 데스크톱은 왼쪽 고정 사이드바, 모바일(및 mapOnly)은 코스 상세와 동일한
           드래그 가능한 하단 시트. 검색 목록 ↔ 상세 전환도 PlaceSearchSidebar 가 내부에서 처리한다. ── */}
