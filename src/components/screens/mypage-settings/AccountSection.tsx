@@ -111,12 +111,12 @@ export function AccountSection() {
 
   return (
     <div className="max-w-xl space-y-6">
-      <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+      <div className="border-hairline rounded-xl border bg-gray-50 px-4 py-3">
         <p className="text-steel text-xs font-semibold">이메일</p>
         <p className="text-ink mt-1 text-sm font-medium">{displayEmailFromAuthUser(user) || "—"}</p>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+      <div className="border-hairline rounded-xl border bg-gray-50 px-4 py-3">
         <p className="text-steel text-xs font-semibold">닉네임</p>
         <p className="text-ink mt-1 text-sm font-medium">{member?.nickname ?? "—"}</p>
       </div>

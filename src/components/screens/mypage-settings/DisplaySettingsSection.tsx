@@ -52,7 +52,7 @@ export function DisplaySettingsSection() {
           key={key}
           type="button"
           onClick={toggles[toggle]}
-          className="hover:bg-surface-soft flex w-full items-center justify-between rounded-xl border border-gray-200 px-4 py-3 transition-colors"
+          className="hover:bg-surface-soft border-hairline flex w-full items-center justify-between rounded-xl border px-4 py-3 transition-colors"
           aria-pressed={values[key]}
         >
           <div className="text-left">
@@ -74,7 +74,7 @@ export function DisplaySettingsSection() {
         </button>
       ))}
 
-      <div className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+      <div className="border-hairline flex w-full items-center justify-between rounded-xl border px-4 py-3">
         <div className="text-left">
           <p className="text-ink text-sm font-semibold">화면 확대</p>
           <p className="text-stone text-xs">텍스트 크기를 조절합니다</p>
@@ -84,7 +84,7 @@ export function DisplaySettingsSection() {
             type="button"
             onClick={decreaseFontScale}
             disabled={fontScale <= FONT_SCALE_MIN}
-            className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-100 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
+            className="border-hairline flex h-8 w-8 items-center justify-center rounded-md border bg-gray-100 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="화면 축소"
           >
             −
@@ -99,7 +99,7 @@ export function DisplaySettingsSection() {
             type="button"
             onClick={increaseFontScale}
             disabled={fontScale >= FONT_SCALE_MAX}
-            className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-100 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
+            className="border-hairline flex h-8 w-8 items-center justify-center rounded-md border bg-gray-100 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="화면 확대"
           >
             +

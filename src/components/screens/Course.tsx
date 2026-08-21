@@ -2908,7 +2908,7 @@ function CourseDetail({ id }: { id: string }) {
           /* ── 편집 패널 ── */
           <>
             {/* Edit header — 코스 상세 패널과 동일한 스타일(제목만, 버튼은 하단 Actions로) */}
-            <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2.5">
+            <div className="border-hairline flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
               <h2 className="flex-1 truncate text-sm font-bold text-gray-800">
                 {isNew ? "코스 추가" : "코스 편집"}
               </h2>
@@ -2936,7 +2936,7 @@ function CourseDetail({ id }: { id: string }) {
               </div>
 
               {/* 공유 여부 */}
-              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+              <div className="border-hairline flex items-center justify-between border-b px-4 py-3">
                 <div>
                   <p className="text-xs font-semibold text-gray-700">공유 여부</p>
                   <p className="mt-0.5 text-xs text-gray-400">
@@ -3163,11 +3163,11 @@ function CourseDetail({ id }: { id: string }) {
 
             {/* Actions — 코스 상세 패널의 Actions 바와 같은 위치·스타일로 하단에 고정. */}
             {saveError && (
-              <p className="shrink-0 border-t border-gray-100 px-4 pt-2 text-xs text-red-500">
+              <p className="border-hairline shrink-0 border-t px-4 pt-2 text-xs text-red-500">
                 저장 실패: {saveError}
               </p>
             )}
-            <div className="mb-16 flex shrink-0 gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
+            <div className="border-hairline mb-16 flex shrink-0 gap-2 border-t px-4 py-3 md:mb-0">
               <button
                 onClick={handleCancel}
                 disabled={saving}
@@ -3198,7 +3198,7 @@ function CourseDetail({ id }: { id: string }) {
           /* ── 보기 패널 ── */
           <>
             {/* Header */}
-            <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2.5">
+            <div className="border-hairline flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
               <button
                 onClick={() => {
                   const saved = readCourseListReturn();
@@ -3218,7 +3218,7 @@ function CourseDetail({ id }: { id: string }) {
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
               {/* 등록자 */}
               {!isNew && courseAuthor && (
-                <div className="border-b border-gray-100 px-4 py-3">
+                <div className="border-hairline border-b px-4 py-3">
                   <p className="mb-1.5 text-xs font-semibold text-gray-700">등록자</p>
                   <CourseAuthorRow
                     authorType={courseAuthor.role}
@@ -3230,7 +3230,7 @@ function CourseDetail({ id }: { id: string }) {
 
               {/* 등록일 / 수정일 — 한 줄을 반으로 나눠 값 있는 것만 표시 */}
               {!isNew && courseAuthor && (
-                <div className="flex border-b border-gray-100 px-4 py-3">
+                <div className="border-hairline flex border-b px-4 py-3">
                   <div className="flex-1">
                     <p className="mb-1.5 text-xs font-semibold text-gray-700">등록일</p>
                     <p className="text-sm text-gray-600">{courseAuthor.registDate}</p>
@@ -3246,7 +3246,7 @@ function CourseDetail({ id }: { id: string }) {
 
               {/* 해시태그 — 포함된 장소들의 대분류+접근성 종합 상위 3개 */}
               {courseBadges.length > 0 && (
-                <div className="border-b border-gray-100 px-4 py-3">
+                <div className="border-hairline border-b px-4 py-3">
                   <p className="mb-1.5 text-xs font-semibold text-gray-700">해시태그</p>
                   <div className="flex flex-wrap gap-1.5">
                     {courseBadges.map((b) => (
@@ -3261,7 +3261,7 @@ function CourseDetail({ id }: { id: string }) {
               {/* 별점 · 즐겨찾기(별점은 후기 게시판의 course_rating 평균, 즐겨찾기는 tb_course_like 실집계) */}
               {/* AI 추천 미리보기는 아직 저장 전이라 별점/즐겨찾기 개념이 없다 */}
               {!isNew && !isAiPreview && (
-                <div className="border-b border-gray-100 px-4 py-3">
+                <div className="border-hairline border-b px-4 py-3">
                   <p className="mb-1.5 text-xs font-semibold text-gray-700">별점 · 즐겨찾기</p>
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1" title="별점">
@@ -3291,7 +3291,7 @@ function CourseDetail({ id }: { id: string }) {
                 <>
                   {/* 공유 여부 (readonly) — AI 추천 미리보기는 아직 저장 전이라 의미가 없다 */}
                   {!isAiPreview && (
-                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                    <div className="border-hairline flex items-center justify-between border-b px-4 py-3">
                       <div>
                         <p className="text-xs font-semibold text-gray-700">공유 여부</p>
                         <p className="mt-0.5 text-xs text-gray-400">
@@ -3310,7 +3310,7 @@ function CourseDetail({ id }: { id: string }) {
 
                   {/* 기간 (readonly) */}
                   {(courseData.startDate || courseData.endDate) && (
-                    <div className="border-b border-gray-100 px-4 py-3">
+                    <div className="border-hairline border-b px-4 py-3">
                       <p className="mb-1.5 text-xs font-semibold text-gray-700">기간</p>
                       <div className="flex items-center gap-1.5 text-sm text-gray-600">
                         <Calendar className="h-4 w-4 text-gray-400" />
@@ -3322,7 +3322,7 @@ function CourseDetail({ id }: { id: string }) {
                   )}
 
                   {/* Day tabs — 코스 편집 폼의 "일정" 섹션과 라벨·버튼 스타일을 맞췄다. */}
-                  <div className="border-b border-gray-100 px-4 py-3">
+                  <div className="border-hairline border-b px-4 py-3">
                     <p className="text-steel mb-1.5 text-xs font-semibold">일정</p>
                     <div className="flex shrink-0 flex-wrap gap-1.5">
                       {courseData.days.map((day) => (
@@ -3380,7 +3380,7 @@ function CourseDetail({ id }: { id: string }) {
             {/* Actions — 제목/버튼 사이만 스크롤되게, 이 줄은 하단에 고정.
                 모바일에서 하단 탭 네비게이션에 가려지지 않게 여백 확보 */}
             {!((!isNew && dbCourseLoading) || (!isNew && !dbCourse)) && (
-              <div className="mb-16 flex shrink-0 flex-col gap-2 border-t border-gray-100 px-4 py-3 md:mb-0">
+              <div className="border-hairline mb-16 flex shrink-0 flex-col gap-2 border-t px-4 py-3 md:mb-0">
                 {dayGuidePickerOpen ? (
                   <div className="border-hairline bg-surface-soft space-y-2 rounded-xl border p-3">
                     <p className="text-ink text-xs font-semibold">

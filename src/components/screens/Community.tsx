@@ -2170,7 +2170,7 @@ function CommunityDetail({ id }: { id: string }) {
             )}
             {!commentsLoading &&
               comments.map((c) => (
-                <div key={c.id} className="bg-surface-soft rounded-lg p-4">
+                <div key={c.id} className="bg-surface-soft border-hairline rounded-lg border p-4">
                   <div className="mb-1.5 flex items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <CommunityLevelBadge

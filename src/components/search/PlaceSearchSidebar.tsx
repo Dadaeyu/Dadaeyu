@@ -124,7 +124,7 @@ export default function PlaceSearchSidebar({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {onBack && (
-        <div className="shrink-0 border-b border-gray-100">
+        <div className="border-hairline shrink-0 border-b">
           <button
             onClick={onBack}
             className="flex w-full items-center gap-1.5 px-3 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
@@ -136,7 +136,7 @@ export default function PlaceSearchSidebar({
       )}
 
       {/* 검색 */}
-      <div className="shrink-0 border-b border-gray-100 p-3">
+      <div className="border-hairline shrink-0 border-b p-3">
         <div className="relative">
           <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
@@ -171,7 +171,7 @@ export default function PlaceSearchSidebar({
         }}
         className="flex-1 overflow-y-auto"
       >
-        <div className="sticky top-0 border-b border-gray-100 bg-gray-50 px-4 py-2">
+        <div className="border-hairline sticky top-0 border-b bg-gray-50 px-4 py-2">
           <span className="text-xs font-semibold tracking-wide text-gray-400 uppercase">
             {hasActiveFilter
               ? `검색 결과 ${Math.max(searchTotal, searchCount)}개`
@@ -195,7 +195,7 @@ export default function PlaceSearchSidebar({
 
       {/* 페이징 — 목록 스크롤 영역 밖에 고정해, 목록을 내려 스크롤해도 항상 보인다 */}
       {onSearchPageChange && (
-        <div className="shrink-0 border-t border-gray-100 bg-white">
+        <div className="border-hairline shrink-0 border-t bg-white">
           <ListPagination
             page={searchPage}
             total={searchTotal}

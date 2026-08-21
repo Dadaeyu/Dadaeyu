@@ -121,7 +121,7 @@ export default function MyPage() {
   return (
     <div className="space-y-6">
       {/* 프로필 요약 */}
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+      <div className="border-hairline overflow-hidden rounded-2xl border bg-white">
         <div className="from-navy-700 via-navy-600 to-brand-500 h-20 bg-gradient-to-br" />
         <div className="-mt-10 px-5 pb-5 md:px-6">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
@@ -148,7 +148,7 @@ export default function MyPage() {
             </div>
             <Link
               href="/mypage/settings"
-              className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+              className="border-hairline flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50"
             >
               <Pencil className="h-3.5 w-3.5" />
               프로필 편집
@@ -159,7 +159,7 @@ export default function MyPage() {
 
       {/* 접근성 / 선호 테마 / 커뮤니티 점수 */}
       <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+        <div className="border-hairline rounded-2xl border bg-white p-5">
           <div className="mb-1 flex items-center justify-between gap-2">
             <h3 className="font-bold text-gray-800">접근성</h3>
             <Link
@@ -187,7 +187,7 @@ export default function MyPage() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+        <div className="border-hairline rounded-2xl border bg-white p-5">
           <div className="mb-1 flex items-center justify-between gap-2">
             <h3 className="font-bold text-gray-800">선호 테마</h3>
             <Link
@@ -250,7 +250,7 @@ export default function MyPage() {
 
       {/* 목록 탭 */}
       <div className="space-y-4">
-        <div className="flex gap-1 overflow-x-auto border-b border-gray-200">
+        <div className="border-hairline flex gap-1 overflow-x-auto border-b">
           {tabs.map(({ key, label, count }) => (
             <button
               key={key}
@@ -313,7 +313,7 @@ export default function MyPage() {
                   <Link
                     key={place.like_id}
                     href={`/map?contentId=${encodeURIComponent(place.contentid)}`}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
+                    className="border-hairline flex items-center justify-between gap-3 rounded-xl border bg-white p-4 transition-shadow hover:shadow-md"
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <div className="bg-brand-50 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg">
@@ -354,7 +354,7 @@ export default function MyPage() {
                     <Link
                       key={course.like_id}
                       href={`/course/${course.course_id}`}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
+                      className="border-hairline flex items-center justify-between gap-3 rounded-xl border bg-white p-4 transition-shadow hover:shadow-md"
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-purple-50">
@@ -418,7 +418,7 @@ export default function MyPage() {
                   <Link
                     key={place.id}
                     href={`/map?place=${place.id}`}
-                    className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
+                    className="border-hairline flex items-center justify-between rounded-xl border bg-white p-4 transition-shadow hover:shadow-md"
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <div className="bg-brand-50 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-xl">
@@ -446,7 +446,7 @@ export default function MyPage() {
                   <Link
                     key={id}
                     href={`/course/${id}`}
-                    className="rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
+                    className="border-hairline rounded-xl border bg-white p-4 transition-shadow hover:shadow-md"
                   >
                     <div className="mb-2.5 flex items-center gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-50">
@@ -479,7 +479,7 @@ export default function MyPage() {
                 <Link
                   key={course.course_id}
                   href={`/course/${course.course_id}`}
-                  className="overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-md"
+                  className="border-hairline overflow-hidden rounded-xl border bg-white transition-shadow hover:shadow-md"
                 >
                   {thumb ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -520,7 +520,7 @@ export default function MyPage() {
               <Link
                 key={post.id}
                 href={`/community/${post.id}`}
-                className="block rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md"
+                className="border-hairline block rounded-xl border bg-white p-4 transition-shadow hover:shadow-md"
               >
                 <div className="mb-1.5 flex items-center gap-2">
                   <span className="bg-brand-100 text-brand-700 rounded-full px-2 py-0.5 text-xs font-medium">
@@ -552,7 +552,7 @@ export default function MyPage() {
             {reports.map((report) => (
               <div
                 key={report.id}
-                className="flex items-start justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4"
+                className="border-hairline flex items-start justify-between gap-3 rounded-xl border bg-white p-4"
               >
                 <div className="min-w-0">
                   <div className="mb-1 flex items-center gap-2">
