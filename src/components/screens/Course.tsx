@@ -1214,15 +1214,13 @@ export default function Course() {
                       author={course.author_nickname}
                       badgeAfter
                     />
-                    {course.hashtags.length > 0 && (
-                      <div className="mb-2 flex flex-wrap gap-1.5">
-                        {course.hashtags.map((label) => (
-                          <Badge key={label} tone="brand" shape="pill">
-                            #{label}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
+                    <div className="mb-2 flex min-h-6 flex-wrap gap-1.5">
+                      {course.hashtags.map((label) => (
+                        <Badge key={label} tone="brand" shape="pill">
+                          #{label}
+                        </Badge>
+                      ))}
+                    </div>
                     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm text-gray-500">
                       <div className="flex shrink-0 gap-2 whitespace-nowrap">
                         {(course.startdate || course.enddate) && (
@@ -1611,15 +1609,13 @@ export default function Course() {
                       author={member?.nickname ?? "나"}
                       badgeAfter
                     />
-                    {(courseHashtags[course.course_id]?.length ?? 0) > 0 && (
-                      <div className="mb-2 flex flex-wrap gap-1.5">
-                        {courseHashtags[course.course_id].map((label) => (
-                          <Badge key={label} tone="brand" shape="pill">
-                            #{label}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
+                    <div className="mb-2 flex min-h-6 flex-wrap gap-1.5">
+                      {(courseHashtags[course.course_id] ?? []).map((label) => (
+                        <Badge key={label} tone="brand" shape="pill">
+                          #{label}
+                        </Badge>
+                      ))}
+                    </div>
                     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm text-gray-500">
                       <div className="flex shrink-0 gap-2 whitespace-nowrap">
                         {(course.startdate || course.enddate) && (
