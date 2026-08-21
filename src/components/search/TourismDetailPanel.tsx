@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
 import type { TourismDetail } from "@/hooks/usePlaceSearch";
+import { formatHomeEventPeriod } from "@/features/home/homePresentation";
 import AccessibilitySection from "./AccessibilitySection";
 import { useAuth } from "@/context/AuthContext";
 import { isPlaceLiked } from "@/lib/supabase/placeLikes";
@@ -261,6 +262,11 @@ export default function TourismDetailPanel({
   const hasOverview = !!detail?.overview;
   const categoryLabel = isKakao ? sp.category?.split(" > ").pop() : detail?.category;
 
+  // 축제/공연/행사(lclssystm1='EV')는 "휴무일" 개념이 없고 대신 행사 기간(eventstartdate ~
+  // eventenddate)이 있다 — 주소와 시간 사이에 "기간"으로 보여주고 휴무일 행은 뺀다.
+  const isEvent = detail?.categoryCode === "EV";
+  const eventPeriod = formatHomeEventPeriod(detail?.event_start_date, detail?.event_end_date);
+
   // 기본 정보 목록 — DB 출처는 주소/시간/전화, 카카오 출처는 시간 정보가 없어 주소/전화만.
   const infoRows = isKakao
     ? [
@@ -269,8 +275,9 @@ export default function TourismDetailPanel({
       ]
     : [
         { label: "주소", value: detail?.addr1 || "-" },
+        ...(isEvent ? [{ label: "기간", value: eventPeriod || "-" }] : []),
         { label: "시간", value: detail?.use_time ? formatUseTime(detail.use_time) : "-" },
-        { label: "휴무일", value: detail?.rest_date || "-" },
+        ...(isEvent ? [] : [{ label: "휴무일", value: detail?.rest_date || "-" }]),
         { label: "전화", value: detail?.phone || "-" }
       ];
 

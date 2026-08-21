@@ -12,6 +12,8 @@ export interface TourismDetail {
   overview: string | null;
   use_time: string | null;
   rest_date: string | null;
+  event_start_date: string | null; // 축제/공연/행사(lclssystm1='EV') 전용 — YYYYMMDD
+  event_end_date: string | null;
   phone: string | null;
   like_count: number;
   accessibility: { category: string; items: { label: string; text: string }[] }[];
