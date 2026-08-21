@@ -232,7 +232,7 @@ export function FilterFields({
 
         {/* 일정 */}
         <div className={compact ? "" : "w-56"}>
-          <p className={`${xs} text-steel mb-1.5 font-semibold`}>일정</p>
+          <p className={`${xs} text-steel mb-1.5 font-semibold`}>날짜</p>
           <div className="flex items-center gap-1">
             {/* 기기마다 네이티브 date input의 "박스 어디를 눌러야 피커가 열리는지"가 달라서
                 (달력 아이콘만 반응하는 기기가 있음) 클릭 판정을 브라우저에 맡기지 않는다.
