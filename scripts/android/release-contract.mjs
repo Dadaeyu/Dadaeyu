@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 export const ANDROID_RELEASE_CONTRACT = Object.freeze({
   host: "dadaeyu.vercel.app",
   packageName: "com.dadaeyou.app",
-  versionCode: 2,
+  versionCode: 3,
   versionName: "1.0.1",
   signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
   compileSdk: 36,

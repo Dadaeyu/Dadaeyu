@@ -32,6 +32,15 @@ import { createFixedWindowRateLimiter } from "@/lib/server/fixed-window-rate-lim
 import { readBoundedRequestBody } from "@/lib/server/read-bounded-request-body";
 import { createTimeoutSignal } from "@/lib/server/timeout-signal";
 import { getKnowledgeContentId } from "@/lib/chat/discoveryLinks";
+import { shouldUseGroundedRecommendation } from "@/lib/chat/groundedRecommendation";
+import {
+  filterRowsByAllowedContentIds,
+  filterRowsByExplicitCategories,
+  resolveSessionChatCategories,
+  resolveSessionChatTheme,
+  type ExplicitChatTheme
+} from "@/lib/chat/topicRelevance";
+import { getBakeryChatKnowledgeRows } from "@/lib/theme/bakeryTheme";
 
 type Confidence = "high" | "medium" | "low";
 
@@ -113,6 +122,8 @@ type QueryAnalysis = {
   place_name: string | null;
   location: string | null;
   keywords: string[];
+  requested_categories: string[];
+  requested_theme: ExplicitChatTheme | null;
 };
 
 type ChatHistoryItem = {
@@ -726,8 +737,7 @@ function createSuccessResponse({
     .flatMap((place) => buildPlaceFollowUps(place.title, place.category))
     .slice(0, 3);
   const responseMessage =
-    analysis.intent === "recommend_place" &&
-    (places.length >= 2 || (conversationContext.isFollowUp && places.length > 0))
+    shouldUseGroundedRecommendation(analysis.intent, places.length)
       ? createCompactRecommendationMessage({
           analysis,
           inputMessage,
@@ -847,6 +857,20 @@ function createCompactRecommendationMessage({
   const [firstPlace, secondPlace] = recommendedPlaces;
   const isFollowUp = conversationContext.isFollowUp;
 
+  if (!firstPlace) {
+    return "현재 조건에 맞는 장소를 찾지 못했어요.";
+  }
+
+  if (!secondPlace) {
+    return [
+      isFollowUp
+        ? `앞에서 본 후보 중에서는 ${withObjectParticle(firstPlace.title)} 먼저 확인해보세요.`
+        : `${getRecommendationLead(analysis, location)} ${withObjectParticle(firstPlace.title)} 먼저 살펴보세요.`,
+      createCompactPlaceRecommendationSentence(firstPlace, analysis.accessibility_needs),
+      "운영 시간과 자세한 편의시설은 아래 카드에서 볼 수 있어요."
+    ].join(" ");
+  }
+
   if (conversationContext.wantsDifferentPlaces) {
     const seenTitles = new Set(
       conversationContext.seenPlaceTitles.map(normalizeConversationReferenceText)
@@ -923,9 +947,11 @@ function hasFinalConsonant(value: string) {
 
 function createCompactPlaceRecommendationSentence(place: PlaceCard, needs: string[]) {
   const activity = place.activity.trim().replace(/[.。]$/, "");
-  const activitySentence = `${withTopicParticle(place.title)} ${activity}${
-    activity.endsWith("곳") ? "이에요." : "예요."
-  }`;
+  const activitySentence = `${
+    normalizeForSearch(activity).startsWith(normalizeForSearch(place.title))
+      ? activity
+      : `${withTopicParticle(place.title)} ${activity}`
+  }${activity.endsWith("곳") ? "이에요." : "예요."}`;
   const accessibilityFact = getPreferredAccessibilityFact(place.accessibility, needs);
 
   return accessibilityFact
@@ -1393,7 +1419,19 @@ function createConversationContext(
         "1번",
         "2번",
         "3번",
-        "다시추천"
+        "다시추천",
+        "휠체어",
+        "유모차",
+        "장애인",
+        "주차",
+        "화장실",
+        "엘리베이터",
+        "실내",
+        "비오는날",
+        "1박2일",
+        "당일",
+        "코스",
+        "동선"
       ]));
 
   return {
@@ -1641,7 +1679,9 @@ function normalizeAnalysis(value: unknown, message: string): QueryAnalysis {
       typeof record.location === "string" && record.location.trim()
         ? record.location.trim()
         : "대전",
-    keywords
+    keywords,
+    requested_categories: [],
+    requested_theme: null
   };
 }
 
@@ -1677,7 +1717,9 @@ function fallbackAnalysis(message: string): QueryAnalysis {
       message.includes("오늘") || message.includes("날씨") || message.includes("비"),
     place_name: null,
     location: "대전",
-    keywords
+    keywords,
+    requested_categories: [],
+    requested_theme: null
   };
 }
 
@@ -1700,17 +1742,26 @@ function normalizeProfileAccessibilityNeeds(value: unknown): string[] {
   );
 }
 
-function rankKnowledgeRows(rows: KnowledgeRow[], analysis: QueryAnalysis, searchTerms: string[]) {
+function rankKnowledgeRows(
+  rows: KnowledgeRow[],
+  analysis: QueryAnalysis,
+  searchTerms: string[],
+  allowedContentIds: string[] | null
+) {
+  const categoryRows = filterRowsByExplicitCategories(rows, analysis.requested_categories);
+  const relevantRows = allowedContentIds
+    ? filterRowsByAllowedContentIds(categoryRows, allowedContentIds)
+    : categoryRows;
   const placeName = normalizeForSearch(analysis.place_name || "");
   const placeMatchedRows = placeName
-    ? rows.filter((row) => rowMatchesPlaceName(row, placeName))
+    ? relevantRows.filter((row) => rowMatchesPlaceName(row, placeName))
     : [];
 
   if (placeName && analysis.intent === "check_accessibility" && !placeMatchedRows.length) {
     return [];
   }
 
-  const candidates = placeMatchedRows.length ? placeMatchedRows : rows;
+  const candidates = placeMatchedRows.length ? placeMatchedRows : relevantRows;
   const desiredCategories = getDesiredCategories(searchTerms);
   const usefulTerms = searchTerms.filter(isUsefulRankingTerm);
 
@@ -1969,6 +2020,10 @@ function buildEmbeddingInput(analysis: QueryAnalysis, searchTerms: string[]) {
       ? `접근성 조건: ${analysis.accessibility_needs.join(", ")}`
       : null,
     analysis.weather_sensitive ? "날씨/실내 조건 고려" : null,
+    analysis.requested_categories.length
+      ? `요청 범주: ${analysis.requested_categories.join(", ")}`
+      : null,
+    analysis.requested_theme === "bakery" ? "요청 테마: 빵지순례" : null,
     analysis.keywords.length ? `핵심어: ${analysis.keywords.join(", ")}` : null,
     searchTerms.length ? `검색어: ${searchTerms.join(", ")}` : null
   ]
@@ -2235,12 +2290,80 @@ async function fetchKnowledge(
   }
 
   const searchTerms = buildSearchTerms(analysis);
+  let allowedContentIds: string[] | null = null;
+
+  if (analysis.requested_theme === "bakery") {
+    try {
+      const bakeryRows = await getBakeryChatKnowledgeRows();
+      allowedContentIds = bakeryRows.map((row) => row.metadata.contentid);
+      const unseenRows = bakeryRows.filter(
+        (row) =>
+          !seenPlaceTitles.some(
+            (seenTitle) => normalizeForSearch(seenTitle) === normalizeForSearch(row.title)
+          )
+      );
+      const unseenTitles = new Set(unseenRows.map((row) => normalizeForSearch(row.title)));
+      const candidates = unseenRows.length
+        ? [
+            ...unseenRows,
+            ...bakeryRows.filter((row) => !unseenTitles.has(normalizeForSearch(row.title)))
+          ]
+        : bakeryRows;
+      const rankedRows = rankKnowledgeRows(
+        candidates,
+        analysis,
+        searchTerms,
+        allowedContentIds
+      ).slice(0, 5);
+
+      if (rankedRows.length) {
+        return {
+          status: "ready",
+          rows: rankedRows,
+          message: `${rankedRows.length}개 빵집 장소 데이터 조회`,
+          searchMode: "keyword",
+          debug: createRagDebug({
+            rows: rankedRows,
+            searchMode: "keyword",
+            statusMessage: "다대유 빵집 장소 데이터 사용"
+          })
+        };
+      }
+    } catch {
+      return {
+        status: "unavailable",
+        rows: [],
+        message: "빵집 테마 조회 실패",
+        searchMode: "none",
+        debug: createRagDebug({
+          rows: [],
+          searchMode: "none",
+          statusMessage: "빵집 테마 조회 실패"
+        })
+      };
+    }
+
+    if (!allowedContentIds.length) {
+      return {
+        status: "empty",
+        rows: [],
+        message: "빵집 테마 조건 일치 없음",
+        searchMode: "none",
+        debug: createRagDebug({
+          rows: [],
+          searchMode: "none",
+          statusMessage: "빵집 테마 조건 일치 없음"
+        })
+      };
+    }
+  }
 
   const vectorKnowledge = await fetchVectorKnowledge(
     config,
     analysis,
     searchTerms,
-    seenPlaceTitles
+    seenPlaceTitles,
+    allowedContentIds
   );
   if (vectorKnowledge.status === "ready") {
     const facilityCategory = getRequestedFacilityCategory(searchTerms);
@@ -2249,7 +2372,8 @@ async function fetchKnowledge(
         config,
         analysis,
         searchTerms,
-        seenPlaceTitles
+        seenPlaceTitles,
+        allowedContentIds
       );
       if (
         facilityKnowledge.status === "ready" &&
@@ -2282,7 +2406,8 @@ async function fetchKnowledge(
     config,
     analysis,
     searchTerms,
-    seenPlaceTitles
+    seenPlaceTitles,
+    allowedContentIds
   );
   if (keywordKnowledge.status === "ready" && vectorKnowledge.status !== "not_configured") {
     const fallbackDebug =
@@ -2311,7 +2436,8 @@ async function fetchVectorKnowledge(
   config: ReturnType<typeof getSupabaseConfig>,
   analysis: QueryAnalysis,
   searchTerms: string[],
-  seenPlaceTitles: string[]
+  seenPlaceTitles: string[],
+  allowedContentIds: string[] | null
 ): Promise<KnowledgeResult> {
   const embedding = getEmbeddingConfig();
 
@@ -2416,7 +2542,7 @@ async function fetchVectorKnowledge(
     }
 
     const rankedRows = selectDiverseItems({
-      items: rankKnowledgeRows(rows, analysis, searchTerms),
+      items: rankKnowledgeRows(rows, analysis, searchTerms, allowedContentIds),
       getTitle: (row) => getRowText(row, "title") || "",
       limit: KNOWLEDGE_RESULT_LIMIT,
       seenTitles: seenPlaceTitles
@@ -2488,7 +2614,8 @@ async function fetchKeywordKnowledge(
   config: ReturnType<typeof getSupabaseConfig>,
   analysis: QueryAnalysis,
   searchTerms: string[],
-  seenPlaceTitles: string[]
+  seenPlaceTitles: string[],
+  allowedContentIds: string[] | null
 ): Promise<KnowledgeResult> {
   const params = new URLSearchParams({
     select: "*",
@@ -2542,7 +2669,7 @@ async function fetchKeywordKnowledge(
     }
 
     const rankedRows = selectDiverseItems({
-      items: rankKnowledgeRows(rows, analysis, searchTerms),
+      items: rankKnowledgeRows(rows, analysis, searchTerms, allowedContentIds),
       getTitle: (row) => getRowText(row, "title") || "",
       limit: KNOWLEDGE_RESULT_LIMIT,
       seenTitles: seenPlaceTitles
@@ -2603,6 +2730,10 @@ function buildSearchTerms(analysis: QueryAnalysis) {
       [
         analysis.place_name,
         analysis.location,
+        ...analysis.requested_categories,
+        ...(analysis.requested_theme === "bakery"
+          ? ["빵집", "베이커리", "제과점", "빵지순례"]
+          : []),
         ...analysis.keywords,
         ...analysis.accessibility_needs.flatMap((need) =>
           need === "wheelchair"
@@ -2856,11 +2987,32 @@ export async function POST(request: Request) {
       message,
       conversationContext
     );
+    const requestedCategories = resolveSessionChatCategories(message, history);
+    const requestedTheme = resolveSessionChatTheme(message, history);
+    const hasRecommendationCue = /(추천|갈\s*만|코스|일정|1박|당일|어디|둘러|위주)/u.test(
+      message
+    );
     const analysis: QueryAnalysis = {
       ...contextualAnalysis,
+      in_scope:
+        contextualAnalysis.in_scope || requestedCategories.length > 0 || requestedTheme !== null,
+      intent:
+        !contextualAnalysis.place_name &&
+        (requestedTheme !== null || (requestedCategories.length > 0 && hasRecommendationCue))
+          ? "recommend_place"
+          : contextualAnalysis.intent,
       accessibility_needs: Array.from(
         new Set([...contextualAnalysis.accessibility_needs, ...profileAccessibilityNeeds])
-      )
+      ),
+      keywords: Array.from(
+        new Set([
+          ...contextualAnalysis.keywords,
+          ...requestedCategories,
+          ...(requestedTheme === "bakery" ? ["빵집", "베이커리", "빵지순례"] : [])
+        ])
+      ).slice(0, 12),
+      requested_categories: requestedCategories,
+      requested_theme: requestedTheme
     };
 
     if (!analysis.in_scope) {

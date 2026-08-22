@@ -188,8 +188,6 @@ const INITIAL_RESPONSE: ChatResponse = {
 
 const DAIYU_AVATAR_SRC = "/daiyu-avatar.png";
 const DAIYU_PROFILE_SRC = "/daiyu-profile.png";
-const CHAT_SESSION_STORAGE_KEY = "daiyu-chat-session";
-const MAX_STORED_MESSAGES = 30;
 const MAX_HISTORY_ITEMS = 10;
 
 interface Props {
@@ -201,7 +199,6 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     { id: 1, role: "assistant", content: INITIAL_RESPONSE }
   ]);
-  const [isSessionReady, setIsSessionReady] = useState(false);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isAutoTtsEnabled, setIsAutoTtsEnabled] = useState(false);
@@ -245,36 +242,12 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
   }, []);
 
   useEffect(() => {
-    const timerId = window.setTimeout(() => {
-      const storedMessages = getStoredChatMessages();
-      setMessages(storedMessages);
-      nextIdRef.current = getLatestMessageId(storedMessages);
-      setIsSessionReady(true);
-    }, 0);
-
-    return () => window.clearTimeout(timerId);
-  }, []);
-
-  useEffect(() => {
     conversationModeRef.current = isConversationMode;
   }, [isConversationMode]);
 
   useEffect(() => {
     isLoadingRef.current = isLoading;
   }, [isLoading]);
-
-  useEffect(() => {
-    if (!isSessionReady) return;
-
-    try {
-      window.sessionStorage.setItem(
-        CHAT_SESSION_STORAGE_KEY,
-        JSON.stringify(messages.slice(-MAX_STORED_MESSAGES))
-      );
-    } catch {
-      // The current conversation still works when session storage is unavailable.
-    }
-  }, [isSessionReady, messages]);
 
   useEffect(() => {
     const latestMessage = messages[messages.length - 1];
@@ -895,44 +868,6 @@ function getSpeechRecognitionConstructor() {
   };
 
   return speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition || null;
-}
-
-function getStoredChatMessages(): Message[] {
-  const initialMessages: Message[] = [{ id: 1, role: "assistant", content: INITIAL_RESPONSE }];
-  if (typeof window === "undefined") return initialMessages;
-
-  try {
-    const parsed = JSON.parse(window.sessionStorage.getItem(CHAT_SESSION_STORAGE_KEY) || "null");
-    if (!Array.isArray(parsed)) return initialMessages;
-
-    const storedMessages = parsed.filter(isStoredChatMessage).slice(-MAX_STORED_MESSAGES);
-    return storedMessages.length ? storedMessages : initialMessages;
-  } catch {
-    return initialMessages;
-  }
-}
-
-function isStoredChatMessage(value: unknown): value is Message {
-  if (!value || typeof value !== "object") return false;
-
-  const record = value as Record<string, unknown>;
-  if (typeof record.id !== "number") return false;
-  if (record.role === "user") return typeof record.text === "string";
-  if (record.role !== "assistant" || !record.content || typeof record.content !== "object") {
-    return false;
-  }
-
-  const content = record.content as Record<string, unknown>;
-  return (
-    typeof content.message === "string" &&
-    Array.isArray(content.chips) &&
-    Array.isArray(content.sources) &&
-    ["high", "medium", "low"].includes(String(content.confidence))
-  );
-}
-
-function getLatestMessageId(messages: Message[]) {
-  return messages.reduce((latestId, message) => Math.max(latestId, message.id), 1);
 }
 
 function buildChatHistory(messages: Message[]): ChatHistoryItem[] {

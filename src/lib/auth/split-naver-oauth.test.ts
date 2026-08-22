@@ -30,7 +30,7 @@ test("카카오 identity에서 @naver.com 이메일을 카카오 로그인 주�
         identity_data: { email: "haetom@naver.com", nickname: "해토" }
       }
     ]
-  } as User;
+  } as unknown as User;
 
   assert.equal(oauthEmailFromUser(user, "kakao"), "haetom@naver.com");
   assert.equal(oauthProfileFromUser(user, "kakao").nickname, "해토");

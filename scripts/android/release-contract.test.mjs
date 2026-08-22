@@ -17,14 +17,14 @@ const validContract = {
   twaManifest: {
     host: "dadaeyu.vercel.app",
     packageId: "com.dadaeyou.app",
-    versionCode: 2,
+    versionCode: 3,
     versionName: "1.0.1",
     signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
     fingerprints: [VALID_SHA256_FINGERPRINT]
   },
   androidGradle: {
     applicationId: "com.dadaeyou.app",
-    versionCode: 2,
+    versionCode: 3,
     versionName: "1.0.1",
     compileSdk: 36,
     targetSdk: 36
@@ -48,13 +48,13 @@ test("Android release contract reports every TWA launch contract drift", () => {
     twaManifest: {
       host: "example.com",
       packageId: "com.example.app",
-      versionCode: 3,
+      versionCode: 4,
       versionName: "2.0.0",
       signingKeyPath: "android-twa/dadaeyu-upload.jks"
     },
     androidGradle: {
       applicationId: "com.example.app",
-      versionCode: 3,
+      versionCode: 4,
       versionName: "2.0.0",
       compileSdk: 35,
       targetSdk: 35
@@ -74,11 +74,11 @@ test("Android release contract reports every TWA launch contract drift", () => {
   assert.deepEqual(errors, [
     "Expected TWA host dadaeyu.vercel.app, received example.com.",
     "Expected Android package com.dadaeyou.app, received com.example.app.",
-    "Expected versionCode 2, received 3.",
+    "Expected versionCode 3, received 4.",
     "Expected versionName 1.0.1, received 2.0.0.",
     "Expected signing key path ../../private/android-signing/dadaeyu-upload.jks, received android-twa/dadaeyu-upload.jks.",
     "Expected Gradle applicationId com.dadaeyou.app, received com.example.app.",
-    "Expected Gradle versionCode 2, received 3.",
+    "Expected Gradle versionCode 3, received 4.",
     "Expected Gradle versionName 1.0.1, received 2.0.0.",
     "Expected compileSdk 36, received 35.",
     "Expected targetSdk 36, received 35.",
@@ -95,7 +95,7 @@ test("generated Android project matches the TWA package, version, and SDK contra
   assert.deepEqual(contract.twaManifest, {
     host: "dadaeyu.vercel.app",
     packageId: "com.dadaeyou.app",
-    versionCode: 2,
+    versionCode: 3,
     versionName: "1.0.1",
     signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
     fingerprints: [
@@ -104,7 +104,7 @@ test("generated Android project matches the TWA package, version, and SDK contra
   });
   assert.deepEqual(contract.androidGradle, {
     applicationId: "com.dadaeyou.app",
-    versionCode: 2,
+    versionCode: 3,
     versionName: "1.0.1",
     compileSdk: 36,
     targetSdk: 36

@@ -1,6 +1,6 @@
 type EmailUser = {
   email?: string | null;
-  app_metadata?: { provider?: string };
+  app_metadata?: { provider?: string; providers?: string[] };
   user_metadata?: Record<string, unknown> | null;
 } | null;
 
