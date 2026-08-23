@@ -16,6 +16,8 @@ const PLAY_CLASSICAL_SIGNING_FINGERPRINT =
   "50:D8:F3:CA:1A:41:73:30:13:84:0E:21:23:72:7C:1C:9B:3D:73:35:0C:DD:D1:34:01:CA:B4:54:38:5B:4E:57";
 const PLAY_QUANTUM_READY_SIGNING_FINGERPRINT =
   "AB:54:5D:67:99:AF:7C:71:65:97:EA:D8:C2:16:FE:73:A6:C2:1F:01:74:1A:8A:51:82:A8:98:A0:04:06:B8:7C";
+const UPLOAD_SIGNING_FINGERPRINT =
+  "8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C";
 
 const validContract = {
   twaManifest: {
@@ -41,7 +43,8 @@ const validContract = {
         package_name: "com.dadaeyou.app",
         sha256_cert_fingerprints: [
           PLAY_CLASSICAL_SIGNING_FINGERPRINT,
-          PLAY_QUANTUM_READY_SIGNING_FINGERPRINT
+          PLAY_QUANTUM_READY_SIGNING_FINGERPRINT,
+          UPLOAD_SIGNING_FINGERPRINT
         ]
       }
     }
@@ -99,11 +102,24 @@ test("Android release contract reports every TWA launch contract drift", () => {
 test("Android release contract rejects a missing active Play app signing certificate", () => {
   const missingClassicalSigningKey = structuredClone(validContract);
   missingClassicalSigningKey.assetLinks[0].target.sha256_cert_fingerprints = [
-    PLAY_QUANTUM_READY_SIGNING_FINGERPRINT
+    PLAY_QUANTUM_READY_SIGNING_FINGERPRINT,
+    UPLOAD_SIGNING_FINGERPRINT
   ];
 
   assert.deepEqual(validateAndroidReleaseContract(missingClassicalSigningKey), [
     `Expected assetlinks[0].target.sha256_cert_fingerprints to include active Play signing fingerprint ${PLAY_CLASSICAL_SIGNING_FINGERPRINT}.`
+  ]);
+});
+
+test("Android release contract rejects a missing upload signing certificate", () => {
+  const missingUploadSigningKey = structuredClone(validContract);
+  missingUploadSigningKey.assetLinks[0].target.sha256_cert_fingerprints = [
+    PLAY_CLASSICAL_SIGNING_FINGERPRINT,
+    PLAY_QUANTUM_READY_SIGNING_FINGERPRINT
+  ];
+
+  assert.deepEqual(validateAndroidReleaseContract(missingUploadSigningKey), [
+    `Expected assetlinks[0].target.sha256_cert_fingerprints to include active Play signing fingerprint ${UPLOAD_SIGNING_FINGERPRINT}.`
   ]);
 });
 
@@ -116,7 +132,11 @@ test("generated Android project matches the TWA package, version, and SDK contra
     versionCode: 3,
     versionName: "1.0.1",
     signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
-    fingerprints: [PLAY_CLASSICAL_SIGNING_FINGERPRINT, PLAY_QUANTUM_READY_SIGNING_FINGERPRINT]
+    fingerprints: [
+      PLAY_CLASSICAL_SIGNING_FINGERPRINT,
+      PLAY_QUANTUM_READY_SIGNING_FINGERPRINT,
+      UPLOAD_SIGNING_FINGERPRINT
+    ]
   });
   assert.deepEqual(contract.androidGradle, {
     applicationId: "com.dadaeyou.app",
