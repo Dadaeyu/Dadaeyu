@@ -37,9 +37,7 @@ test("후속 질문은 현재 대화의 직전 빵집 조건을 이어받는다"
 test("새 장소나 새 범주를 명시하면 이전 빵집 조건을 이어받지 않는다", () => {
   const history = [{ role: "user" as const, content: "유명한 빵집 추천해줘" }];
 
-  assert.deepEqual(resolveSessionChatCategories("대전시립미술관은 어때?", history), [
-    "문화시설"
-  ]);
+  assert.deepEqual(resolveSessionChatCategories("대전시립미술관은 어때?", history), ["문화시설"]);
   assert.equal(resolveSessionChatTheme("대전시립미술관은 어때?", history), null);
 });
 

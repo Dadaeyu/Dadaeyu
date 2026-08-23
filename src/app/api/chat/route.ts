@@ -736,17 +736,16 @@ function createSuccessResponse({
   const placeFollowUpChips = places
     .flatMap((place) => buildPlaceFollowUps(place.title, place.category))
     .slice(0, 3);
-  const responseMessage =
-    shouldUseGroundedRecommendation(analysis.intent, places.length)
-      ? createCompactRecommendationMessage({
-          analysis,
-          inputMessage,
-          conversationContext,
-          places
-        })
-      : analysis.intent === "check_accessibility" && places.length
-        ? createGroundedAccessibilityCheckMessage(places[0], analysis.accessibility_needs)
-        : message;
+  const responseMessage = shouldUseGroundedRecommendation(analysis.intent, places.length)
+    ? createCompactRecommendationMessage({
+        analysis,
+        inputMessage,
+        conversationContext,
+        places
+      })
+    : analysis.intent === "check_accessibility" && places.length
+      ? createGroundedAccessibilityCheckMessage(places[0], analysis.accessibility_needs)
+      : message;
   const normalizedInput = normalizeStaticFaqText(inputMessage);
   const chips = uniqueChatSuggestions(
     [
@@ -2989,9 +2988,7 @@ export async function POST(request: Request) {
     );
     const requestedCategories = resolveSessionChatCategories(message, history);
     const requestedTheme = resolveSessionChatTheme(message, history);
-    const hasRecommendationCue = /(추천|갈\s*만|코스|일정|1박|당일|어디|둘러|위주)/u.test(
-      message
-    );
+    const hasRecommendationCue = /(추천|갈\s*만|코스|일정|1박|당일|어디|둘러|위주)/u.test(message);
     const analysis: QueryAnalysis = {
       ...contextualAnalysis,
       in_scope:

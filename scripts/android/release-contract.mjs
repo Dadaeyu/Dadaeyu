@@ -11,7 +11,11 @@ export const ANDROID_RELEASE_CONTRACT = Object.freeze({
   compileSdk: 36,
   targetSdk: 36,
   assetLinksRelation: "delegate_permission/common.handle_all_urls",
-  assetLinksNamespace: "android_app"
+  assetLinksNamespace: "android_app",
+  playSigningFingerprints: [
+    "50:D8:F3:CA:1A:41:73:30:13:84:0E:21:23:72:7C:1C:9B:3D:73:35:0C:DD:D1:34:01:CA:B4:54:38:5B:4E:57",
+    "AB:54:5D:67:99:AF:7C:71:65:97:EA:D8:C2:16:FE:73:A6:C2:1F:01:74:1A:8A:51:82:A8:98:A0:04:06:B8:7C"
+  ]
 });
 
 const SHA256_FINGERPRINT_PATTERN = /^[0-9A-F]{2}(?::[0-9A-F]{2}){31}$/u;
@@ -168,6 +172,14 @@ export function validateAndroidReleaseContract(contract) {
     errors.push(
       "Expected assetlinks[0].target.sha256_cert_fingerprints to contain SHA-256 fingerprints."
     );
+  } else {
+    for (const fingerprint of expected.playSigningFingerprints) {
+      if (!assetLinkTarget.sha256_cert_fingerprints.includes(fingerprint)) {
+        errors.push(
+          `Expected assetlinks[0].target.sha256_cert_fingerprints to include active Play signing fingerprint ${fingerprint}.`
+        );
+      }
+    }
   }
 
   return errors;
