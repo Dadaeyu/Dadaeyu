@@ -5,7 +5,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bookmark, Heart, Route, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { isGuestWelcomeEligiblePath, shouldShowGuestWelcome } from "@/lib/auth/guestWelcome";
+import {
+  getGuestWelcomeTodayKey,
+  GUEST_WELCOME_SNOOZE_STORAGE_KEY,
+  isGuestWelcomeEligiblePath,
+  isGuestWelcomeSnoozedToday,
+  shouldShowGuestWelcome
+} from "@/lib/auth/guestWelcome";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
@@ -14,7 +20,26 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
   const { user, loading } = useAuth();
   const [open, setOpen] = useState(false);
   const [dismissedForEntry, setDismissedForEntry] = useState(false);
+  const [snoozeResolved, setSnoozeResolved] = useState(false);
+  const [snoozedToday, setSnoozedToday] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      let storedDate: string | null = null;
+
+      try {
+        storedDate = window.localStorage.getItem(GUEST_WELCOME_SNOOZE_STORAGE_KEY);
+      } catch {
+        // 저장소를 사용할 수 없어도 로그인 안내는 정상적으로 표시한다.
+      }
+
+      setSnoozedToday(isGuestWelcomeSnoozedToday(storedDate));
+      setSnoozeResolved(true);
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -23,7 +48,9 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
         hasUser: Boolean(user),
         eligiblePath: isGuestWelcomeEligiblePath(pathname),
         blockedByNotice: blocked,
-        dismissedForEntry
+        dismissedForEntry,
+        snoozeResolved,
+        snoozedToday
       });
 
       if (!shouldOpen) {
@@ -35,7 +62,7 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
     }, 0);
 
     return () => window.clearTimeout(timerId);
-  }, [blocked, dismissedForEntry, loading, pathname, user]);
+  }, [blocked, dismissedForEntry, loading, pathname, snoozeResolved, snoozedToday, user]);
 
   useEffect(() => {
     if (!open) return;
@@ -49,6 +76,16 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
   const closePrompt = () => {
     setDismissedForEntry(true);
     setOpen(false);
+  };
+  const snoozePromptToday = () => {
+    try {
+      window.localStorage.setItem(GUEST_WELCOME_SNOOZE_STORAGE_KEY, getGuestWelcomeTodayKey());
+    } catch {
+      // 저장소를 사용할 수 없으면 현재 홈 진입에서만 닫는다.
+    }
+
+    setSnoozedToday(true);
+    closePrompt();
   };
 
   return (
@@ -135,13 +172,22 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
             </Button>
           </div>
 
-          <button
-            type="button"
-            onClick={closePrompt}
-            className="text-steel hover:text-ink mt-3 min-h-12 w-full rounded-xl px-4 text-sm font-semibold underline-offset-4 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
-          >
-            로그인 없이 둘러보기
-          </button>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={closePrompt}
+              className="text-steel hover:text-ink min-h-12 rounded-xl px-3 text-sm font-semibold underline-offset-4 transition-colors hover:bg-gray-50 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
+            >
+              로그인 없이 둘러보기
+            </button>
+            <button
+              type="button"
+              onClick={snoozePromptToday}
+              className="text-steel hover:text-ink min-h-12 rounded-xl bg-gray-50 px-3 text-sm font-semibold transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
+            >
+              오늘 하루 안 보기
+            </button>
+          </div>
         </div>
       </Card>
     </dialog>
