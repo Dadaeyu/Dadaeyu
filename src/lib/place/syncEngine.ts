@@ -1067,26 +1067,47 @@ async function syncDetailNormalized(
     row.has_irregular_closing = rest.hasIrregularClosing;
   }
 
-  // place_id(PK) 기준으로 insert/update 분류해 tb_place_detail_normalized 로 upsert
+  // place_id(PK) 기준으로 insert/update 분류해 tb_place_detail_normalized 로 upsert.
+  // detail/barrierfree 와 동일하게, "정규화가 가장 오래전(또는 한 번도 안 된) 것부터" 순서로
+  // 처리하고 시간 예산(deadline)을 넘기면 그 자리에서 멈춘다 — detail이 아직 다 안 끝났어도
+  // 매 회차 조금씩은 확실히 진행되고, 다음 회차엔 자연스럽게 이어서 처리된다(별도 커서 불필요).
   const now = new Date().toISOString();
   const known = await fetchKnownIds(supabase, "tb_place_detail_normalized", "place_id");
   if ("error" in known) {
     return { ok: false, status: 502, error: known.error };
   }
-  const io = await insertOrUpdate(
-    supabase,
-    "tb_place_detail_normalized",
-    rows,
-    known,
-    now,
-    "place_id"
-  );
-  if (io.error) {
+  const normalizedUpdateTimes = await fetchUpdateTimes(supabase, "tb_place_detail_normalized");
+  const orderedRows =
+    "error" in normalizedUpdateTimes
+      ? rows
+      : sortByStaleness(rows, (r) => r.place_id, normalizedUpdateTimes);
+
+  let upserted = 0;
+  let processed = 0;
+  const errors: string[] = [];
+  for (let i = 0; i < orderedRows.length; i += UPSERT_CHUNK) {
+    if (Date.now() >= deadline) break;
+    const chunk = orderedRows.slice(i, i + UPSERT_CHUNK);
+    const io = await insertOrUpdate(
+      supabase,
+      "tb_place_detail_normalized",
+      chunk,
+      known,
+      now,
+      "place_id"
+    );
+    upserted += io.upserted;
+    processed += chunk.length;
+    if (io.error) errors.push(io.error);
+  }
+  const notDone = processed < orderedRows.length;
+
+  if (errors.length > 0) {
     return {
       ok: false,
       status: 502,
-      error: io.error,
-      partial: { totalPlaces: rows.length, fetched: rows.length, upserted: io.upserted, skipped: 0 }
+      error: errors.join(" / "),
+      partial: { totalPlaces: rows.length, fetched: processed, upserted, skipped: 0 }
     };
   }
 
@@ -1094,12 +1115,13 @@ async function syncDetailNormalized(
     ok: true,
     result: {
       totalPlaces: rows.length,
-      fetched: rows.length,
-      upserted: io.upserted,
+      fetched: processed,
+      upserted,
       deleted: 0,
       skipped: 0,
       errorCount: 0,
-      errors: []
+      errors: [],
+      notDone
     }
   };
 }
@@ -1446,6 +1468,14 @@ function outcomeToJson(
 // 의존 순서상 tb_place 를 먼저 채운 뒤(자식 테이블이 place_id/contentid 를 참조),
 // 서로 독립인 detail / barrierfree 는 병렬로 실행한다.
 // tb_place_bakery 는 tb_place 에 의존하지 않으므로 place 시작과 동시에 병렬로 돌린다.
+// detail/barrierfree/bakery가 normalize와 같은 deadline을 그대로 공유하면, 셋 다 시간 예산이
+// 남아있는 한(=처리할 대상이 아직 많이 남아있는 한) deadline 딱 그 순간까지 계속 돌다가 끝나서
+// normalize에게는 매번 남는 시간이 0에 가까워진다 — 그러면 normalize는 회차마다 시작하자마자
+// "이미 시간 다 됐음"으로 아무 일도 안 하고 끝나버려서, detail/barrierfree가 완전히 다 따라잡기
+// 전까지는 영원히 진행이 안 된다(실제로 이 증상이 관측됐다: normalize가 매 회차 0건). normalize
+// 몫으로 시간을 미리 떼어두고, detail/barrierfree/bakery는 그보다 앞당긴 시각까지만 돌게 한다.
+const NORMALIZE_RESERVED_MS = 8_000;
+
 export async function runFullSync(
   supabase: SupabaseClient,
   deadline: number
@@ -1455,8 +1485,10 @@ export async function runFullSync(
     Record<string, unknown> | SyncResult | BakerySyncResult
   >
 > {
+  const innerDeadline = deadline - NORMALIZE_RESERVED_MS;
+
   // 0) tb_place 와 무관한 bakery 동기화를 먼저 시작(await 하지 않고 병렬 진행)
-  const bakeryPromise = syncBakery(supabase, deadline);
+  const bakeryPromise = syncBakery(supabase, innerDeadline);
 
   // 1) 원본 테이블 tb_place 선행 동기화
   console.log("[sync] tb_place 동기화 시작");
@@ -1464,16 +1496,17 @@ export async function runFullSync(
   console.log("[sync] tb_place 완료 → detail/barrierfree 병렬 시작");
 
   // 2) tb_place_detail / tb_place_barrierfree 병렬 동기화 (서로 독립) + bakery 수거.
-  //    셋 다 같은 deadline 을 공유한다 — 각자 그 시각이 되면 알아서 중단하고 notDone 을 남긴다.
+  //    셋 다 같은 innerDeadline 을 공유한다 — 각자 그 시각이 되면 알아서 중단하고 notDone 을 남긴다.
   const [detailOutcome, barrierfreeOutcome, bakeryOutcome] = await Promise.all([
-    syncDetail(supabase, deadline),
-    syncBarrierfree(supabase, deadline),
+    syncDetail(supabase, innerDeadline),
+    syncBarrierfree(supabase, innerDeadline),
     bakeryPromise
   ]);
   console.log("[sync] detail/barrierfree/bakery 완료 → detail_normalized 정규화 시작");
 
   // 3) detail 완료 후 정규화 (tb_place_detail → tb_place_detail_normalized 의존이라 순차 실행).
-  //    시간이 이미 다 됐으면 syncDetailNormalized 내부에서 바로 notDone 으로 건너뛴다.
+  //    detail/barrierfree/bakery가 innerDeadline에서 멈춰줬으니, 여기서 원래 deadline까지 남은
+  //    NORMALIZE_RESERVED_MS만큼은 항상 확보돼 있다.
   const normalizeOutcome = await syncDetailNormalized(supabase, deadline);
   console.log("[sync] detail_normalized 정규화 완료");
 
