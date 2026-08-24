@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSyncConfig, runFullSync, TIME_BUDGET_MS } from "@/lib/place/syncEngine";
 
@@ -16,9 +15,15 @@ const MAX_CHAIN_DEPTH = 100;
 //
 // Hobby 플랜은 크론을 하루 한 번만 트리거할 수 있고, 함수 실행도 60초로 제한된다. 그 안에
 // 전체 동기화(800건 넘는 장소×API 여러 번)를 다 끝낼 수 없어서, 한 번 호출될 때마다
-// TIME_BUDGET_MS(45초) 만큼만 일하고 남은 작업이 있으면 스스로를 다시 호출해 이어간다
-// (after()/waitUntil 로 응답을 먼저 보낸 뒤 백그라운드에서 다음 호출을 건다).
+// TIME_BUDGET_MS(45초) 만큼만 일하고 남은 작업이 있으면 스스로를 다시 호출해 이어간다.
 // 크론 트리거는 하루 한 번이지만, 그 한 번이 여러 번의 짧은 호출로 자동으로 이어지는 구조다.
+//
+// 다음 체인 호출은 응답을 보내기 "전에" 직접 기다렸다가 보낸다 — 예전엔 after()(응답 이후
+// 백그라운드)로 걸었는데, 실제 스케줄러 트리거에서는 응답이 나간 뒤의 백그라운드 작업이
+// Vercel 대시보드 "Run" 수동 테스트 때와 다르게 끊기는 것으로 보였다(체이닝이 1회차에서
+// 멈춤). 응답 전에 직접 기다리면 이 함수가 아직 살아있는 상태에서 다음 체인이 확실히
+// 시작된다 — 그만큼 이 함수의 응답이 늦어지지만, 크론 트리거라 응답을 기다리는 사람이 없어
+// 문제없다.
 //
 // 인증: Vercel Cron 은 CRON_SECRET 환경변수가 설정돼 있으면 요청에
 //   Authorization: Bearer <CRON_SECRET>
@@ -78,40 +83,40 @@ export async function GET(request: Request) {
   }
   console.log(`[cron/place] 동기화 종료 ${finishedAt} (남은 작업: ${pendingWork})`);
 
-  // 남은 작업이 있으면 스스로를 다시 호출해 이어간다. 응답은 먼저 보내고(after), 다음 호출은
-  // 백그라운드에서 건다 — 그래야 지금 이 호출이 자기 자신의 60초 예산 안에서 안전하게 끝난다.
+  // 남은 작업이 있으면 스스로를 다시 호출해 이어간다 — 응답을 보내기 전에, 남은 예산 안에서
+  // 짧게(요청이 실제로 전달됐는지 확인할 정도만) 기다린다.
+  let chainTriggered = false;
   if (pendingWork && chain < MAX_CHAIN_DEPTH && cronSecret) {
     const selfHost = process.env.VERCEL_URL; // 로컬(next dev)에는 없음 — 로컬에선 체이닝 안 함
     if (selfHost) {
       const nextUrl = `https://${selfHost}/api/cron/place?chain=${chain + 1}`;
-      after(async () => {
-        try {
-          // fetch() 는 다음 함수를 "부르는" 즉시(TCP 연결 + 요청 전송) 다음 invocation 이 시작되고,
-          // 그 실행은 이 함수의 커넥션과 무관하게 독립적으로 자기 예산(TIME_BUDGET_MS)만큼 계속
-          // 돈다 — 그러니 우리가 응답을 오래 기다려줄 필요가 없다. 오히려 after() 안에서 대기하는
-          // 시간도 이 함수 자신의 maxDuration(60초) 예산에 그대로 포함되므로, 본작업이 이미 시간을
-          // 많이 썼는데 여기서도 오래 기다리면 이 함수 자체가 60초를 넘겨 타임아웃으로 죽는다
-          // (실제로 본작업 41초 + 대기 58초 = 99초로 죽은 사례가 있었다). 지금까지 쓴 시간을 빼고
-          // 남은 예산 안에서만, 그것도 짧게(요청이 실제로 전달됐는지 확인할 정도만) 기다린다.
-          const elapsedMs = Date.now() - requestStartedAt;
-          const remainingMs = maxDuration * 1000 - elapsedMs - 3000; // 3초는 안전 여유
-          const waitMs = Math.max(1000, Math.min(8000, remainingMs));
-          await fetch(nextUrl, {
-            headers: { Authorization: `Bearer ${cronSecret}` },
-            signal: AbortSignal.timeout(waitMs)
-          });
-        } catch {
-          // 응답을 못 받았거나 시간 안에 못 기다렸어도, 요청 자체는 이미 전달돼 다음 invocation이
-          // 독립적으로 실행 중일 가능성이 높다 — 조용히 넘어간다. 최악의 경우 다음날 크론이 처음부터 다시 훑는다.
-          console.error(
-            "[cron/place] 다음 체이닝 호출 확인 실패(전달은 됐을 수 있음) — 다음날 크론 때 재시도됨"
-          );
-        }
-      });
+      try {
+        const elapsedMs = Date.now() - requestStartedAt;
+        const remainingMs = maxDuration * 1000 - elapsedMs - 3000; // 3초는 안전 여유
+        const waitMs = Math.max(1000, Math.min(8000, remainingMs));
+        await fetch(nextUrl, {
+          headers: { Authorization: `Bearer ${cronSecret}` },
+          signal: AbortSignal.timeout(waitMs)
+        });
+        chainTriggered = true;
+      } catch {
+        // 응답을 못 받았거나 시간 안에 못 기다렸어도, 요청 자체는 이미 전달돼 다음 invocation이
+        // 독립적으로 실행 중일 가능성이 높다 — 조용히 넘어간다.
+        console.error("[cron/place] 다음 체이닝 호출 확인 실패(전달은 됐을 수 있음)");
+        chainTriggered = true;
+      }
     } else {
       console.log("[cron/place] VERCEL_URL 없음(로컬 실행) — 체이닝 생략, 이번 호출 결과만 반환");
     }
   }
 
-  return NextResponse.json({ ok: true, startedAt, finishedAt, chain, pendingWork, results });
+  return NextResponse.json({
+    ok: true,
+    startedAt,
+    finishedAt,
+    chain,
+    pendingWork,
+    chainTriggered,
+    results
+  });
 }
