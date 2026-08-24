@@ -18,22 +18,30 @@ const PLAY_QUANTUM_READY_SIGNING_FINGERPRINT =
   "AB:54:5D:67:99:AF:7C:71:65:97:EA:D8:C2:16:FE:73:A6:C2:1F:01:74:1A:8A:51:82:A8:98:A0:04:06:B8:7C";
 const UPLOAD_SIGNING_FINGERPRINT =
   "8A:E2:7B:BB:05:05:25:AB:A6:60:85:75:9F:E4:08:D1:C4:E1:E7:7A:7B:9C:DE:B1:46:0E:73:9E:E1:0C:0B:0C";
+const CHROME_PACKAGE = "com.android.chrome";
+const ANDROID_BROWSER_HELPER_VERSION = "2.7.2";
 
 const validContract = {
   twaManifest: {
     host: "dadaeyu.vercel.app",
     packageId: "com.dadaeyou.app",
-    versionCode: 3,
-    versionName: "1.0.1",
+    versionCode: 4,
+    versionName: "1.0.2",
     signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
     fingerprints: [VALID_SHA256_FINGERPRINT]
   },
   androidGradle: {
     applicationId: "com.dadaeyou.app",
-    versionCode: 3,
-    versionName: "1.0.1",
+    versionCode: 4,
+    versionName: "1.0.2",
     compileSdk: 36,
-    targetSdk: 36
+    targetSdk: 36,
+    minSdk: 23,
+    browserHelperVersion: ANDROID_BROWSER_HELPER_VERSION
+  },
+  androidManifest: {
+    launchingBrowser: CHROME_PACKAGE,
+    launchingBrowserName: "Chrome"
   },
   assetLinks: [
     {
@@ -58,17 +66,19 @@ test("Android release contract reports every TWA launch contract drift", () => {
     twaManifest: {
       host: "example.com",
       packageId: "com.example.app",
-      versionCode: 4,
+      versionCode: 5,
       versionName: "2.0.0",
       signingKeyPath: "android-twa/dadaeyu-upload.jks"
     },
     androidGradle: {
       applicationId: "com.example.app",
-      versionCode: 4,
+      versionCode: 5,
       versionName: "2.0.0",
       compileSdk: 35,
-      targetSdk: 35
+      targetSdk: 35,
+      minSdk: 21
     },
+    androidManifest: {},
     assetLinks: [
       {
         relation: ["delegate_permission/common.get_login_creds"],
@@ -84,14 +94,18 @@ test("Android release contract reports every TWA launch contract drift", () => {
   assert.deepEqual(errors, [
     "Expected TWA host dadaeyu.vercel.app, received example.com.",
     "Expected Android package com.dadaeyou.app, received com.example.app.",
-    "Expected versionCode 3, received 4.",
-    "Expected versionName 1.0.1, received 2.0.0.",
+    "Expected versionCode 4, received 5.",
+    "Expected versionName 1.0.2, received 2.0.0.",
     "Expected signing key path ../../private/android-signing/dadaeyu-upload.jks, received android-twa/dadaeyu-upload.jks.",
     "Expected Gradle applicationId com.dadaeyou.app, received com.example.app.",
-    "Expected Gradle versionCode 3, received 4.",
-    "Expected Gradle versionName 1.0.1, received 2.0.0.",
+    "Expected Gradle versionCode 4, received 5.",
+    "Expected Gradle versionName 1.0.2, received 2.0.0.",
     "Expected compileSdk 36, received 35.",
     "Expected targetSdk 36, received 35.",
+    "Expected minSdk 23, received 21.",
+    `Expected Android Browser Helper ${ANDROID_BROWSER_HELPER_VERSION}, received undefined.`,
+    `Expected TWA browser ${CHROME_PACKAGE}, received undefined.`,
+    "Expected TWA browser name Chrome, received undefined.",
     "Expected assetlinks[0].relation to include delegate_permission/common.handle_all_urls.",
     "Expected assetlinks[0].target.namespace android_app, received web.",
     "Expected assetlinks[0].target.package_name com.dadaeyou.app, received com.example.app.",
@@ -129,8 +143,8 @@ test("generated Android project matches the TWA package, version, and SDK contra
   assert.deepEqual(contract.twaManifest, {
     host: "dadaeyu.vercel.app",
     packageId: "com.dadaeyou.app",
-    versionCode: 3,
-    versionName: "1.0.1",
+    versionCode: 4,
+    versionName: "1.0.2",
     signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
     fingerprints: [
       PLAY_CLASSICAL_SIGNING_FINGERPRINT,
@@ -140,10 +154,16 @@ test("generated Android project matches the TWA package, version, and SDK contra
   });
   assert.deepEqual(contract.androidGradle, {
     applicationId: "com.dadaeyou.app",
-    versionCode: 3,
-    versionName: "1.0.1",
+    versionCode: 4,
+    versionName: "1.0.2",
     compileSdk: 36,
-    targetSdk: 36
+    targetSdk: 36,
+    minSdk: 23,
+    browserHelperVersion: ANDROID_BROWSER_HELPER_VERSION
+  });
+  assert.deepEqual(contract.androidManifest, {
+    launchingBrowser: CHROME_PACKAGE,
+    launchingBrowserName: "Chrome"
   });
 });
 

@@ -5,11 +5,15 @@ import { execFileSync } from "node:child_process";
 export const ANDROID_RELEASE_CONTRACT = Object.freeze({
   host: "dadaeyu.vercel.app",
   packageName: "com.dadaeyou.app",
-  versionCode: 3,
-  versionName: "1.0.1",
+  versionCode: 4,
+  versionName: "1.0.2",
   signingKeyPath: "../../private/android-signing/dadaeyu-upload.jks",
   compileSdk: 36,
   targetSdk: 36,
+  minSdk: 23,
+  browserHelperVersion: "2.7.2",
+  launchingBrowser: "com.android.chrome",
+  launchingBrowserName: "Chrome",
   assetLinksRelation: "delegate_permission/common.handle_all_urls",
   assetLinksNamespace: "android_app",
   playSigningFingerprints: [
@@ -27,6 +31,10 @@ export function readAndroidProjectContract(projectRoot) {
   );
   const androidGradleSource = readFileSync(
     join(projectRoot, "android-twa/app/build.gradle"),
+    "utf8"
+  );
+  const androidManifestSource = readFileSync(
+    join(projectRoot, "android-twa/app/src/main/AndroidManifest.xml"),
     "utf8"
   );
   const assetLinksPath = join(projectRoot, "public/.well-known/assetlinks.json");
@@ -47,7 +55,22 @@ export function readAndroidProjectContract(projectRoot) {
       versionCode: readGradleInteger(androidGradleSource, /versionCode\s+(\d+)/u),
       versionName: readGradleString(androidGradleSource, /versionName\s+"([^"]+)"/u),
       compileSdk: readGradleInteger(androidGradleSource, /compileSdkVersion\s+(\d+)/u),
-      targetSdk: readGradleInteger(androidGradleSource, /targetSdkVersion\s+(\d+)/u)
+      targetSdk: readGradleInteger(androidGradleSource, /targetSdkVersion\s+(\d+)/u),
+      minSdk: readGradleInteger(androidGradleSource, /minSdkVersion\s+(\d+)/u),
+      browserHelperVersion: readGradleString(
+        androidGradleSource,
+        /com\.google\.androidbrowserhelper:androidbrowserhelper:([0-9.]+)/u
+      )
+    },
+    androidManifest: {
+      launchingBrowser: readManifestMetadata(
+        androidManifestSource,
+        "android.support.customtabs.trusted.LAUNCHING_BROWSER"
+      ),
+      launchingBrowserName: readManifestMetadata(
+        androidManifestSource,
+        "android.support.customtabs.trusted.LAUNCHING_BROWSER_NAME"
+      )
     },
     assetLinks: existsSync(assetLinksPath) ? JSON.parse(readFileSync(assetLinksPath, "utf8")) : []
   };
@@ -75,6 +98,7 @@ export function validateAndroidReleaseContract(contract) {
   const expected = ANDROID_RELEASE_CONTRACT;
   const twaManifest = contract?.twaManifest ?? {};
   const androidGradle = contract?.androidGradle ?? {};
+  const androidManifest = contract?.androidManifest ?? {};
   const assetLink = Array.isArray(contract?.assetLinks) ? contract.assetLinks[0] : undefined;
   const assetLinkTarget = assetLink?.target ?? {};
 
@@ -146,6 +170,36 @@ export function validateAndroidReleaseContract(contract) {
     );
   }
 
+  if (androidGradle.minSdk !== expected.minSdk) {
+    errors.push(
+      `Expected minSdk ${expected.minSdk}, received ${formatReceived(androidGradle.minSdk)}.`
+    );
+  }
+
+  if (androidGradle.browserHelperVersion !== expected.browserHelperVersion) {
+    errors.push(
+      `Expected Android Browser Helper ${expected.browserHelperVersion}, received ${formatReceived(
+        androidGradle.browserHelperVersion
+      )}.`
+    );
+  }
+
+  if (androidManifest.launchingBrowser !== expected.launchingBrowser) {
+    errors.push(
+      `Expected TWA browser ${expected.launchingBrowser}, received ${formatReceived(
+        androidManifest.launchingBrowser
+      )}.`
+    );
+  }
+
+  if (androidManifest.launchingBrowserName !== expected.launchingBrowserName) {
+    errors.push(
+      `Expected TWA browser name ${expected.launchingBrowserName}, received ${formatReceived(
+        androidManifest.launchingBrowserName
+      )}.`
+    );
+  }
+
   if (
     !Array.isArray(assetLink?.relation) ||
     !assetLink.relation.includes(expected.assetLinksRelation)
@@ -201,6 +255,17 @@ function readGradleInteger(source, pattern) {
 
 function readGradleString(source, pattern) {
   return source.match(pattern)?.[1];
+}
+
+function readManifestMetadata(source, metadataName) {
+  const escapedName = metadataName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const match = source.match(
+    new RegExp(
+      `<meta-data\\s+android:name=["']${escapedName}["']\\s+android:value=["']([^"']+)["']\\s*/>`,
+      "u"
+    )
+  );
+  return match?.[1];
 }
 
 function formatReceived(value) {
