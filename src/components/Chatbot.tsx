@@ -16,6 +16,7 @@ import {
   formatChatDisplayText,
   getPublicChatSourceLabel
 } from "@/lib/chat/presentation";
+import { getChatScrollTarget } from "@/lib/chat/scrollTarget";
 import {
   Accessibility,
   ArrowRight,
@@ -207,8 +208,8 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
   const [isListening, setIsListening] = useState(false);
   const [isConversationMode, setIsConversationMode] = useState(false);
   const [voiceInputStatus, setVoiceInputStatus] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const latestMessageRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const lastAutoSpokenMessageIdRef = useRef<number | null>(null);
   const nextIdRef = useRef(1);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -250,17 +251,28 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
   }, [isLoading]);
 
   useEffect(() => {
-    const latestMessage = messages[messages.length - 1];
-    if (latestMessage?.role === "assistant" && messages.length > 1 && !isLoading) {
-      latestMessageRef.current?.scrollIntoView({
-        block: "start",
+    const scrollTarget = getChatScrollTarget(messages, isLoading);
+    const messageList = messageListRef.current;
+
+    if (!messageList) return;
+
+    if (scrollTarget.kind === "message" && scrollAnchorRef.current) {
+      const anchorRect = scrollAnchorRef.current.getBoundingClientRect();
+      const listRect = messageList.getBoundingClientRect();
+      const anchorTopInList = anchorRect.top - listRect.top + messageList.scrollTop;
+
+      messageList.scrollTo({
+        top: Math.max(0, anchorTopInList - 12),
         behavior: "smooth"
       });
       return;
     }
 
-    bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+    messageList.scrollTo({ top: messageList.scrollHeight, behavior: "smooth" });
   }, [messages, isLoading]);
+
+  const scrollTarget = getChatScrollTarget(messages, isLoading);
+  const scrollTargetMessageId = scrollTarget.kind === "message" ? scrollTarget.messageId : null;
 
   const stopSpeech = useCallback(() => {
     stopTts();
@@ -741,24 +753,23 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
       </div>
 
       <div
+        ref={messageListRef}
         className="min-h-0 space-y-4 overflow-y-auto bg-[#f6faf8] px-4 py-5 sm:px-6 lg:px-7"
         aria-live="polite"
       >
-        {messages.map((message, index) => {
-          const isLatest = index === messages.length - 1;
-
+        {messages.map((message) => {
           return message.role === "user" ? (
             <div
               key={message.id}
-              ref={isLatest ? latestMessageRef : null}
+              ref={message.id === scrollTargetMessageId ? scrollAnchorRef : null}
               className="flex justify-end"
             >
-              <div className="from-navy-800 to-brand-800 shadow-brand-900/10 max-w-[78%] rounded-2xl rounded-br-md bg-gradient-to-br px-4 py-3 text-[16px] leading-relaxed font-semibold text-white shadow-md">
+              <div className="from-navy-800 to-brand-800 shadow-brand-900/10 max-w-[78%] rounded-2xl rounded-br-md bg-gradient-to-br px-4 py-3 text-[16px] leading-relaxed font-semibold break-words whitespace-pre-wrap text-white shadow-md">
                 {message.text}
               </div>
             </div>
           ) : (
-            <div key={message.id} ref={isLatest ? latestMessageRef : null}>
+            <div key={message.id}>
               <AssistantMessage
                 messageId={message.id}
                 response={message.content}
@@ -782,11 +793,10 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
             </div>
           </div>
         ) : null}
-        <div ref={bottomRef} />
       </div>
 
       <form
-        className="border-hairline flex items-center gap-2.5 border-t bg-white/95 px-4 py-3 backdrop-blur sm:px-5"
+        className="border-hairline flex items-center gap-2.5 border-t bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-5"
         onSubmit={handleSubmit}
       >
         <input
@@ -807,7 +817,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
           }
           aria-label="질문 입력"
           disabled={isLoading || isConversationMode}
-          className="focus:border-brand-400 min-w-0 flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-[16px] transition-colors placeholder:text-gray-600 focus:bg-white disabled:opacity-60"
+          className="focus:border-brand-400 text-ink min-w-0 flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-[16px] transition-colors placeholder:text-gray-600 focus:bg-white disabled:opacity-60"
         />
         <button
           type="button"
