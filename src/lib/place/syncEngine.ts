@@ -1507,13 +1507,36 @@ export async function runFullSync(
     syncBarrierfree(supabase, innerDeadline, cursors.barrierfree ?? 0),
     bakeryPromise
   ]);
-  console.log("[sync] detail/barrierfree/bakery 완료 → detail_normalized 정규화 시작");
+  console.log("[sync] detail/barrierfree/bakery 이번 회차 종료");
 
-  // 3) detail 완료 후 정규화 (tb_place_detail → tb_place_detail_normalized 의존이라 순차 실행).
-  //    detail/barrierfree/bakery가 innerDeadline에서 멈춰줬으니, 여기서 원래 deadline까지 남은
-  //    NORMALIZE_RESERVED_MS만큼은 항상 확보돼 있다.
-  const normalizeOutcome = await syncDetailNormalized(supabase, deadline, cursors.normalize ?? 0);
-  console.log("[sync] detail_normalized 정규화 완료");
+  // 3) detail 이 오늘 몫을 "전부" 끝낸 뒤에만 정규화한다 (tb_place_detail → tb_place_detail_normalized).
+  //    normalize 는 외부 API 호출이 없는 순수 DB 작업이라 detail 보다 훨씬 빠르다. detail 이 아직
+  //    진행 중인데 같이 돌리면 normalize 가 먼저 테이블 끝까지 완주해버리고(notDone=false), 그 뒤
+  //    회차에서 detail 이 새로 써넣는 행은 아무도 정규화하지 않아 normalized 테이블이 영구히 하루
+  //    뒤처진다. detail 이 끝난 회차부터 normalize 가 자기 커서로 이어서 돌면 그 문제가 없다.
+  const detailDone = detailOutcome.ok && detailOutcome.result.notDone !== true;
+  const normalizeCursor = cursors.normalize ?? 0;
+  let normalizeOutcome: SyncOutcome;
+  if (detailDone) {
+    normalizeOutcome = await syncDetailNormalized(supabase, deadline, normalizeCursor);
+    console.log("[sync] detail_normalized 정규화 완료");
+  } else {
+    console.log("[sync] detail 미완료 → detail_normalized 정규화 건너뜀");
+    normalizeOutcome = {
+      ok: true,
+      result: {
+        totalPlaces: 0,
+        fetched: 0,
+        upserted: 0,
+        deleted: 0,
+        skipped: 0,
+        errorCount: 0,
+        errors: [],
+        notDone: true, // detail 이 끝나면 그때부터 처리해야 하므로 "남은 작업" 으로 둔다
+        nextCursor: normalizeCursor
+      }
+    };
+  }
 
   return {
     place: outcomeToJson(placeOutcome),
