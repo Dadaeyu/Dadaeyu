@@ -7,6 +7,7 @@ import { Bookmark, Heart, Route, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   getGuestWelcomeTodayKey,
+  GUEST_WELCOME_SESSION_STORAGE_KEY,
   GUEST_WELCOME_SNOOZE_STORAGE_KEY,
   isGuestWelcomeEligiblePath,
   isGuestWelcomeSnoozedToday,
@@ -20,6 +21,7 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
   const { user, loading } = useAuth();
   const [open, setOpen] = useState(false);
   const [dismissedForEntry, setDismissedForEntry] = useState(false);
+  const [dismissedForSession, setDismissedForSession] = useState(false);
   const [snoozeResolved, setSnoozeResolved] = useState(false);
   const [snoozedToday, setSnoozedToday] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -27,6 +29,7 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
   useEffect(() => {
     const timerId = window.setTimeout(() => {
       let storedDate: string | null = null;
+      let storedSessionDismissal: string | null = null;
 
       try {
         storedDate = window.localStorage.getItem(GUEST_WELCOME_SNOOZE_STORAGE_KEY);
@@ -34,7 +37,14 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
         // 저장소를 사용할 수 없어도 로그인 안내는 정상적으로 표시한다.
       }
 
+      try {
+        storedSessionDismissal = window.sessionStorage.getItem(GUEST_WELCOME_SESSION_STORAGE_KEY);
+      } catch {
+        // 세션 저장소를 사용할 수 없어도 현재 진입 닫힘 상태로만 처리한다.
+      }
+
       setSnoozedToday(isGuestWelcomeSnoozedToday(storedDate));
+      setDismissedForSession(storedSessionDismissal === "1");
       setSnoozeResolved(true);
     }, 0);
 
@@ -49,6 +59,7 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
         eligiblePath: isGuestWelcomeEligiblePath(pathname),
         blockedByNotice: blocked,
         dismissedForEntry,
+        dismissedForSession,
         snoozeResolved,
         snoozedToday
       });
@@ -62,7 +73,16 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
     }, 0);
 
     return () => window.clearTimeout(timerId);
-  }, [blocked, dismissedForEntry, loading, pathname, snoozeResolved, snoozedToday, user]);
+  }, [
+    blocked,
+    dismissedForEntry,
+    dismissedForSession,
+    loading,
+    pathname,
+    snoozeResolved,
+    snoozedToday,
+    user
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -76,6 +96,16 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
   const closePrompt = () => {
     setDismissedForEntry(true);
     setOpen(false);
+  };
+  const continueWithoutLogin = () => {
+    try {
+      window.sessionStorage.setItem(GUEST_WELCOME_SESSION_STORAGE_KEY, "1");
+    } catch {
+      // 세션 저장소를 사용할 수 없으면 현재 홈 진입에서만 닫는다.
+    }
+
+    setDismissedForSession(true);
+    closePrompt();
   };
   const snoozePromptToday = () => {
     try {
@@ -175,7 +205,7 @@ export function GuestWelcomePrompt({ blocked = false }: { blocked?: boolean }) {
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={closePrompt}
+              onClick={continueWithoutLogin}
               className="text-steel hover:text-ink min-h-12 rounded-xl px-3 text-sm font-semibold underline-offset-4 transition-colors hover:bg-gray-50 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
             >
               로그인 없이 둘러보기

@@ -13,6 +13,20 @@ export function shouldShowHomePlaceImage(source: string | null, failedSource: st
   return Boolean(source && source !== failedSource);
 }
 
+export function buildHomeFallbackCopy({ compact = false }: { compact?: boolean } = {}) {
+  if (compact) {
+    return {
+      title: "사진 준비 중",
+      description: null
+    };
+  }
+
+  return {
+    title: "등록된 장소 사진이 없어요",
+    description: "주소와 방문 정보는 아래에서 확인할 수 있어요"
+  };
+}
+
 export function splitHomeRecommendationPlaces<T>(places: readonly T[], limit = 4) {
   const visiblePlaces = places.slice(0, Math.max(limit, 0));
   return {

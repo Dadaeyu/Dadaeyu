@@ -754,7 +754,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
 
       <div
         ref={messageListRef}
-        className="min-h-0 space-y-4 overflow-y-auto bg-[#f6faf8] px-4 py-5 sm:px-6 lg:px-7"
+        className="min-h-0 space-y-4 overflow-y-auto bg-[#f6faf8] px-4 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-6 lg:px-7"
         aria-live="polite"
       >
         {messages.map((message) => {
@@ -796,7 +796,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
       </div>
 
       <form
-        className="border-hairline flex items-center gap-2.5 border-t bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-5"
+        className="border-hairline flex items-center gap-2 border-t bg-white/95 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:gap-2.5 sm:px-5"
         onSubmit={handleSubmit}
       >
         <input
@@ -840,7 +840,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
                   : "음성으로 질문 입력"
                 : "이 브라우저는 음성 입력을 지원하지 않아요"
           }
-          className={`inline-flex h-12 min-w-[98px] shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-3 text-[12px] font-extrabold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+          className={`inline-flex h-12 w-12 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-0 text-[12px] font-extrabold text-white shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-40 min-[390px]:w-auto min-[390px]:min-w-[98px] min-[390px]:px-3 ${
             isConversationMode || isListening
               ? "border-red-300 bg-red-500 shadow-red-500/20 hover:bg-red-600"
               : "border-brand-800 bg-brand-800 shadow-brand-900/15 hover:bg-brand-900"
@@ -851,7 +851,9 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
           ) : (
             <Mic className="h-5 w-5" aria-hidden="true" />
           )}
-          <span>{isConversationMode ? "대화 종료" : isListening ? "듣기 중지" : "음성입력"}</span>
+          <span className="hidden min-[390px]:inline">
+            {isConversationMode ? "대화 종료" : isListening ? "듣기 중지" : "음성입력"}
+          </span>
         </button>
         <button
           type="submit"

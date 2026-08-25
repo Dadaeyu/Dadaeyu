@@ -22,6 +22,7 @@ import {
 import { usePlaceSearch } from "@/hooks/usePlaceSearch";
 import { useMyLocation, type MyLocationErrorReason } from "@/hooks/useMyLocation";
 import { useLockBodyScroll } from "@/hooks/useLockBodyScroll";
+import { getMapRenderPlaces } from "@/lib/search/mapDeepLinkState";
 import {
   fetchDirections,
   openKakaoMapRoute,
@@ -255,6 +256,7 @@ export default function Map() {
     isLoadingDetail,
     handleSearch,
     focusPlaceById,
+    focusedPlace,
     topRatedPlaces,
     isLoadingTopRated,
     hasActiveFilter,
@@ -521,8 +523,13 @@ export default function Map() {
 
   // 필터/검색을 아무것도 안 켰을 때만 핫플레이스를 기본으로 보여준다.
   // 필터를 켰는데 결과가 0개면(searchPlaces=[]) 그대로 빈 목록으로 둬서 "결과 없음"이 보이게 한다.
-  const displayPlaces = hasActiveFilter ? searchPlaces : topRatedPlaces;
-  const markerPlaces = hasActiveFilter ? searchPlaces : topRatedPlaces;
+  const displayPlaces = getMapRenderPlaces({
+    focusedPlace,
+    hasActiveFilter,
+    searchPlaces,
+    topRatedPlaces
+  });
+  const markerPlaces = displayPlaces;
 
   return (
     <div

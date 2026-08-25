@@ -39,6 +39,26 @@ test("guest welcome waits for auth and notices and stays dismissed during the cu
   assert.equal(shouldShowGuestWelcome({ ...readyGuest, eligiblePath: false }), false);
 });
 
+test("guest welcome stays dismissed for the session after the home entry state resets", () => {
+  type GuestWelcomeStateWithSessionDismissal = Parameters<typeof shouldShowGuestWelcome>[0] & {
+    dismissedForSession: boolean;
+  };
+
+  const remountedGuest = {
+    authLoading: false,
+    hasUser: false,
+    eligiblePath: true,
+    blockedByNotice: false,
+    dismissedForEntry: false,
+    dismissedForSession: false,
+    snoozeResolved: true,
+    snoozedToday: false
+  } satisfies GuestWelcomeStateWithSessionDismissal;
+
+  assert.equal(shouldShowGuestWelcome(remountedGuest), true);
+  assert.equal(shouldShowGuestWelcome({ ...remountedGuest, dismissedForSession: true }), false);
+});
+
 test("guest welcome daily snooze expires on the next local calendar day", () => {
   const today = new Date(2026, 7, 24, 23, 59);
   const tomorrow = new Date(2026, 7, 25, 0, 0);

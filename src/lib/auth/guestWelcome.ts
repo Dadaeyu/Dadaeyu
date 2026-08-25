@@ -4,11 +4,13 @@ type GuestWelcomeState = {
   eligiblePath: boolean;
   blockedByNotice: boolean;
   dismissedForEntry: boolean;
+  dismissedForSession?: boolean;
   snoozeResolved: boolean;
   snoozedToday: boolean;
 };
 
 export const GUEST_WELCOME_SNOOZE_STORAGE_KEY = "guest_welcome_snooze_date";
+export const GUEST_WELCOME_SESSION_STORAGE_KEY = "guest_welcome_dismissed_for_session";
 
 export function getGuestWelcomeTodayKey(date = new Date()) {
   const year = date.getFullYear();
@@ -33,6 +35,7 @@ export function shouldShowGuestWelcome(state: GuestWelcomeState) {
     state.eligiblePath &&
     !state.blockedByNotice &&
     !state.dismissedForEntry &&
+    !state.dismissedForSession &&
     state.snoozeResolved &&
     !state.snoozedToday
   );

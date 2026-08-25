@@ -7,12 +7,15 @@ import {
 } from "@/lib/tour-weather";
 import {
   asksForSingleRecommendation,
+  resolveRequestedRecommendationLimit,
   selectDiverseItems
 } from "@/lib/chat/recommendationDiversity";
+import { filterRowsByAccessibilityEvidence } from "@/lib/chat/accessibilityEvidence";
 import {
   formatChatAccessibilityText,
   formatChatDisplayText,
   getPublicChatSourceLabel,
+  shouldReturnChatPlaceCards,
   uniqueChatSuggestions
 } from "@/lib/chat/presentation";
 import {
@@ -125,6 +128,21 @@ type QueryAnalysis = {
   requested_categories: string[];
   requested_theme: ExplicitChatTheme | null;
 };
+
+const CHAT_ACCESSIBILITY_NEEDS = [
+  "wheelchair",
+  "stroller",
+  "elderly",
+  "visual_impairment",
+  "hearing_impairment",
+  "mobility_access",
+  "step_free",
+  "accessible_toilet",
+  "accessible_parking",
+  "public_transport",
+  "short_distance",
+  "easy_explanation"
+] as const;
 
 type ChatHistoryItem = {
   role: "assistant" | "user";
@@ -259,6 +277,26 @@ const ACCESSIBILITY_RULES: Record<string, { tags: string[]; fields: string[]; te
     fields: ["parking", "publictransport", "route", "exit", "elevator", "restroom"],
     terms: ["이동약자", "장애인", "경사로", "엘리베이터", "화장실", "접근로"]
   },
+  step_free: {
+    tags: ["wheelchair", "mobility_access"],
+    fields: ["route", "exit", "entrance", "elevator", "wheelchair"],
+    terms: ["계단 없음", "단차 없음", "턱 없음", "무단차", "접근로", "경사로", "엘리베이터"]
+  },
+  accessible_toilet: {
+    tags: ["wheelchair", "mobility_access"],
+    fields: ["restroom", "toilet"],
+    terms: ["장애인 화장실", "장애인화장실", "화장실"]
+  },
+  accessible_parking: {
+    tags: ["wheelchair", "mobility_access"],
+    fields: ["parking"],
+    terms: ["장애인 주차", "장애인주차장", "전용 주차", "교통약자 주차"]
+  },
+  public_transport: {
+    tags: ["mobility_access"],
+    fields: ["publictransport", "public_transport"],
+    terms: ["대중교통", "저상버스", "버스", "정류장", "역"]
+  },
   short_distance: {
     tags: ["mobility_access"],
     fields: ["parking", "publictransport", "route", "exit", "elevator", "restroom"],
@@ -349,7 +387,7 @@ const classifierPrompt = [
   "코딩, 과제, 투자, 정치, 일반 잡담, 여행과 무관한 지식 질문은 in_scope를 false로 둔다.",
   "scope_reason은 범위 판단 이유를 한국어 짧은 문장으로 쓴다.",
   "intent는 recommend_place, check_accessibility, ask_info 중 하나다.",
-  "accessibility_needs는 wheelchair, stroller, elderly, visual_impairment, hearing_impairment, mobility_access, short_distance, easy_explanation 중 필요한 값만 넣는다.",
+  "accessibility_needs는 wheelchair, stroller, elderly, visual_impairment, hearing_impairment, mobility_access, step_free, accessible_toilet, accessible_parking, public_transport, short_distance, easy_explanation 중 필요한 값만 넣는다.",
   "날씨, 오늘, 비, 더위, 추위, 미세먼지처럼 현재 조건이 필요하면 weather_sensitive를 true로 둔다.",
   "대전 앱이므로 location이 없으면 대전으로 둔다.",
   "place_name은 특정 장소명이 있으면 문자열, 없으면 null이다.",
@@ -732,19 +770,54 @@ function createSuccessResponse({
   searchTerms: string[];
   weather?: TourWeatherResult;
 }): ChatResponse {
-  const places = prioritizeConversationPlaces(buildPlaceCards(knowledge.rows), conversationContext);
+  const evidenceRows = shouldFilterRowsByAccessibilityEvidence(analysis)
+    ? filterRowsByAccessibilityEvidence(knowledge.rows, analysis.accessibility_needs)
+    : knowledge.rows;
+  if (shouldFilterRowsByAccessibilityEvidence(analysis) && !evidenceRows.length) {
+    return createNoKnowledgeResponse({
+      analysis,
+      inputMessage,
+      knowledge: {
+        ...knowledge,
+        rows: [],
+        message: "조건 일치 없음: 요청한 접근성 근거를 확인할 수 없음"
+      },
+      searchTerms,
+      weather
+    });
+  }
+  const prioritizedPlaces = prioritizeConversationPlaces(
+    buildPlaceCards(evidenceRows),
+    conversationContext
+  );
+  const recommendationLimit = resolveRequestedRecommendationLimit(inputMessage, {
+    defaultLimit: 2,
+    maxLimit: 5
+  });
+  const messagePlaces = shouldUseGroundedRecommendation(analysis.intent, prioritizedPlaces.length)
+    ? prioritizedPlaces.slice(0, recommendationLimit)
+    : analysis.intent === "check_accessibility" || analysis.intent === "ask_info"
+      ? prioritizedPlaces.slice(0, 1)
+      : prioritizedPlaces;
+  const places = shouldReturnChatPlaceCards({
+    intent: analysis.intent,
+    isFollowUp: conversationContext.isFollowUp,
+    hasPlaces: messagePlaces.length > 0
+  })
+    ? messagePlaces
+    : [];
   const placeFollowUpChips = places
     .flatMap((place) => buildPlaceFollowUps(place.title, place.category))
     .slice(0, 3);
-  const responseMessage = shouldUseGroundedRecommendation(analysis.intent, places.length)
+  const responseMessage = shouldUseGroundedRecommendation(analysis.intent, messagePlaces.length)
     ? createCompactRecommendationMessage({
         analysis,
         inputMessage,
         conversationContext,
-        places
+        places: messagePlaces
       })
-    : analysis.intent === "check_accessibility" && places.length
-      ? createGroundedAccessibilityCheckMessage(places[0], analysis.accessibility_needs)
+    : analysis.intent === "check_accessibility" && messagePlaces.length
+      ? createGroundedAccessibilityCheckMessage(messagePlaces[0], analysis.accessibility_needs)
       : message;
   const normalizedInput = normalizeStaticFaqText(inputMessage);
   const chips = uniqueChatSuggestions(
@@ -773,6 +846,11 @@ function createSuccessResponse({
       ...getWeatherDebugPayload(weather)
     }
   };
+}
+
+function shouldFilterRowsByAccessibilityEvidence(analysis: QueryAnalysis) {
+  if (!analysis.accessibility_needs.length) return false;
+  return analysis.intent === "recommend_place" || analysis.intent === "check_accessibility";
 }
 
 function prioritizeConversationPlaces(places: PlaceCard[], context: ConversationContext) {
@@ -822,6 +900,10 @@ function createGroundedAccessibilityCheckMessage(place: PlaceCard, needs: string
 
 function getAccessibilityInfoLabel(needs: string[]) {
   if (needs.includes("stroller")) return "유모차 이용";
+  if (needs.includes("accessible_toilet")) return "장애인 화장실";
+  if (needs.includes("accessible_parking")) return "장애인 주차";
+  if (needs.includes("public_transport")) return "대중교통";
+  if (needs.includes("step_free")) return "계단 없는 이동";
   if (needs.includes("visual_impairment")) return "시각장애인 편의";
   if (needs.includes("hearing_impairment")) return "청각장애인 편의";
   if (needs.includes("elderly")) return "이동 편의";
@@ -851,7 +933,7 @@ function createCompactRecommendationMessage({
   conversationContext: ConversationContext;
   places: PlaceCard[];
 }) {
-  const recommendedPlaces = places.slice(0, 2);
+  const recommendedPlaces = places;
   const location = analysis.location?.trim() || "대전";
   const [firstPlace, secondPlace] = recommendedPlaces;
   const isFollowUp = conversationContext.isFollowUp;
@@ -877,12 +959,11 @@ function createCompactRecommendationMessage({
     const allNew = recommendedPlaces.every(
       (place) => !seenTitles.has(normalizeConversationReferenceText(place.title))
     );
-    const selectedPlaces =
-      asksForSingleRecommendation(inputMessage) || !secondPlace ? [firstPlace] : recommendedPlaces;
+    const selectedPlaces = recommendedPlaces;
     const lead =
       selectedPlaces.length === 1
         ? `${allNew ? "앞에서 본 곳은 빼고" : "이번에는"} ${withObjectParticle(firstPlace.title)} 추천할게요.`
-        : `${allNew ? "앞에서 본 곳과 겹치지 않게" : "이번에는"} ${joinPlaceNames(firstPlace.title, secondPlace.title)} 살펴보세요.`;
+        : `${allNew ? "앞에서 본 곳과 겹치지 않게" : "이번에는"} ${joinSelectedPlaceNames(selectedPlaces)} 살펴보세요.`;
 
     return [
       lead,
@@ -903,16 +984,25 @@ function createCompactRecommendationMessage({
 
   return [
     isFollowUp
-      ? `앞에서 본 후보 중에서는 ${joinPlaceNames(firstPlace.title, secondPlace.title)} 먼저 비교해볼 만해요.`
-      : `${getRecommendationLead(analysis, location)} ${joinPlaceNames(firstPlace.title, secondPlace.title)} 먼저 살펴보세요.`,
-    createCompactPlaceRecommendationSentence(firstPlace, analysis.accessibility_needs),
-    createCompactPlaceRecommendationSentence(secondPlace, analysis.accessibility_needs),
+      ? `앞에서 본 후보 중에서는 ${joinSelectedPlaceNames(recommendedPlaces)} 먼저 비교해볼 만해요.`
+      : `${getRecommendationLead(analysis, location)} ${joinSelectedPlaceNames(recommendedPlaces)} 먼저 살펴보세요.`,
+    ...recommendedPlaces.map((place) =>
+      createCompactPlaceRecommendationSentence(place, analysis.accessibility_needs)
+    ),
     "운영 시간과 자세한 편의시설은 아래 카드에서 볼 수 있어요."
   ].join(" ");
 }
 
 function joinPlaceNames(firstTitle: string, secondTitle: string) {
   return `${firstTitle}${getKoreanParticle(firstTitle, "과", "와")} ${secondTitle}${getKoreanParticle(secondTitle, "을", "를")}`;
+}
+
+function joinSelectedPlaceNames(places: PlaceCard[]) {
+  if (places.length === 1) return withObjectParticle(places[0].title);
+  if (places.length === 2) return joinPlaceNames(places[0].title, places[1].title);
+
+  const [firstPlace, secondPlace] = places;
+  return `${firstPlace.title}, ${secondPlace.title} 등 ${places.length}곳을`;
 }
 
 function withObjectParticle(value: string) {
@@ -965,9 +1055,19 @@ function getRecommendationLead(analysis: QueryAnalysis, location: string) {
   if (analysis.accessibility_needs.includes("short_distance")) {
     return "이동거리가 짧은 곳을 찾는다면";
   }
+  if (analysis.accessibility_needs.includes("accessible_toilet")) {
+    return "장애인 화장실 정보를 함께 보고 싶다면";
+  }
+  if (analysis.accessibility_needs.includes("accessible_parking")) {
+    return "장애인 주차 정보를 함께 보고 싶다면";
+  }
+  if (analysis.accessibility_needs.includes("public_transport")) {
+    return "대중교통으로 이동할 곳을 찾는다면";
+  }
   if (
     analysis.accessibility_needs.includes("wheelchair") ||
-    analysis.accessibility_needs.includes("mobility_access")
+    analysis.accessibility_needs.includes("mobility_access") ||
+    analysis.accessibility_needs.includes("step_free")
   ) {
     return "휠체어 이동을 고려하고 있다면";
   }
@@ -987,13 +1087,21 @@ function getRecommendationLead(analysis: QueryAnalysis, location: string) {
 function getPreferredAccessibilityFact(items: string[], needs: string[]) {
   const preferredLabels = needs.includes("stroller")
     ? ["유모차", "엘리베이터", "출입통로", "수유실"]
-    : needs.includes("short_distance")
-      ? ["출입통로", "엘리베이터", "장애인 주차", "주차", "휴식"]
-      : needs.includes("visual_impairment")
-        ? ["점자블록", "보조견", "안내요원", "오디오 가이드"]
-        : needs.includes("hearing_impairment")
-          ? ["수화", "자막", "청각"]
-          : ["출입통로", "엘리베이터", "장애인 주차", "장애인 화장실"];
+    : needs.includes("accessible_toilet")
+      ? ["장애인 화장실", "화장실"]
+      : needs.includes("accessible_parking")
+        ? ["장애인 주차", "주차"]
+        : needs.includes("public_transport")
+          ? ["대중교통", "버스", "정류장", "접근로"]
+          : needs.includes("step_free")
+            ? ["출입통로", "엘리베이터", "접근로"]
+            : needs.includes("short_distance")
+              ? ["출입통로", "엘리베이터", "장애인 주차", "주차", "휴식"]
+              : needs.includes("visual_impairment")
+                ? ["점자블록", "보조견", "안내요원", "오디오 가이드"]
+                : needs.includes("hearing_impairment")
+                  ? ["수화", "자막", "청각"]
+                  : ["출입통로", "엘리베이터", "장애인 주차", "장애인 화장실"];
 
   return (
     preferredLabels
@@ -1635,16 +1743,7 @@ function normalizeAnalysis(value: unknown, message: string): QueryAnalysis {
     record.intent === "ask_info"
       ? record.intent
       : fallback.intent;
-  const allowedNeeds = new Set([
-    "wheelchair",
-    "stroller",
-    "elderly",
-    "visual_impairment",
-    "hearing_impairment",
-    "mobility_access",
-    "short_distance",
-    "easy_explanation"
-  ]);
+  const allowedNeeds = new Set<string>(CHAT_ACCESSIBILITY_NEEDS);
   const accessibilityNeeds = Array.isArray(record.accessibility_needs)
     ? record.accessibility_needs
         .filter((item): item is string => typeof item === "string")
@@ -1724,16 +1823,7 @@ function fallbackAnalysis(message: string): QueryAnalysis {
 
 function normalizeProfileAccessibilityNeeds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  const allowedNeeds = new Set([
-    "wheelchair",
-    "stroller",
-    "elderly",
-    "visual_impairment",
-    "hearing_impairment",
-    "mobility_access",
-    "short_distance",
-    "easy_explanation"
-  ]);
+  const allowedNeeds = new Set<string>(CHAT_ACCESSIBILITY_NEEDS);
   return Array.from(
     new Set(
       value.filter((item): item is string => typeof item === "string" && allowedNeeds.has(item))
@@ -2743,9 +2833,17 @@ function buildSearchTerms(analysis: QueryAnalysis) {
                 ? ["짧은 동선", "가까운", "근처", "이동거리", "휴식"]
                 : need === "easy_explanation"
                   ? ["쉬운 설명", "간단한 안내", "핵심 정보", "안내"]
-                  : need === "elderly" || need === "mobility_access"
-                    ? ["이동약자", "계단", "경사로", "휴식"]
-                    : [need]
+                  : need === "accessible_toilet"
+                    ? ["장애인 화장실", "화장실"]
+                    : need === "accessible_parking"
+                      ? ["장애인 주차", "전용 주차", "주차장"]
+                      : need === "public_transport"
+                        ? ["대중교통", "저상버스", "정류장"]
+                        : need === "step_free"
+                          ? ["계단 없음", "단차 없음", "접근로", "경사로", "엘리베이터"]
+                          : need === "elderly" || need === "mobility_access"
+                            ? ["이동약자", "계단", "경사로", "휴식"]
+                            : [need]
         ),
         analysis.weather_sensitive ? "실내" : null,
         analysis.weather_sensitive ? "우천" : null
