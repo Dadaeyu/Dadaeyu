@@ -18,12 +18,15 @@ const MAX_CHAIN_DEPTH = 100;
 // TIME_BUDGET_MS(45초) 만큼만 일하고 남은 작업이 있으면 스스로를 다시 호출해 이어간다.
 // 크론 트리거는 하루 한 번이지만, 그 한 번이 여러 번의 짧은 호출로 자동으로 이어지는 구조다.
 //
-// 다음 체인 호출은 응답을 보내기 "전에" 직접 기다렸다가 보낸다 — 예전엔 after()(응답 이후
-// 백그라운드)로 걸었는데, 실제 스케줄러 트리거에서는 응답이 나간 뒤의 백그라운드 작업이
-// Vercel 대시보드 "Run" 수동 테스트 때와 다르게 끊기는 것으로 보였다(체이닝이 1회차에서
-// 멈춤). 응답 전에 직접 기다리면 이 함수가 아직 살아있는 상태에서 다음 체인이 확실히
-// 시작된다 — 그만큼 이 함수의 응답이 늦어지지만, 크론 트리거라 응답을 기다리는 사람이 없어
-// 문제없다.
+// detail/barrierfree/normalize는 place_id 오름차순 고정 순서로 진행하고, 이번 회차까지 처리한
+// 마지막 place_id(커서)를 다음 체이닝 호출의 쿼리 파라미터로 그대로 실어 보낸다 — updatetime
+// 기준 "오래된 것부터"가 아니라, 매일 자정 새 트리거(커서 없음)는 항상 처음부터 다시 돌고,
+// 같은 날 안에서의 체이닝만 커서로 이어간다.
+//
+// 다음 체인 호출은 응답을 보내기 "전에" 직접 기다렸다가 보낸다 — after()(응답 이후 백그라운드)
+// 방식은 대시보드 수동 Run 테스트에선 됐지만 실제 스케줄 트리거에서는 1회차에서 체이닝이
+// 끊기는 것으로 보였다. 함수가 아직 살아있는 상태에서 다음 체인을 확실히 쏘도록, 응답 전에
+// 짧게 기다리는 방식으로 바꿨다.
 //
 // 인증: Vercel Cron 은 CRON_SECRET 환경변수가 설정돼 있으면 요청에
 //   Authorization: Bearer <CRON_SECRET>
@@ -49,13 +52,22 @@ export async function GET(request: Request) {
     auth: { persistSession: false }
   });
 
-  const chain = Math.max(0, Number(new URL(request.url).searchParams.get("chain") ?? "0") | 0);
+  const searchParams = new URL(request.url).searchParams;
+  const chain = Math.max(0, Number(searchParams.get("chain") ?? "0") | 0);
+  const cursorParam = (name: string) => Math.max(0, Number(searchParams.get(name) ?? "0") | 0);
+  const cursors = {
+    detail: cursorParam("detailCursor"),
+    barrierfree: cursorParam("barrierfreeCursor"),
+    normalize: cursorParam("normalizeCursor")
+  };
 
   // place 선행 → detail/barrierfree/bakery 병렬 (runFullSync 내부에서 처리)
   const startedAt = new Date().toISOString();
   const deadline = Date.now() + TIME_BUDGET_MS;
-  console.log(`[cron/place] 동기화 시작 ${startedAt} (chain=${chain})`);
-  const results = await runFullSync(supabase, deadline);
+  console.log(
+    `[cron/place] 동기화 시작 ${startedAt} (chain=${chain}, cursors=${JSON.stringify(cursors)})`
+  );
+  const results = await runFullSync(supabase, deadline, cursors);
   const finishedAt = new Date().toISOString();
 
   // 자동 실행은 응답 본문이 버려지므로, 테이블별 집계/에러를 로그로 남긴다.
@@ -83,13 +95,31 @@ export async function GET(request: Request) {
   }
   console.log(`[cron/place] 동기화 종료 ${finishedAt} (남은 작업: ${pendingWork})`);
 
+  // 다음 회차가 이어받을 커서 — 이번 회차 결과에 nextCursor 가 있으면 그 값, 없으면(예: place/bakery
+  // 처럼 커서 개념이 없는 테이블, 또는 이번 회차에서 아예 안 돈 경우) 이번에 넘겨받은 값을 그대로 유지.
+  const nextCursorOf = (table: "detail" | "barrierfree" | "normalize"): number => {
+    const r = results[table];
+    const value =
+      r && typeof r === "object" ? (r as Record<string, unknown>).nextCursor : undefined;
+    return typeof value === "number" ? value : cursors[table];
+  };
+  const nextCursors = {
+    detail: nextCursorOf("detail"),
+    barrierfree: nextCursorOf("barrierfree"),
+    normalize: nextCursorOf("normalize")
+  };
+
   // 남은 작업이 있으면 스스로를 다시 호출해 이어간다 — 응답을 보내기 전에, 남은 예산 안에서
   // 짧게(요청이 실제로 전달됐는지 확인할 정도만) 기다린다.
   let chainTriggered = false;
   if (pendingWork && chain < MAX_CHAIN_DEPTH && cronSecret) {
     const selfHost = process.env.VERCEL_URL; // 로컬(next dev)에는 없음 — 로컬에선 체이닝 안 함
     if (selfHost) {
-      const nextUrl = `https://${selfHost}/api/cron/place?chain=${chain + 1}`;
+      const nextUrl =
+        `https://${selfHost}/api/cron/place?chain=${chain + 1}` +
+        `&detailCursor=${nextCursors.detail}` +
+        `&barrierfreeCursor=${nextCursors.barrierfree}` +
+        `&normalizeCursor=${nextCursors.normalize}`;
       try {
         const elapsedMs = Date.now() - requestStartedAt;
         const remainingMs = maxDuration * 1000 - elapsedMs - 3000; // 3초는 안전 여유
@@ -115,6 +145,8 @@ export async function GET(request: Request) {
     startedAt,
     finishedAt,
     chain,
+    cursors,
+    nextCursors,
     pendingWork,
     chainTriggered,
     results

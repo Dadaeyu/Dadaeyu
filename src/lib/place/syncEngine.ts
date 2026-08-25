@@ -215,6 +215,10 @@ type SyncResult = {
   dongErrorCount?: number;
   // true 면 시간 예산(deadline)을 넘겨서 중간에 멈췄다는 뜻 — 남은 대상은 다음 호출이 이어서 처리한다.
   notDone?: boolean;
+  // 오늘 이 회차까지 처리한 마지막 place_id(고정 오름차순 진행용 커서). 다음 체이닝 호출에
+  // 그대로 실어 보내면 그 지점부터 이어서 처리하고, 매일 자정 새 트리거는 커서 없이 시작해
+  // 처음(place_id 0)부터 다시 돈다. 커서 기반이 아닌 동기화(place/bakery)는 비워둔다.
+  nextCursor?: number;
 };
 
 type SyncOutcome =
@@ -236,39 +240,6 @@ async function fetchKnownIds(
       .filter((v) => v != null)
       .map((v) => key(v))
   );
-}
-
-// 대상 테이블(tb_place_detail / tb_place_barrierfree, 둘 다 PK=place_id)의 place_id → updatetime
-// 맵을 조회한다. syncDetail/syncBarrierfree 가 "가장 오래전에 갱신된 것부터" 순서로 처리해 시간
-// 예산이 부족해도 다음 호출 때 자연스럽게 이어서 처리되도록(별도 커서 테이블 없이) 하는 데 쓴다.
-async function fetchUpdateTimes(
-  supabase: SupabaseClient,
-  table: string
-): Promise<Map<string, string | null> | { error: string }> {
-  const { data, error } = await supabase.from(table).select("place_id, updatetime");
-  if (error) return { error: `${table} updatetime 조회 실패: ${error.message}` };
-  const map = new Map<string, string | null>();
-  for (const row of (data ?? []) as { place_id: unknown; updatetime: string | null }[]) {
-    if (row.place_id == null) continue;
-    map.set(key(row.place_id), row.updatetime ?? null);
-  }
-  return map;
-}
-
-// targets 를 "가장 오래전에 갱신된(또는 한 번도 갱신 안 된) 것부터" 순서로 정렬한다.
-function sortByStaleness<T extends Record<string, unknown>>(
-  targets: T[],
-  keyOf: (t: T) => unknown,
-  updateTimes: Map<string, string | null>
-): T[] {
-  return [...targets].sort((a, b) => {
-    const ta = updateTimes.get(key(keyOf(a)));
-    const tb = updateTimes.get(key(keyOf(b)));
-    if (!ta && !tb) return 0;
-    if (!ta) return -1; // 한 번도 갱신 안 된 쪽이 최우선
-    if (!tb) return 1;
-    return ta.localeCompare(tb); // 오래된(작은) updatetime 이 앞으로
-  });
 }
 
 // 신규(knownIds 에 없는 키)는 insert, 기존은 update 한다.
@@ -565,44 +536,50 @@ async function syncPlace(supabase: SupabaseClient, deadline: number): Promise<Sy
 
 // 활성 tb_place contentid 목록 조회 (소프트 삭제 제외). 컬럼 지정 가능.
 // onlyWithContentid=true 면 contentid 가 null 인 행은 DB 단계에서 제외한다.
+// cursor를 넘기면 place_id > cursor 조건과 오름차순 정렬을 DB 쿼리 단계에서 처리한다(자바스크립트
+// 쪽에서 다시 필터링·정렬할 필요 없음) — place_id가 PK라 인덱스로 바로 처리된다.
 async function fetchActivePlaces<T>(
   supabase: SupabaseClient,
   columns: string,
-  onlyWithContentid = false
+  onlyWithContentid = false,
+  cursor?: number
 ): Promise<{ data: T[] } | { error: string }> {
   let query = supabase.from("tb_place").select(columns).or("delete_yn.is.null,delete_yn.eq.N");
   // 관리자가 등록한 행(contentid="a..." 접두)은 정부 API 콘텐츠가 아니므로 동기화 대상에서 제외한다.
   if (onlyWithContentid) query = query.not("contentid", "is", null).not("contentid", "ilike", "a%");
+  if (cursor != null) query = query.gt("place_id", cursor).order("place_id", { ascending: true });
   const { data, error } = await query;
   if (error) return { error: `tb_place 조회 실패: ${error.message}` };
   return { data: (data ?? []) as T[] };
 }
 
 // ── 2. tb_place_detail 동기화 (detailCommon2 + detailIntro2) ─
-async function syncDetail(supabase: SupabaseClient, deadline: number): Promise<SyncOutcome> {
+// cursor: 지난 체이닝 호출까지 처리한 마지막 place_id. 이보다 큰 place_id부터 오름차순으로
+// 이어서 처리한다 — 매일 자정 새 트리거는 cursor 없이(0) 시작해 처음부터 다시 돈다.
+async function syncDetail(
+  supabase: SupabaseClient,
+  deadline: number,
+  cursor = 0
+): Promise<SyncOutcome> {
   // place_id 는 tb_place 에서 가져와 그대로 tb_place_detail 에 넣는다(detail 의 PK).
+  // cursor보다 큰 place_id만, 오름차순으로 DB 쿼리 단계에서 이미 걸러져서 온다. 오늘 이미
+  // 끝(cursor가 최댓값을 넘어섬)까지 갔으면 빈 목록이 와서 이번 회차는 곧바로 끝난다(다음날
+  // 새 트리거 전까지 계속 그렇다).
   const places = await fetchActivePlaces<{
     place_id: number | null;
     contentid: number | null;
     contenttypeid: string | null;
-  }>(supabase, "place_id, contentid, contenttypeid", true);
+  }>(supabase, "place_id, contentid, contenttypeid", true, cursor);
   if ("error" in places) return { ok: false, status: 502, error: places.error };
-  const unsortedTargets = places.data.filter(
+  const targets = places.data.filter(
     (p): p is { place_id: number; contentid: number; contenttypeid: string | null } =>
       p.contentid != null && p.place_id != null
   );
 
-  // 가장 오래전에 갱신된(또는 한 번도 안 된) 것부터 처리 — 시간 예산이 부족해 중간에 멈춰도
-  // 다음 호출에서 자연스럽게 이어서 처리된다(별도 진행 커서 불필요).
-  const updateTimes = await fetchUpdateTimes(supabase, "tb_place_detail");
-  const targets =
-    "error" in updateTimes
-      ? unsortedTargets
-      : sortByStaleness(unsortedTargets, (t) => t.place_id, updateTimes);
-
   let fetched = 0;
   let skipped = 0;
   let notDone = false;
+  let nextCursor = cursor;
   const errors: { contentid: number; message: string }[] = [];
   const rows: Record<string, unknown>[] = [];
   const now = new Date().toISOString();
@@ -612,6 +589,7 @@ async function syncDetail(supabase: SupabaseClient, deadline: number): Promise<S
       notDone = true;
       break;
     }
+    nextCursor = place_id; // 성공/스킵/에러와 무관하게, 이 항목을 시도했으면 커서를 여기로 옮긴다
     try {
       const commonRes = await withRetry(() =>
         korTourInfoApi.detailCommon<TourResponse>({
@@ -688,7 +666,8 @@ async function syncDetail(supabase: SupabaseClient, deadline: number): Promise<S
       skipped,
       errorCount: errors.length,
       errors: errors.slice(0, 20),
-      notDone
+      notDone,
+      nextCursor
     }
   };
 }
@@ -948,7 +927,8 @@ export function parseRestdate(text: string): {
 
 async function syncDetailNormalized(
   supabase: SupabaseClient,
-  deadline: number
+  deadline: number,
+  cursor = 0
 ): Promise<SyncOutcome> {
   // 외부 API 호출이 없는 순수 DB 읽기/변환/쓰기라 원래도 빠르다(861건 기준). 다만 앞선 단계들이
   // 시간 예산을 이미 다 썼으면 이번 호출에선 아예 건너뛰고 다음 체이닝 호출에 맡긴다.
@@ -963,7 +943,8 @@ async function syncDetailNormalized(
         skipped: 0,
         errorCount: 0,
         errors: [],
-        notDone: true
+        notDone: true,
+        nextCursor: cursor // 아무것도 안 했으니 커서를 그대로 돌려줘야 다음 회차가 안 되돌아간다
       }
     };
   }
@@ -982,11 +963,12 @@ async function syncDetailNormalized(
   const rows: Record<string, unknown>[] = [];
   let from = 0;
   for (;;) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("tb_place_detail")
       .select(cols)
-      .order("place_id", { ascending: true })
-      .range(from, from + 999);
+      .order("place_id", { ascending: true });
+    if (cursor > 0) query = query.gt("place_id", cursor);
+    const { data, error } = await query.range(from, from + 999);
     if (error) {
       return { ok: false, status: 502, error: `tb_place_detail 조회 실패: ${error.message}` };
     }
@@ -1068,26 +1050,20 @@ async function syncDetailNormalized(
   }
 
   // place_id(PK) 기준으로 insert/update 분류해 tb_place_detail_normalized 로 upsert.
-  // detail/barrierfree 와 동일하게, "정규화가 가장 오래전(또는 한 번도 안 된) 것부터" 순서로
-  // 처리하고 시간 예산(deadline)을 넘기면 그 자리에서 멈춘다 — detail이 아직 다 안 끝났어도
-  // 매 회차 조금씩은 확실히 진행되고, 다음 회차엔 자연스럽게 이어서 처리된다(별도 커서 불필요).
+  // detail/barrierfree 와 동일하게 place_id 오름차순 고정 진행 — cursor보다 큰 것만 DB 쿼리
+  // 단계에서 이미 걸러져서 온다. 시간 예산(deadline) 넘기면 그 자리에서 멈춘다.
   const now = new Date().toISOString();
   const known = await fetchKnownIds(supabase, "tb_place_detail_normalized", "place_id");
   if ("error" in known) {
     return { ok: false, status: 502, error: known.error };
   }
-  const normalizedUpdateTimes = await fetchUpdateTimes(supabase, "tb_place_detail_normalized");
-  const orderedRows =
-    "error" in normalizedUpdateTimes
-      ? rows
-      : sortByStaleness(rows, (r) => r.place_id, normalizedUpdateTimes);
-
   let upserted = 0;
   let processed = 0;
+  let nextCursor = cursor;
   const errors: string[] = [];
-  for (let i = 0; i < orderedRows.length; i += UPSERT_CHUNK) {
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
     if (Date.now() >= deadline) break;
-    const chunk = orderedRows.slice(i, i + UPSERT_CHUNK);
+    const chunk = rows.slice(i, i + UPSERT_CHUNK);
     const io = await insertOrUpdate(
       supabase,
       "tb_place_detail_normalized",
@@ -1098,9 +1074,10 @@ async function syncDetailNormalized(
     );
     upserted += io.upserted;
     processed += chunk.length;
+    nextCursor = chunk[chunk.length - 1].place_id as number;
     if (io.error) errors.push(io.error);
   }
-  const notDone = processed < orderedRows.length;
+  const notDone = processed < rows.length;
 
   if (errors.length > 0) {
     return {
@@ -1121,33 +1098,35 @@ async function syncDetailNormalized(
       skipped: 0,
       errorCount: 0,
       errors: [],
-      notDone
+      notDone,
+      nextCursor
     }
   };
 }
 
 // ── 3. tb_place_barrierfree 동기화 (detailWithTour2) ────────
-async function syncBarrierfree(supabase: SupabaseClient, deadline: number): Promise<SyncOutcome> {
+// cursor: syncDetail 과 동일한 방식 — place_id 오름차순 고정 진행, 매일 자정 새 트리거는
+// cursor 없이 처음부터 다시 돈다.
+async function syncBarrierfree(
+  supabase: SupabaseClient,
+  deadline: number,
+  cursor = 0
+): Promise<SyncOutcome> {
   // place_id 는 tb_place 에서 가져와 그대로 tb_place_barrierfree 에 넣는다(barrierfree 의 PK).
+  // cursor보다 큰 place_id만, 오름차순으로 DB 쿼리 단계에서 이미 걸러져서 온다.
   const places = await fetchActivePlaces<{
     place_id: number | null;
     contentid: number | null;
-  }>(supabase, "place_id, contentid", true);
+  }>(supabase, "place_id, contentid", true, cursor);
   if ("error" in places) return { ok: false, status: 502, error: places.error };
-  const unsortedTargets = places.data.filter(
+  const targets = places.data.filter(
     (p): p is { place_id: number; contentid: number } => p.contentid != null && p.place_id != null
   );
-
-  // 가장 오래전에 갱신된(또는 한 번도 안 된) 것부터 처리 — syncDetail 과 동일한 이유.
-  const updateTimes = await fetchUpdateTimes(supabase, "tb_place_barrierfree");
-  const targets =
-    "error" in updateTimes
-      ? unsortedTargets
-      : sortByStaleness(unsortedTargets, (t) => t.place_id, updateTimes);
 
   let fetched = 0;
   let skipped = 0;
   let notDone = false;
+  let nextCursor = cursor;
   const errors: { contentid: number; message: string }[] = [];
   const rows: Record<string, unknown>[] = [];
   const now = new Date().toISOString();
@@ -1157,6 +1136,7 @@ async function syncBarrierfree(supabase: SupabaseClient, deadline: number): Prom
       notDone = true;
       break;
     }
+    nextCursor = place_id;
     try {
       const res = await withRetry(() =>
         brfrTourInfoApi.detailWithTour<TourResponse>({
@@ -1222,7 +1202,8 @@ async function syncBarrierfree(supabase: SupabaseClient, deadline: number): Prom
       skipped,
       errorCount: errors.length,
       errors: errors.slice(0, 20),
-      notDone
+      notDone,
+      nextCursor
     }
   };
 }
@@ -1450,10 +1431,33 @@ export const SYNC_FNS = {
   bakery: syncBakery,
   normalize: syncDetailNormalized
 } as const;
-type SyncTarget = keyof typeof SYNC_FNS;
+export type SyncTarget = keyof typeof SYNC_FNS;
 
 export function isSyncTarget(target: string): target is SyncTarget {
   return target in SYNC_FNS;
+}
+
+// SYNC_FNS[target](supabase, deadline, cursor) 로 바로 호출하면, place/bakery 는 cursor
+// 인자를 안 받는 함수라 유니언 호출 타입 검사를 통과 못한다. cursor 를 지원하는 대상만
+// 실어 보내는 디스패처를 따로 둔다.
+export function runSyncTarget(
+  supabase: SupabaseClient,
+  target: SyncTarget,
+  deadline: number,
+  cursor: number
+): Promise<SyncOutcome | BakerySyncOutcome> {
+  switch (target) {
+    case "detail":
+      return syncDetail(supabase, deadline, cursor);
+    case "barrierfree":
+      return syncBarrierfree(supabase, deadline, cursor);
+    case "normalize":
+      return syncDetailNormalized(supabase, deadline, cursor);
+    case "place":
+      return syncPlace(supabase, deadline);
+    case "bakery":
+      return syncBakery(supabase, deadline);
+  }
 }
 
 // SyncOutcome → 응답에 실을 값(성공이면 result, 실패면 error/partial)으로 평탄화.
@@ -1478,7 +1482,8 @@ const NORMALIZE_RESERVED_MS = 8_000;
 
 export async function runFullSync(
   supabase: SupabaseClient,
-  deadline: number
+  deadline: number,
+  cursors: { detail?: number; barrierfree?: number; normalize?: number } = {}
 ): Promise<
   Record<
     "place" | "detail" | "barrierfree" | "bakery" | "normalize",
@@ -1498,8 +1503,8 @@ export async function runFullSync(
   // 2) tb_place_detail / tb_place_barrierfree 병렬 동기화 (서로 독립) + bakery 수거.
   //    셋 다 같은 innerDeadline 을 공유한다 — 각자 그 시각이 되면 알아서 중단하고 notDone 을 남긴다.
   const [detailOutcome, barrierfreeOutcome, bakeryOutcome] = await Promise.all([
-    syncDetail(supabase, innerDeadline),
-    syncBarrierfree(supabase, innerDeadline),
+    syncDetail(supabase, innerDeadline, cursors.detail ?? 0),
+    syncBarrierfree(supabase, innerDeadline, cursors.barrierfree ?? 0),
     bakeryPromise
   ]);
   console.log("[sync] detail/barrierfree/bakery 완료 → detail_normalized 정규화 시작");
@@ -1507,7 +1512,7 @@ export async function runFullSync(
   // 3) detail 완료 후 정규화 (tb_place_detail → tb_place_detail_normalized 의존이라 순차 실행).
   //    detail/barrierfree/bakery가 innerDeadline에서 멈춰줬으니, 여기서 원래 deadline까지 남은
   //    NORMALIZE_RESERVED_MS만큼은 항상 확보돼 있다.
-  const normalizeOutcome = await syncDetailNormalized(supabase, deadline);
+  const normalizeOutcome = await syncDetailNormalized(supabase, deadline, cursors.normalize ?? 0);
   console.log("[sync] detail_normalized 정규화 완료");
 
   return {
