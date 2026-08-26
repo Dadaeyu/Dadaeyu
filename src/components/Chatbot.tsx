@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useAccessibility } from "@/context/AccessibilityContext";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import type { TourismSharedCourse } from "@/lib/supabase/types";
 import { HomePlaceImage } from "@/features/home/HomePlaceImage";
@@ -197,12 +198,13 @@ interface Props {
 }
 
 export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
+  const { readAloud } = useAccessibility();
   const [messages, setMessages] = useState<Message[]>([
     { id: 1, role: "assistant", content: INITIAL_RESPONSE }
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isAutoTtsEnabled, setIsAutoTtsEnabled] = useState(false);
+  const [isAutoTtsEnabled, setIsAutoTtsEnabled] = useState(readAloud);
   const [speakingMessageId, setSpeakingMessageId] = useState<number | null>(null);
   const [sttSupported, setSttSupported] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -300,6 +302,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
         onDone?.();
       };
 
+      stopTts();
       setSpeakingMessageId(messageId);
       void speakWithTts({
         text,
@@ -310,7 +313,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
         }
       });
     },
-    [speakWithTts, ttsSupported]
+    [speakWithTts, stopTts, ttsSupported]
   );
 
   useEffect(() => {
@@ -331,26 +334,39 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
     startSpeech(latestMessage.id, latestMessage.content.message);
   }, [isAutoTtsEnabled, isLoading, messages, startSpeech, ttsSupported]);
 
-  function speakMessage(messageId: number, text: string) {
+  async function speakMessage(messageId: number, text: string) {
     if (speakingMessageId === messageId) {
       stopSpeech();
+      return;
+    }
+
+    stopSpeech();
+    const unlocked = await unlockTts();
+    if (!unlocked) {
+      setVoiceInputStatus("브라우저에서 음성 재생이 차단되었어요. 다시 눌러주세요.");
       return;
     }
 
     startSpeech(messageId, text);
   }
 
-  function toggleAutoTts() {
+  async function toggleAutoTts() {
     if (!ttsSupported || isConversationMode) return;
 
-    const nextValue = !isAutoTtsEnabled;
-    setIsAutoTtsEnabled(nextValue);
-
-    if (!nextValue) {
+    if (isAutoTtsEnabled) {
+      setIsAutoTtsEnabled(false);
       stopSpeech();
       return;
     }
 
+    stopSpeech();
+    const unlocked = await unlockTts();
+    if (!unlocked) {
+      setVoiceInputStatus("브라우저에서 자동 읽기를 시작하지 못했어요. 다시 눌러주세요.");
+      return;
+    }
+
+    setIsAutoTtsEnabled(true);
     const latestAssistantMessage = messages.findLast(
       (message): message is Extract<Message, { role: "assistant" }> => message.role === "assistant"
     );
@@ -540,6 +556,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
 
     abortVoiceInput();
     stopSpeech();
+    unlockTts();
     setMessages((current) => [...current, { id: nextId(), role: "user", text }]);
     setInput("");
     isLoadingRef.current = true;
@@ -673,13 +690,15 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
               <strong className="text-ink block text-base leading-tight font-semibold">다유</strong>
               <span className="text-steel mt-1 flex items-center gap-1.5 text-sm">
                 <span className="bg-brand-500 h-2 w-2 rounded-full" aria-hidden="true" />
-                {isConversationMode
-                  ? isListening
-                    ? "대화 모드로 듣는 중"
-                    : "대화 모드 대기 중"
-                  : isAutoTtsEnabled
-                    ? "자동 읽기 켜짐"
-                    : "질문을 기다리고 있어요"}
+                {isLoading
+                  ? "답변을 준비하고 있어요"
+                  : isConversationMode
+                    ? isListening
+                      ? "대화 모드로 듣는 중"
+                      : "대화 모드 대기 중"
+                    : isAutoTtsEnabled
+                      ? "자동 읽기 켜짐"
+                      : "질문을 기다리고 있어요"}
               </span>
             </div>
           </div>
