@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { HomeDiscovery } from "@/features/home/HomeDiscovery";
 import { HomeRecommendations } from "@/features/home/HomeRecommendations";
+import { HomeTravelSupport } from "@/features/home/HomeTravelSupport";
 import { HOME_NEED_ICONS, HOME_VISIT_SITUATIONS } from "@/features/home/HomeHero";
 import { getHomeRecommendationNeedIds, type HomeNeedId } from "@/features/home/homeData";
 import type { HomeExperience } from "@/features/home/useHomeExperience";
@@ -243,6 +244,8 @@ export function EasyHome({
             targetId={EASY_RECOMMENDATIONS_ID}
           />
         </section>
+
+        <HomeTravelSupport easyMode />
 
         <HomeDiscovery
           festivals={experience.data?.festivals ?? []}
