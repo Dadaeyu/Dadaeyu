@@ -553,14 +553,27 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
     const text = message.trim();
     if (!text || isLoadingRef.current) return;
     const history = buildChatHistory(messages);
+    const userMessageId = nextId();
+    const shouldReadTypedQuestion = readAloud && !options.continueConversation;
+    const shouldUnlockTts =
+      ttsSupported && (isAutoTtsEnabled || shouldReadTypedQuestion || options.continueConversation);
 
     abortVoiceInput();
     stopSpeech();
-    unlockTts();
-    setMessages((current) => [...current, { id: nextId(), role: "user", text }]);
+    const ttsUnlockPromise = shouldUnlockTts ? unlockTts() : Promise.resolve(true);
+    setMessages((current) => [...current, { id: userMessageId, role: "user", text }]);
     setInput("");
     isLoadingRef.current = true;
     setIsLoading(true);
+
+    const ttsUnlocked = await ttsUnlockPromise;
+    if (shouldUnlockTts && !ttsUnlocked) {
+      setVoiceInputStatus(
+        "브라우저에서 자동 읽기를 시작하지 못했어요. 답변의 읽기 버튼을 눌러주세요."
+      );
+    } else if (shouldReadTypedQuestion && ttsSupported) {
+      startSpeech(userMessageId, text);
+    }
 
     try {
       const response = await fetch("/api/chat", {

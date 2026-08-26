@@ -90,8 +90,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!PUBLIC_SUPABASE_CONFIGURED) return;
 
     const supabase = createClient();
+    const sessionGeneration = loadGenerationRef.current;
+    let isActive = true;
 
     supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (!isActive || loadGenerationRef.current !== sessionGeneration) return;
+
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
@@ -111,16 +115,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        loadUserData(s.user.id);
+        loadUserData(s.user.id).finally(() => setLoading(false));
       } else {
         activeUserIdRef.current = null;
         loadGenerationRef.current += 1;
         setMember(null);
         setPreferences(null);
+        setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isActive = false;
+      subscription.unsubscribe();
+    };
   }, [loadUserData]);
 
   const signOut = useCallback(async () => {
