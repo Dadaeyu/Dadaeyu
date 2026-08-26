@@ -9,6 +9,7 @@ import {
   loadAccessibilityState,
   mergeAccessibilityPreferences,
   saveAccessibilityState,
+  getSpeakableText,
   type AccessibilityState
 } from "./accessibility.ts";
 
@@ -35,7 +36,10 @@ type TestRoot = {
 const mutableGlobals = globalThis as unknown as {
   localStorage?: TestStorage;
   window?: { localStorage: TestStorage };
-  document?: { documentElement: TestRoot };
+  document?: {
+    documentElement: TestRoot;
+    getElementById?: (id: string) => { textContent?: string | null } | null;
+  };
 };
 
 function installLocalStorage(initial: Record<string, string> = {}) {
@@ -159,4 +163,63 @@ test("pre-hydration script applies the easy-mode root class from stored state", 
   const layout = readFileSync(path.join(process.cwd(), "src", "app", "layout.tsx"), "utf8");
 
   assert.match(layout, /if \(s\.easyMode\) el\.classList\.add\("easy-mode"\);/u);
+});
+
+test("입력 요소는 현재 값 또는 placeholder를 읽을 수 있는 텍스트로 반환한다", () => {
+  const inputWithValue = {
+    getAttribute(name: string) {
+      if (name === "aria-label") return "질문 입력";
+      return null;
+    },
+    tagName: "INPUT",
+    textContent: "",
+    value: "유모차 가능한 곳 알려줘",
+    placeholder: "메시지를 입력하세요"
+  } as unknown as Element;
+
+  assert.equal(getSpeakableText(inputWithValue), "질문 입력, 유모차 가능한 곳 알려줘");
+
+  const textareaWithPlaceholder = {
+    getAttribute(name: string) {
+      if (name === "aria-label") return "댓글 입력";
+      return null;
+    },
+    tagName: "TEXTAREA",
+    textContent: "",
+    value: "",
+    placeholder: "댓글을 입력하세요"
+  } as unknown as Element;
+
+  assert.equal(getSpeakableText(textareaWithPlaceholder), "댓글 입력, 댓글을 입력하세요");
+});
+
+test("비밀번호와 선택 입력은 민감하거나 무의미한 value를 읽지 않는다", () => {
+  const passwordInput = {
+    getAttribute(name: string) {
+      if (name === "aria-label") return "비밀번호";
+      if (name === "type") return "password";
+      return null;
+    },
+    tagName: "INPUT",
+    textContent: "",
+    type: "password",
+    value: "secret-password",
+    placeholder: "비밀번호를 입력하세요"
+  } as unknown as Element;
+
+  assert.equal(getSpeakableText(passwordInput), "비밀번호, 비밀번호를 입력하세요");
+
+  const checkbox = {
+    getAttribute(name: string) {
+      if (name === "aria-label") return "답변 자동 읽기";
+      if (name === "type") return "checkbox";
+      return null;
+    },
+    tagName: "INPUT",
+    textContent: "",
+    type: "checkbox",
+    value: "on"
+  } as unknown as Element;
+
+  assert.equal(getSpeakableText(checkbox), "답변 자동 읽기");
 });

@@ -96,10 +96,28 @@ export function getSpeakableText(element: Element): string | null {
   }
 
   const ariaLabel = element.getAttribute("aria-label")?.trim();
-  if (ariaLabel) return ariaLabel;
-
   const role = element.getAttribute("role");
   const tag = element.tagName.toLowerCase();
+  const isTextarea = tag === "textarea";
+  const inputType =
+    tag === "input"
+      ? ((element as HTMLInputElement).type || element.getAttribute("type") || "text").toLowerCase()
+      : "";
+  const isTextInput =
+    tag === "input" && ["text", "search", "email", "tel", "url", "number"].includes(inputType);
+
+  if (isTextarea || isTextInput || inputType === "password") {
+    const input = element as HTMLInputElement | HTMLTextAreaElement;
+    const readableValue = inputType === "password" ? "" : input.value;
+    const inputText = (readableValue || input.placeholder || "").replace(/\s+/g, " ").trim();
+    const parts = [ariaLabel, inputText].filter((part): part is string => Boolean(part));
+    return parts.length ? parts.join(", ").slice(0, 200) : null;
+  }
+
+  if (tag === "input" && ariaLabel) return ariaLabel;
+
+  if (ariaLabel) return ariaLabel;
+
   const interactive =
     role === "button" ||
     role === "link" ||
