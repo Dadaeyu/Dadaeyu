@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent
+} from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -177,6 +183,15 @@ export default function Admin() {
     width: number;
   } | null>(null);
   const mobileGroupBtnRef = useRef<HTMLButtonElement>(null);
+  const mobileTabsRef = useRef<HTMLDivElement>(null);
+
+  // 선택된 탭이 스크롤 영역 밖에 있을 수 있으니(스크롤바도 숨겨서 위치 단서가 없다), 렌더링될
+  // 때 항상 보이는 위치로 스크롤해 준다.
+  useEffect(() => {
+    mobileTabsRef.current
+      ?.querySelector<HTMLElement>('[data-active="true"]')
+      ?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [section]);
   const mobileGroupPanelRef = useRef<HTMLDivElement>(null);
   const toggleMobileGroup = (key: string, e: MouseEvent<HTMLButtonElement>) => {
     if (mobileGroupOpen === key) {
@@ -293,7 +308,10 @@ export default function Admin() {
       {/* 메인 영역 */}
       <div className="bg-surface-soft/40 flex min-w-0 flex-1 flex-col">
         {/* 모바일 탭바 */}
-        <div className="border-hairline-soft bg-background flex gap-1 overflow-x-auto border-b px-4 py-2 md:hidden">
+        <div
+          ref={mobileTabsRef}
+          className="border-hairline-soft bg-background flex [scrollbar-width:none] gap-1 overflow-x-auto border-b px-4 py-2 [-ms-overflow-style:none] md:hidden [&::-webkit-scrollbar]:hidden"
+        >
           {SECTIONS.map((item) => {
             if ("children" in item) {
               const Icon = item.icon;
@@ -303,6 +321,7 @@ export default function Admin() {
                 <button
                   key={item.key}
                   ref={isOpen ? mobileGroupBtnRef : undefined}
+                  data-active={childActive || undefined}
                   onClick={(e) => toggleMobileGroup(item.key, e)}
                   aria-expanded={isOpen}
                   className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
@@ -323,6 +342,7 @@ export default function Admin() {
             return (
               <button
                 key={key}
+                data-active={active || undefined}
                 onClick={() => router.push(key === "dashboard" ? "/admin" : `/admin/${key}`)}
                 className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
                   active ? "bg-navy-50 text-navy-700" : "text-steel hover:bg-surface-soft"
@@ -576,6 +596,39 @@ const PLACE_BAKERY_COLUMNS = [
 function PlaceSyncSection() {
   const [dbTab, setDbTab] = useState<DbTabKey>("place");
 
+  // 휠/네이티브 스크롤은 안 쓰고, 드래그(마우스든 터치든)로만 좌우로 넘긴다. 컨테이너에
+  // touch-none 을 줘서 터치의 네이티브 스크롤 제스처를 끄고, 아래 pointer 핸들러가 마우스/터치
+  // 구분 없이 직접 scrollLeft 를 옮긴다. 드래그 중 눌렀다 뗀 지점이 탭 버튼이면 click 이 그대로
+  // 발동해 탭이 바뀌어버리므로, 일정 거리 이상 움직였을 때만 그 click 을 막는다.
+  const tabDragRef = useRef({ down: false, startX: 0, startScrollLeft: 0, moved: false });
+
+  const handleTabPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    tabDragRef.current = {
+      down: true,
+      startX: e.clientX,
+      startScrollLeft: e.currentTarget.scrollLeft,
+      moved: false
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const handleTabPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = tabDragRef.current;
+    if (!drag.down) return;
+    const delta = e.clientX - drag.startX;
+    if (Math.abs(delta) > 3) drag.moved = true;
+    e.currentTarget.scrollLeft = drag.startScrollLeft - delta;
+  };
+  const handleTabPointerUp = () => {
+    tabDragRef.current.down = false;
+  };
+  const handleTabClickCapture = (e: MouseEvent<HTMLDivElement>) => {
+    if (tabDragRef.current.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+      tabDragRef.current.moved = false;
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -587,7 +640,15 @@ function PlaceSyncSection() {
 
       {/* Supabase 테이블 탭 */}
       <div>
-        <div className="border-hairline-soft flex gap-1 overflow-x-auto border-b">
+        <div
+          onPointerDown={handleTabPointerDown}
+          onPointerMove={handleTabPointerMove}
+          onPointerUp={handleTabPointerUp}
+          onPointerCancel={handleTabPointerUp}
+          onPointerLeave={handleTabPointerUp}
+          onClickCapture={handleTabClickCapture}
+          className="border-hairline-soft flex cursor-grab touch-none [scrollbar-width:none] gap-1 overflow-x-auto border-b select-none [-ms-overflow-style:none] active:cursor-grabbing [&::-webkit-scrollbar]:hidden"
+        >
           {DB_TABS.map(({ key, label, desc }) => {
             const active = dbTab === key;
             return (
