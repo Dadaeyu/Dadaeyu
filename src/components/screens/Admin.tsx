@@ -609,14 +609,18 @@ function PlaceSyncSection() {
       startScrollLeft: e.currentTarget.scrollLeft,
       moved: false
     };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // 여기서 바로 캡처하면 그냥 클릭한 것도 컨테이너가 가져가버려 버튼의 click 이 안 먹는다.
+    // 실제로 드래그가 감지됐을 때(handleTabPointerMove)만 캡처한다.
   };
   const handleTabPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const drag = tabDragRef.current;
     if (!drag.down) return;
     const delta = e.clientX - drag.startX;
-    if (Math.abs(delta) > 3) drag.moved = true;
-    e.currentTarget.scrollLeft = drag.startScrollLeft - delta;
+    if (Math.abs(delta) > 3 && !drag.moved) {
+      drag.moved = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    if (drag.moved) e.currentTarget.scrollLeft = drag.startScrollLeft - delta;
   };
   const handleTabPointerUp = () => {
     tabDragRef.current.down = false;
