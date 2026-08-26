@@ -393,7 +393,7 @@ export function HomePlaceDialog({
               </summary>
               <div className="border-hairline border-t bg-white px-4 pb-5">
                 <dl className="divide-hairline divide-y">
-                  <SourceRow label="정보 출처" value="한국관광공사 관광정보·무장애 여행정보" />
+                  <SourceRow label="정보 출처" value="ⓒ한국관광공사 관광정보·무장애 여행정보" />
                   <SourceRow label="관광정보 갱신" value={sourceDate ?? "확인할 수 없음"} />
                 </dl>
                 <p className="text-steel mt-2 text-sm leading-6">

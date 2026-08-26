@@ -554,6 +554,9 @@ export default function TourismDetailPanel({
             </div>
           )}
 
+          {/* 공공데이터 출처 표기 (DB=TourAPI 출처만, 카카오 출처는 해당 없음) */}
+          {!isKakao && <p className="text-[11px] text-gray-400">출처: ⓒ한국관광공사</p>}
+
           {/* 리뷰 — 카카오 출처는 DB 상세가 없어 리뷰 자체를 보여주지 않는다 */}
           {!isKakao && (
             <div>
