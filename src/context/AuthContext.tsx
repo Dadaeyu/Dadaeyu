@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode
 } from "react";
@@ -37,8 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [member, setMember] = useState<DbMember | null>(null);
   const [preferences, setPreferences] = useState<DbUserPreferences | null>(null);
   const [loading, setLoading] = useState(PUBLIC_SUPABASE_CONFIGURED);
+  const activeUserIdRef = useRef<string | null>(null);
+  const loadGenerationRef = useRef(0);
 
   const loadUserData = useCallback(async (userId: string) => {
+    const generation = (loadGenerationRef.current += 1);
+    activeUserIdRef.current = userId;
+
     await callEnsureMember().catch(() => {});
 
     const [m, prefs] = await Promise.all([
@@ -46,9 +52,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fetchUserPreferences(userId).catch(() => null)
     ]);
 
+    if (activeUserIdRef.current !== userId || loadGenerationRef.current !== generation) {
+      return;
+    }
+
     if (m?.status === "withdrawn") {
       const supabase = createClient();
       await supabase.auth.signOut().catch(() => {});
+      if (activeUserIdRef.current !== userId || loadGenerationRef.current !== generation) {
+        return;
+      }
+      activeUserIdRef.current = null;
+      loadGenerationRef.current += 1;
       setUser(null);
       setSession(null);
       setMember(null);
@@ -82,6 +97,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (s?.user) {
         loadUserData(s.user.id).finally(() => setLoading(false));
       } else {
+        activeUserIdRef.current = null;
+        loadGenerationRef.current += 1;
+        setMember(null);
+        setPreferences(null);
         setLoading(false);
       }
     });
@@ -94,6 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (s?.user) {
         loadUserData(s.user.id);
       } else {
+        activeUserIdRef.current = null;
+        loadGenerationRef.current += 1;
         setMember(null);
         setPreferences(null);
       }
@@ -104,12 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (!PUBLIC_SUPABASE_CONFIGURED) return;
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    activeUserIdRef.current = null;
+    loadGenerationRef.current += 1;
     setUser(null);
     setSession(null);
     setMember(null);
     setPreferences(null);
+    const supabase = createClient();
+    await supabase.auth.signOut();
   }, []);
 
   const value = useMemo<AuthContextValue>(
