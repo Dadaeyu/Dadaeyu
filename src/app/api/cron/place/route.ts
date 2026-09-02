@@ -21,10 +21,14 @@ export const maxDuration = 60;
 //
 // place_sync_claim()이 DB 트랜잭션으로 락을 잡아, 짧은 간격으로 겹쳐 들어온 호출이 있어도
 // 한 번에 하나만 실제로 처리한다(락이 오래(기본 90초) 남아있으면 이전 실행이 죽은 것으로 보고
-// 새로 잡는다). 매일 자정이 지나 처음 호출되면 place_sync_claim() 이 커서와 done 을 초기화해
-// "매일 처음부터" 다시 돈다. 그날 detail/barrierfree/normalize 가 전부 끝나(done=true) 있으면,
-// place/bakery 전체 재조회 같은 무거운 작업 없이 DB 조회 한 번만 하고 바로 반환한다 — 그래야
-// 짧은 간격(예: 1분)으로 하루 종일 불려도 끝난 뒤엔 API 호출이 더 늘지 않는다.
+// 새로 잡는다). 매일 자정이 지나 처음 호출되면 place_sync_claim() 이 커서와 완료 플래그를
+// 전부 초기화해 "매일 처음부터" 다시 돈다.
+//
+// place/bakery 는 detail/barrierfree 와 달리 커서 없이 매번 전체를 다시 조회하는 구조라(원래
+// 한 회차 안에 항상 끝남), 한 번 성공하면 place_done/bakery_done 을 세워 그 뒤 회차부터는
+// 건너뛴다 — 안 그러면 detail/barrierfree 가 아직 진행 중인 나머지 하루 동안 1분마다 계속
+// place/bakery 전체를 재조회하게 된다. 그날 detail/barrierfree/normalize 까지 전부 끝나면
+// (done=true) place_sync_claim() 이 락도 안 건드리고 DB 조회 한 번만 하고 바로 반환한다.
 //
 // 인증: Vercel Cron 은 CRON_SECRET 환경변수가 설정돼 있으면 요청에
 //   Authorization: Bearer <CRON_SECRET>
@@ -57,6 +61,8 @@ export async function GET(request: Request) {
     | {
         claimed: boolean;
         done: boolean;
+        place_done: boolean;
+        bakery_done: boolean;
         detail_cursor: number;
         barrierfree_cursor: number;
         normalize_cursor: number;
@@ -76,21 +82,29 @@ export async function GET(request: Request) {
 
   const startedAt = new Date().toISOString();
   const deadline = Date.now() + TIME_BUDGET_MS;
-  console.log(`[cron/place] 동기화 시작 ${startedAt} (cursors=${JSON.stringify(cursors)})`);
+  console.log(
+    `[cron/place] 동기화 시작 ${startedAt} (cursors=${JSON.stringify(cursors)}, ` +
+      `placeDone=${claim.place_done}, bakeryDone=${claim.bakery_done})`
+  );
 
   let results: Awaited<ReturnType<typeof runFullSync>>;
   try {
-    results = await runFullSync(supabase, deadline, cursors);
+    results = await runFullSync(supabase, deadline, cursors, {
+      skipPlace: claim.place_done,
+      skipBakery: claim.bakery_done
+    });
   } catch (e) {
     // 처리 중 예상 못한 예외가 나도 락은 반드시 풀어야 다음 호출이 이어받을 수 있다.
-    // 진행한 게 없으니 커서는 원래 자리 그대로 되돌린다.
+    // 진행한 게 없으니 커서와 완료 플래그 모두 원래 자리 그대로 되돌린다.
     const message = e instanceof Error ? e.message : String(e);
     console.error(`[cron/place] 동기화 중 예외 발생: ${message}`);
     await supabase.rpc("place_sync_release", {
       p_detail_cursor: cursors.detail,
       p_barrierfree_cursor: cursors.barrierfree,
       p_normalize_cursor: cursors.normalize,
-      p_done: false
+      p_done: false,
+      p_place_done: claim.place_done,
+      p_bakery_done: claim.bakery_done
     });
     return NextResponse.json({ error: message }, { status: 502 });
   }
@@ -135,11 +149,22 @@ export async function GET(request: Request) {
     normalize: nextCursorOf("normalize")
   };
 
+  // place/bakery 는 커서가 없어 "이번 회차에 성공적으로 끝났는지"만으로 완료 여부를 판단한다.
+  // 이미 이전 회차에 끝나서 이번엔 건너뛴 경우(claim.place_done)도 계속 완료 상태를 유지한다.
+  const isTableDone = (table: "place" | "bakery"): boolean => {
+    const r = results[table] as Record<string, unknown>;
+    return typeof r.error !== "string" && r.notDone !== true;
+  };
+  const nextPlaceDone = claim.place_done || isTableDone("place");
+  const nextBakeryDone = claim.bakery_done || isTableDone("bakery");
+
   const { error: releaseError } = await supabase.rpc("place_sync_release", {
     p_detail_cursor: nextCursors.detail,
     p_barrierfree_cursor: nextCursors.barrierfree,
     p_normalize_cursor: nextCursors.normalize,
-    p_done: !pendingWork
+    p_done: !pendingWork,
+    p_place_done: nextPlaceDone,
+    p_bakery_done: nextBakeryDone
   });
   if (releaseError) {
     console.error(`[cron/place] 락 해제 실패: ${releaseError.message}`);
