@@ -9,7 +9,10 @@ import {
   loadAccessibilityState,
   mergeAccessibilityPreferences,
   saveAccessibilityState,
+  findNextSpeakableBlock,
+  findSpeakableBlock,
   getSpeakableText,
+  shouldStopHoverSpeech,
   type AccessibilityState
 } from "./accessibility.ts";
 
@@ -222,4 +225,209 @@ test("비밀번호와 선택 입력은 민감하거나 무의미한 value를 읽
   } as unknown as Element;
 
   assert.equal(getSpeakableText(checkbox), "답변 자동 읽기");
+});
+
+test("aria-labelledby가 있으면 제목과 본문을 함께 읽는다", () => {
+  const title = { textContent: "방문 정보" };
+  const section = {
+    getAttribute(name: string) {
+      if (name === "aria-labelledby") return "visit-title";
+      if (name === "data-speak-text") return null;
+      if (name === "aria-label") return null;
+      if (name === "role") return null;
+      return null;
+    },
+    hasAttribute(name: string) {
+      return name === "data-speakable";
+    },
+    tagName: "SECTION",
+    textContent: "방문 정보 운영시간 09:00-18:00 휴무일 매주 월요일"
+  } as unknown as Element;
+
+  mutableGlobals.document = {
+    documentElement: installDocument(),
+    getElementById(id: string) {
+      return id === "visit-title" ? title : null;
+    }
+  };
+
+  assert.equal(getSpeakableText(section), "방문 정보. 운영시간 09:00-18:00 휴무일 매주 월요일");
+});
+
+test("내용 블록은 고르지만 main과 chrome은 고르지 않는다", () => {
+  const main = {
+    tagName: "MAIN",
+    parentElement: null,
+    closest() {
+      return null;
+    },
+    matches() {
+      return false;
+    },
+    getAttribute() {
+      return null;
+    }
+  } as unknown as Element;
+
+  const section = {
+    tagName: "SECTION",
+    parentElement: main,
+    closest(selector: string) {
+      if (selector.includes("data-speakable")) return null;
+      if (selector.includes("header")) return null;
+      return null;
+    },
+    matches(selector: string) {
+      return selector.includes("section");
+    },
+    getAttribute() {
+      return null;
+    }
+  } as unknown as Element;
+
+  const heading = {
+    tagName: "H2",
+    parentElement: section,
+    closest(selector: string) {
+      if (selector.includes("data-speakable")) return null;
+      if (selector.includes("header") || selector.includes("data-a11y-chrome")) return null;
+      return null;
+    },
+    matches() {
+      return false;
+    },
+    getAttribute() {
+      return null;
+    }
+  } as unknown as Element;
+
+  const chromeBtn = {
+    tagName: "BUTTON",
+    parentElement: null,
+    closest(selector: string) {
+      if (selector.includes("header") || selector.includes("data-a11y-chrome")) {
+        return chromeBtn;
+      }
+      return null;
+    },
+    matches() {
+      return false;
+    },
+    getAttribute() {
+      return null;
+    }
+  } as unknown as Element;
+
+  assert.equal(findSpeakableBlock(heading), heading);
+  assert.equal(findSpeakableBlock(section), section);
+  assert.equal(findSpeakableBlock(main), null);
+  assert.equal(findSpeakableBlock(chromeBtn), null);
+});
+
+test("다음 내용 블록은 문서 순서의 다음 후보를 고른다", () => {
+  const second = { id: "second" } as unknown as Element;
+  const first = {
+    id: "first",
+    closest() {
+      return {
+        querySelectorAll() {
+          return [first, second];
+        }
+      };
+    },
+    compareDocumentPosition() {
+      return 0;
+    }
+  } as unknown as Element;
+
+  // textContent filter needs truthy text
+  Object.defineProperty(first, "textContent", { value: "운영시간 09:00" });
+  Object.defineProperty(second, "textContent", { value: "휴무일 월요일" });
+
+  // isA11yChrome uses closest - return null for both
+  (first as { closest: (s: string) => Element | null }).closest = (selector: string) => {
+    if (
+      selector.includes("dialog") ||
+      selector.includes("main") ||
+      selector.includes("data-place")
+    ) {
+      return {
+        querySelectorAll: () => [first, second]
+      } as unknown as Element;
+    }
+    return null;
+  };
+  (second as { closest: (s: string) => Element | null }).closest = () => null;
+
+  assert.equal(findNextSpeakableBlock(first), second);
+});
+
+test("호버 이탈: 창 밖·빈 영역은 멈추고 버튼·내용 블록 위는 유지한다", () => {
+  assert.equal(shouldStopHoverSpeech(null), true);
+
+  const emptyDiv = {
+    tagName: "DIV",
+    parentElement: null,
+    closest() {
+      return null;
+    },
+    matches() {
+      return false;
+    },
+    getAttribute() {
+      return null;
+    }
+  } as unknown as Element;
+
+  const button = {
+    tagName: "BUTTON",
+    parentElement: null,
+    closest(selector: string) {
+      if (selector.includes("button") || selector.includes("role='button'")) return button;
+      if (selector.includes("header") || selector.includes("data-a11y-chrome")) return null;
+      return null;
+    },
+    matches() {
+      return false;
+    },
+    getAttribute() {
+      return null;
+    }
+  } as unknown as Element;
+
+  const section = {
+    tagName: "SECTION",
+    parentElement: null,
+    closest(selector: string) {
+      if (selector.includes("header") || selector.includes("data-a11y-chrome")) return null;
+      if (selector.includes("data-speakable")) return null;
+      return null;
+    },
+    matches(selector: string) {
+      return selector.includes("section");
+    },
+    getAttribute() {
+      return null;
+    }
+  } as unknown as Element;
+
+  const chrome = {
+    tagName: "BUTTON",
+    parentElement: null,
+    closest(selector: string) {
+      if (selector.includes("header") || selector.includes("data-a11y-chrome")) return chrome;
+      return null;
+    },
+    matches() {
+      return false;
+    },
+    getAttribute() {
+      return null;
+    }
+  } as unknown as Element;
+
+  assert.equal(shouldStopHoverSpeech(emptyDiv), true);
+  assert.equal(shouldStopHoverSpeech(button), false);
+  assert.equal(shouldStopHoverSpeech(section), false);
+  assert.equal(shouldStopHoverSpeech(chrome), true);
 });

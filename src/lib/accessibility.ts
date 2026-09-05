@@ -88,12 +88,155 @@ export function mergeAccessibilityPreferences(
   };
 }
 
-export function getSpeakableText(element: Element): string | null {
-  const labelledBy = element.getAttribute("aria-labelledby");
-  if (labelledBy) {
-    const labelEl = document.getElementById(labelledBy);
-    if (labelEl?.textContent?.trim()) return labelEl.textContent.trim();
+const ROW_SPEAK_LIMIT = 400;
+const SECTION_SPEAK_LIMIT = 800;
+
+const CHROME_SELECTOR = "header, nav, footer, [data-a11y-chrome], [aria-hidden='true']";
+
+const CONTENT_BLOCK_SELECTOR = [
+  "[data-speakable]",
+  "article",
+  "section",
+  "li",
+  "[role='listitem']",
+  "[role='dialog']",
+  "dl > div",
+  "dialog"
+].join(", ");
+
+/** 호버로 읽어주는 인터랙티브 요소 */
+export const HOVER_SPEAK_SELECTOR =
+  "button, a, [role='button'], [role='link'], input, textarea, select";
+
+function normalizeSpeakText(value: string | null | undefined): string {
+  return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 호버 발화 중 마우스가 relatedTarget으로 이동했을 때 중지할지.
+ * 창 밖·비 Element·chrome·읽을 곳 없으면 true.
+ */
+export function shouldStopHoverSpeech(relatedTarget: EventTarget | null): boolean {
+  if (relatedTarget == null || typeof relatedTarget !== "object") return true;
+  if (!("closest" in relatedTarget) || typeof (relatedTarget as Element).closest !== "function") {
+    return true;
   }
+
+  const el = relatedTarget as Element;
+  if (isA11yChrome(el)) return true;
+  if (el.closest(HOVER_SPEAK_SELECTOR)) return false;
+  if (findSpeakableBlock(el)) return false;
+  return true;
+}
+
+function speakLimitFor(element: Element): number {
+  const tag = element.tagName.toLowerCase();
+  if (
+    tag === "section" ||
+    tag === "article" ||
+    tag === "dialog" ||
+    element.getAttribute("role") === "dialog"
+  ) {
+    return SECTION_SPEAK_LIMIT;
+  }
+  return ROW_SPEAK_LIMIT;
+}
+
+export function isA11yChrome(element: Element): boolean {
+  return Boolean(element.closest(CHROME_SELECTOR));
+}
+
+/** 눌러서 읽을 가장 가까운 내용 블록. main/body처럼 너무 큰 컨테이너는 고르지 않는다. */
+export function findSpeakableBlock(start: Element): Element | null {
+  if (isA11yChrome(start)) return null;
+
+  const explicit = start.closest("[data-speakable]");
+  if (explicit && !isA11yChrome(explicit)) return explicit;
+
+  // dt/dd 묶음: 같은 행(div) 또는 dl 바로 아래 형제 쌍
+  const dtOrDd = start.closest("dt, dd");
+  if (dtOrDd?.parentElement) {
+    const parent = dtOrDd.parentElement;
+    if (
+      parent.tagName.toLowerCase() === "div" &&
+      parent.parentElement?.tagName.toLowerCase() === "dl"
+    ) {
+      return parent;
+    }
+    return dtOrDd;
+  }
+
+  let current: Element | null = start;
+  while (current) {
+    if (isA11yChrome(current)) return null;
+    const tag = current.tagName.toLowerCase();
+    if (tag === "main" || tag === "body" || tag === "html") return null;
+
+    if (current.matches(CONTENT_BLOCK_SELECTOR)) {
+      return current;
+    }
+
+    const role = current.getAttribute("role");
+    if (
+      role === "button" ||
+      role === "link" ||
+      tag === "button" ||
+      tag === "a" ||
+      tag === "h1" ||
+      tag === "h2" ||
+      tag === "h3" ||
+      tag === "p"
+    ) {
+      return current;
+    }
+
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
+/** 방금 읽은 블록의 다음 형제(문서 순서)를 찾는다. */
+export function findNextSpeakableBlock(from: Element): Element | null {
+  const root =
+    from.closest("dialog, [role='dialog'], main, [data-place-section]") ?? from.parentElement;
+  if (!root) return null;
+
+  const candidates = Array.from(
+    root.querySelectorAll(
+      "[data-speakable], article, section, li, [role='listitem'], dl > div, h1, h2, h3, p, button, a"
+    )
+  ).filter((el) => !isA11yChrome(el) && normalizeSpeakText(el.textContent));
+
+  const index = candidates.indexOf(from);
+  if (index >= 0 && index < candidates.length - 1) {
+    return candidates[index + 1] ?? null;
+  }
+
+  // from이 후보 목록에 없으면, 문서 순서상 from 다음에 오는 첫 후보
+  for (const candidate of candidates) {
+    const position = from.compareDocumentPosition(candidate);
+    if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function labelledByText(element: Element): string {
+  const labelledBy = element.getAttribute("aria-labelledby");
+  if (!labelledBy) return "";
+  return labelledBy
+    .split(/\s+/)
+    .map((id) => normalizeSpeakText(document.getElementById(id)?.textContent))
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function getSpeakableText(element: Element): string | null {
+  const dataSpeak = element.getAttribute("data-speak-text")?.trim();
+  if (dataSpeak) return dataSpeak.slice(0, speakLimitFor(element));
 
   const ariaLabel = element.getAttribute("aria-label")?.trim();
   const role = element.getAttribute("role");
@@ -116,9 +259,8 @@ export function getSpeakableText(element: Element): string | null {
 
   if (tag === "input" && ariaLabel) return ariaLabel;
 
-  if (ariaLabel) return ariaLabel;
-
-  const interactive =
+  // 짧은 컨트롤은 aria-label만. 섹션/카드는 본문까지.
+  const isCompactControl =
     role === "button" ||
     role === "link" ||
     tag === "button" ||
@@ -127,12 +269,43 @@ export function getSpeakableText(element: Element): string | null {
     tag === "textarea" ||
     tag === "select";
 
-  if (!interactive && tag !== "h1" && tag !== "h2" && tag !== "h3" && tag !== "p") {
+  if (ariaLabel && isCompactControl) return ariaLabel;
+
+  const label = labelledByText(element);
+  const body = normalizeSpeakText(element.textContent);
+  if (label) {
+    const withoutRepeatedLabel = body.startsWith(label) ? body.slice(label.length).trim() : body;
+    const combined = withoutRepeatedLabel ? `${label}. ${withoutRepeatedLabel}` : label;
+    return combined.slice(0, speakLimitFor(element)) || null;
+  }
+
+  if (ariaLabel) return ariaLabel.slice(0, speakLimitFor(element));
+
+  const interactive = isCompactControl;
+  const isContentBlock =
+    element.hasAttribute("data-speakable") ||
+    tag === "section" ||
+    tag === "article" ||
+    tag === "li" ||
+    tag === "dialog" ||
+    tag === "div" ||
+    tag === "dl" ||
+    tag === "dt" ||
+    tag === "dd" ||
+    role === "dialog" ||
+    role === "listitem";
+
+  if (
+    !interactive &&
+    !isContentBlock &&
+    tag !== "h1" &&
+    tag !== "h2" &&
+    tag !== "h3" &&
+    tag !== "p"
+  ) {
     return null;
   }
 
-  const text = element.textContent?.replace(/\s+/g, " ").trim();
-  if (!text) return null;
-
-  return text.slice(0, 200);
+  if (!body) return null;
+  return body.slice(0, speakLimitFor(element));
 }

@@ -25,3 +25,9 @@ test("로그아웃 뒤 늦게 도착한 초기 세션 응답을 무시한다", (
     /getSession\(\)\.then\([\s\S]*loadGenerationRef\.current !== sessionGeneration[\s\S]*return/u
   );
 });
+
+test("의도적 로그아웃 이후에는 SIGNED_IN 전까지 user 세션을 다시 심지 않는다", () => {
+  assert.match(source, /suppressStaleSessionRef/u);
+  assert.match(source, /suppressStaleSessionRef\.current = true/u);
+  assert.match(source, /suppressStaleSessionRef\.current && event !== ["']SIGNED_IN["']/u);
+});
