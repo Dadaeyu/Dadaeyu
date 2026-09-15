@@ -201,12 +201,17 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
 
   const speak = useCallback((text: string, force = false) => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
-    if (!force && activeUtterance.current?.text === text) return;
+
+    // 데스크톱(윈도우) 한국어 음성엔진은 물결표(~)를 "물결표"라고 그대로 읽는다. 이용시간·
+    // 기간 범위("10:00~22:00")에 흔히 쓰이므로, 모바일 엔진처럼 "에서"로 바꿔 읽힌다.
+    const spokenText = text.replace(/\s*[~∼〜～]\s*/g, " 에서 ").trim();
+
+    if (!force && activeUtterance.current?.text === spokenText) return;
 
     activeUtterance.current = null;
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(spokenText);
     activeUtterance.current = utterance;
     const release = () => {
       if (activeUtterance.current === utterance) activeUtterance.current = null;

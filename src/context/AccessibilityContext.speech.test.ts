@@ -63,6 +63,12 @@ test("읽는 중에는 중복을 막고 완료 후 같은 안내를 다시 읽�
   assert.equal(spoken.length, 2);
 });
 
+test("물결표(~)는 '에서'로 바꿔 읽어 데스크톱 엔진의 '물결표' 발음을 막는다", () => {
+  const { speak, spoken } = setup();
+  speak("이용시간 10:00~22:00");
+  assert.equal(spoken[0].text, "이용시간 10:00 에서 22:00");
+});
+
 test("음성 오류 후에도 같은 안내를 재시도할 수 있다", () => {
   const { speak, spoken } = setup();
   speak("다유에게 묻기");
