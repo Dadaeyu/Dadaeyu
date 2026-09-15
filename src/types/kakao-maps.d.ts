@@ -110,7 +110,23 @@ declare namespace kakao.maps {
       ): void;
     }
 
-    const Status: { OK: string };
+    interface RegionCode {
+      region_type: "H" | "B";
+      region_1depth_name: string;
+      region_2depth_name: string;
+      region_3depth_name: string;
+    }
+
+    class Geocoder {
+      /** x=경도, y=위도. 결과에 법정동(B)/행정동(H) 두 건이 올 수 있다. */
+      coord2RegionCode(
+        x: number,
+        y: number,
+        callback: (result: RegionCode[], status: string) => void
+      ): void;
+    }
+
+    const Status: { OK: string; ZERO_RESULT: string; ERROR: string };
   }
 }
 

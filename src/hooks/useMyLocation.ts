@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { loadKakaoMap } from "@/lib/kakao/loadKakaoMap";
 
 export interface MyLocationCoords {
   lat: number;
@@ -28,6 +29,29 @@ function isInDaejeon({ lat, lng }: MyLocationCoords): boolean {
   );
 }
 
+// bounding box는 사각형이라 대전과 맞닿은 세종·계룡·옥천 등도 넉넉히 통과시킨다.
+// 카카오맵 JS SDK(Geocoder)로 실제 시/도가 "대전광역시"인지 한 번 더 확인한다 — 좌표를
+// 우리 서버로 보내지 않고 브라우저에서 곧바로 카카오 SDK를 호출한다(이미 지도에 쓰고
+// 있는 공개 JS 키만 사용, 서버 전용 REST 키는 쓰지 않음).
+// 조회 실패(SDK 로드 실패 등) 시에는 bbox 판정을 그대로 신뢰해 과도하게 막지 않는다.
+async function verifyIsDaejeon(coords: MyLocationCoords): Promise<boolean> {
+  try {
+    const kakao = await loadKakaoMap();
+    const geocoder = new kakao.maps.services.Geocoder();
+    return await new Promise<boolean>((resolve) => {
+      geocoder.coord2RegionCode(coords.lng, coords.lat, (result, status) => {
+        if (status !== kakao.maps.services.Status.OK) {
+          resolve(true);
+          return;
+        }
+        resolve(result.some((region) => region.region_1depth_name === "대전광역시"));
+      });
+    });
+  } catch {
+    return true;
+  }
+}
+
 // 버튼을 누른 시점에만 위치를 잡는다(백그라운드에서 계속 따라다니지 않음).
 // 다만 GPS가 스스로 정확도를 보정할 시간을 잠깐 주기 위해, 충분히 정확한 값이 나오거나
 // 시도 횟수를 다 채울 때까지만 짧게 추적하다가 자동으로 멈춘다 — 그래서 "허용" 직후
@@ -43,6 +67,8 @@ export function useMyLocation() {
   const watchIdRef = useRef<number | null>(null);
   const readingCountRef = useRef(0);
   const hasFocusedRef = useRef(false);
+  const verifiedRef = useRef(false);
+  const sessionIdRef = useRef(0);
 
   const stopWatch = () => {
     if (watchIdRef.current !== null) {
@@ -63,6 +89,8 @@ export function useMyLocation() {
     stopWatch();
     readingCountRef.current = 0;
     hasFocusedRef.current = false;
+    verifiedRef.current = false;
+    const sessionId = ++sessionIdRef.current;
     setStatus("locating");
     setErrorReason(null);
 
@@ -94,6 +122,18 @@ export function useMyLocation() {
         if (accuracy <= ACCURACY_THRESHOLD_M || isLastAllowedReading) {
           stopWatch();
         }
+
+        // bbox를 통과한 이번 세션 첫 좌표만 실제 대전인지 한 번 더 확인한다(호출 최소화).
+        if (!verifiedRef.current) {
+          verifiedRef.current = true;
+          void verifyIsDaejeon(coords).then((ok) => {
+            if (ok || sessionIdRef.current !== sessionId) return;
+            setLocation(null);
+            setStatus("error");
+            setErrorReason("outside_daejeon");
+            setResetTrigger((n) => n + 1);
+          });
+        }
       },
       (error) => {
         stopWatch();
@@ -111,6 +151,7 @@ export function useMyLocation() {
 
   // 내 위치 표시를 끄고(다시 누르면 재조회) 지도를 대전 전체 화면으로 되돌린다.
   const reset = () => {
+    sessionIdRef.current += 1; // 진행 중인 비동기 대전 확인 결과를 무시하게 한다
     stopWatch();
     setLocation(null);
     setStatus("idle");
@@ -118,7 +159,13 @@ export function useMyLocation() {
     setResetTrigger((n) => n + 1);
   };
 
-  useEffect(() => stopWatch, []);
+  useEffect(
+    () => () => {
+      sessionIdRef.current += 1; // 언마운트 후 늦게 온 대전 확인 결과로 setState하지 않게 한다
+      stopWatch();
+    },
+    []
+  );
 
   return { location, status, errorReason, start, reset, focusTrigger, resetTrigger };
 }

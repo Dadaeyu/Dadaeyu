@@ -2187,7 +2187,7 @@ function CourseDetail({ id }: { id: string }) {
       myLocationError === "denied"
         ? "위치 접근 권한이 꺼져 있어요"
         : myLocationError === "outside_daejeon"
-          ? "대전 지역 밖에서는 내 위치를 표시할 수 없어요"
+          ? "내 위치는 대전 내에서만 확인할 수 있어요"
           : "내 위치를 확인하지 못했어요";
     setFavoriteNotice(message);
     setTimeout(() => setFavoriteNotice(""), 2000);

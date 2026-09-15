@@ -41,7 +41,8 @@ function injectScript(key: string): Promise<void> {
 
     const script = document.createElement("script");
     script.id = KAKAO_MAP_SCRIPT_ID;
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&autoload=false`;
+    // libraries=services: 좌표→행정구역 조회(Geocoder.coord2RegionCode) 등에 필요.
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&autoload=false&libraries=services`;
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("카카오맵 SDK 로드 실패"));
