@@ -1023,6 +1023,16 @@ function CommunityWrite() {
 
   const canSubmit = !!boardId && !!title.trim() && !!content.trim();
 
+  // 지도의 "리뷰 쓰기"로 들어오면 쿼리에 장소 contentId 가 담긴다. 이때 뒤로가기는
+  // 커뮤니티가 아니라 그 장소가 열린 지도로 돌려보낸다.
+  const goBack = () => {
+    if (contentIdParam && !isEditing) {
+      router.push(`/map?contentId=${encodeURIComponent(contentIdParam)}`);
+      return;
+    }
+    router.push("/community");
+  };
+
   if (editForbidden) {
     return (
       <div className="space-y-4">
@@ -1050,7 +1060,7 @@ function CommunityWrite() {
           variant="ghost"
           size="icon"
           className="min-h-11 min-w-11"
-          onClick={() => router.push("/community")}
+          onClick={goBack}
           aria-label="뒤로"
         >
           <ArrowLeft className="h-5 w-5" />

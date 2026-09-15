@@ -287,9 +287,40 @@ export default function Map() {
     initialKeyword: initialQuery
   });
 
+  // 현재 열려 있는 장소 상세 id. URL(?contentId=) 동기화 시, 이미 보고 있는 장소면
+  // focusPlaceById 를 다시 호출(=재조회)하지 않으려고 ref 로도 들고 있는다.
+  const selectedDetailIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (initialContentId) focusPlaceById(initialContentId);
+    selectedDetailIdRef.current = searchDetailId;
+  }, [searchDetailId]);
+
+  useEffect(() => {
+    if (initialContentId && initialContentId !== selectedDetailIdRef.current) {
+      focusPlaceById(initialContentId);
+    }
   }, [focusPlaceById, initialContentId]);
+
+  // 열려 있는 장소 상세를 URL(?contentId=)에 반영한다. 리뷰·글쓰기 등 다른 화면에 갔다가
+  // 브라우저/페이지 내 뒤로가기로 지도에 돌아왔을 때 보던 장소가 그대로 열리도록.
+  const initialContentIdRef = useRef(initialContentId);
+  const consumedInitialContentIdRef = useRef(false);
+  useEffect(() => {
+    // 딥링크(?contentId=)로 들어온 경우, 그 장소가 처음 열릴 때까지는 URL 을 건드리지 않는다.
+    if (!consumedInitialContentIdRef.current) {
+      if (initialContentIdRef.current && searchDetailId !== initialContentIdRef.current) return;
+      consumedInitialContentIdRef.current = true;
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    if (searchDetailId) {
+      if (params.get("contentId") === searchDetailId) return;
+      params.set("contentId", searchDetailId);
+    } else {
+      if (!params.has("contentId")) return;
+      params.delete("contentId");
+    }
+    const qs = params.toString();
+    router.replace(qs ? `/map?${qs}` : "/map", { scroll: false });
+  }, [searchDetailId, searchParams, router]);
 
   const {
     location: myLocation,
@@ -897,7 +928,7 @@ function getMyLocationErrorCopy(errorReason: MyLocationErrorReason): {
   if (errorReason === "outside_daejeon") {
     return {
       title: "대전 밖 위치예요",
-      help: "내 위치는 대전 안에서만 표시해요. 위치 없이도 장소 검색은 가능해요."
+      help: "내 위치는 대전 내에서만 확인할 수 있어요. 위치 없이도 장소 검색은 가능해요."
     };
   }
   return {
