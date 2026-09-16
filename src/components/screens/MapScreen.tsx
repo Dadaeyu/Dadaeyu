@@ -784,6 +784,13 @@ export default function Map() {
             id="map-location-error"
             role="alert"
             className="border-hairline bg-background absolute top-1/2 left-1/2 z-[60] w-[min(16rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-3.5 shadow-lg"
+            // 모바일은 하단 시트가 지도 아래쪽을 가리므로, "보이는 지도" 영역(시트 위쪽)의
+            // 세로 중앙에 오도록 top을 직접 계산한다. 데스크톱은 overlay가 0이라 그대로 중앙.
+            style={
+              mapAreaHeightPx > 0
+                ? { top: Math.max(0, (mapAreaHeightPx - mapBottomOverlayPx) / 2) }
+                : undefined
+            }
           >
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
