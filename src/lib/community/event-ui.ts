@@ -54,3 +54,24 @@ export function validateEventPeriod(start: string | null, end: string | null): s
   }
   return null;
 }
+
+/** 오늘(한국 시간) 날짜를 YYYY-MM-DD로 반환한다. */
+export function getTodayKstDate(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(date);
+}
+
+/** 이벤트 상태 배지 — 관리자가 입력한 배지 문구 대신, 기간(period_start~period_end)이
+ * 설정된 이벤트라면 오늘 날짜와 비교해 "예정/진행중/종료"를 자동으로 계산한다.
+ * 기간이 끝난 뒤에도 "진행중" 문구를 관리자가 직접 고쳐야만 없어지던 문제를 막기 위함.
+ * 기간이 없는 이벤트(상시 안내 등)는 관리자가 입력한 배지를 그대로 쓴다. */
+export function resolveEventStatusBadge(
+  periodStart: string | null,
+  periodEnd: string | null,
+  fallback: { label: string; color: string },
+  today: string = getTodayKstDate()
+): { label: string; color: string } {
+  if (!periodStart || !periodEnd) return fallback;
+  if (today < periodStart) return { label: "예정", color: "bg-navy-100 text-navy-700" };
+  if (today > periodEnd) return { label: "종료", color: "bg-gray-100 text-gray-700" };
+  return { label: "진행중", color: "bg-brand-100 text-brand-700" };
+}

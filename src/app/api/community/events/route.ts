@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { parseCommunityListParams } from "@/lib/pagination";
+import { resolveEventStatusBadge } from "@/lib/community/event-ui";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
     const { data, error, count } = await supabase
       .from("tb_community_events")
       .select(
-        "id, title, summary, emoji, badge_label, badge_color, cover_gradient, cover_image_url, period_label",
+        "id, title, summary, emoji, badge_label, badge_color, cover_gradient, cover_image_url, period_label, period_start, period_end",
         { count: "exact" }
       )
       .eq("is_visible", true)
@@ -22,8 +23,15 @@ export async function GET(request: Request) {
       .range(from, to);
 
     if (error) throw error;
+    const items = (data ?? []).map(({ period_start, period_end, ...rest }) => {
+      const badge = resolveEventStatusBadge(period_start, period_end, {
+        label: rest.badge_label,
+        color: rest.badge_color
+      });
+      return { ...rest, badge_label: badge.label, badge_color: badge.color };
+    });
     return NextResponse.json({
-      items: data ?? [],
+      items,
       total: count ?? 0,
       page,
       pageSize

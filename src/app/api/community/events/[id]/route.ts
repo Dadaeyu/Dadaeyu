@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { resolveEventStatusBadge } from "@/lib/community/event-ui";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function GET(_request: Request, { params }: Params) {
     const { data, error } = await supabase
       .from("tb_community_events")
       .select(
-        "id, title, summary, content, emoji, badge_label, badge_color, cover_gradient, cover_image_url, period_label"
+        "id, title, summary, content, emoji, badge_label, badge_color, cover_gradient, cover_image_url, period_label, period_start, period_end"
       )
       .eq("id", eventId)
       .eq("is_visible", true)
@@ -25,7 +26,14 @@ export async function GET(_request: Request, { params }: Params) {
 
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json({ event: data });
+    const { period_start, period_end, ...rest } = data;
+    const badge = resolveEventStatusBadge(period_start, period_end, {
+      label: rest.badge_label,
+      color: rest.badge_color
+    });
+    return NextResponse.json({
+      event: { ...rest, badge_label: badge.label, badge_color: badge.color }
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to fetch event" },
