@@ -783,8 +783,7 @@ export default function Map() {
           <div
             id="map-location-error"
             role="alert"
-            className="border-hairline bg-background absolute right-4 z-[60] w-[min(16rem,calc(100%-2rem))] rounded-2xl border p-3.5 shadow-lg"
-            style={{ bottom: mapBottomOverlayPx + 16 + 56 }}
+            className="border-hairline bg-background absolute top-1/2 left-1/2 z-[60] w-[min(16rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-3.5 shadow-lg"
           >
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
