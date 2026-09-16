@@ -37,7 +37,7 @@ export function useConfirmDialog() {
       role="alertdialog"
       aria-modal="true"
       aria-label={state.message}
-      className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 px-4 py-6 sm:items-center"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4 py-6"
       onClick={() => close(false)}
     >
       <Card className="w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
