@@ -56,8 +56,9 @@ async function verifyIsDaejeon(coords: MyLocationCoords): Promise<boolean> {
 // 다만 GPS가 스스로 정확도를 보정할 시간을 잠깐 주기 위해, 충분히 정확한 값이 나오거나
 // 시도 횟수를 다 채울 때까지만 짧게 추적하다가 자동으로 멈춘다 — 그래서 "허용" 직후
 // 대충 잡힌 값(Wi-Fi/IP 기반) 대신 실제 GPS 위치로 보정될 기회를 준다.
-// 대전 밖이거나 권한 거부/조회 실패 시 location은 null로 유지되어 마커를 표시하지 않고,
-// resetTrigger를 올려 지도를 대전 전체 화면으로 되돌릴 수 있게 한다.
+// 대전 밖이거나 권한 거부/조회 실패 시 location은 null로 유지되어 마커를 표시하지 않는다.
+// 대전 밖은 사용자가 보던 지도 화면을 그대로 두고(카메라 이동 없음) 안내만 띄우고,
+// 권한 거부·조회 실패 등 다른 오류는 resetTrigger를 올려 지도를 대전 전체 화면으로 되돌린다.
 export function useMyLocation() {
   const [location, setLocation] = useState<MyLocationCoords | null>(null);
   const [status, setStatus] = useState<MyLocationStatus>("idle");
@@ -102,36 +103,40 @@ export function useMyLocation() {
         const isLastAllowedReading = readingCountRef.current >= MAX_READINGS;
 
         if (!isInDaejeon(coords)) {
+          // 대전 밖은 지도를 움직이지 않는다 — 사용자가 보던 화면 그대로 두고 안내만 띄운다.
           stopWatch();
           setLocation(null);
           setStatus("error");
           setErrorReason("outside_daejeon");
-          setResetTrigger((n) => n + 1);
           return;
         }
 
         setLocation(coords);
         setStatus("active");
         setErrorReason(null);
-        // 지도 이동(카메라 팬)은 처음으로 쓸만한 값을 잡았을 때만 — 이후 보정되는 값은 마커 위치만 갱신.
-        if (!hasFocusedRef.current) {
-          hasFocusedRef.current = true;
-          setFocusTrigger((n) => n + 1);
-        }
 
         if (accuracy <= ACCURACY_THRESHOLD_M || isLastAllowedReading) {
           stopWatch();
         }
 
         // bbox를 통과한 이번 세션 첫 좌표만 실제 대전인지 한 번 더 확인한다(호출 최소화).
+        // 지도 이동(카메라 팬)은 대전이 확인된 뒤에만 한다 — 확인 전에 미리 옮겼다가 대전이
+        // 아닌 걸로 밝혀지면 되돌릴 방법이 없어 화면만 어긋난 채로 남는다. 이후 보정되는
+        // 값은(이미 한 번 확인·이동했으므로) 마커 위치만 갱신한다.
         if (!verifiedRef.current) {
           verifiedRef.current = true;
           void verifyIsDaejeon(coords).then((ok) => {
-            if (ok || sessionIdRef.current !== sessionId) return;
-            setLocation(null);
-            setStatus("error");
-            setErrorReason("outside_daejeon");
-            setResetTrigger((n) => n + 1);
+            if (sessionIdRef.current !== sessionId) return;
+            if (!ok) {
+              setLocation(null);
+              setStatus("error");
+              setErrorReason("outside_daejeon");
+              return;
+            }
+            if (!hasFocusedRef.current) {
+              hasFocusedRef.current = true;
+              setFocusTrigger((n) => n + 1);
+            }
           });
         }
       },
