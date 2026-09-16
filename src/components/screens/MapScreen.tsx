@@ -351,6 +351,7 @@ export default function Map() {
   // 내 위치 버튼 토글: 켜져 있으면 끄면서 대전 전체 화면으로, 꺼져 있으면 내 위치를 조회한다.
   // 모바일에서는 시트 55%(지도 45%)로 맞춘 뒤 위치를 잡아, 보이는 지도 중앙에 오도록 한다.
   const handleLocateClick = () => {
+    setMapMenuOpen(false); // 드롭다운("지도 기능 목록")에서 눌렀을 수 있어, 안내가 가려지지 않게 닫는다
     if (myLocationStatus === "active") {
       resetMyLocation();
     } else {
@@ -783,7 +784,9 @@ export default function Map() {
           <div
             id="map-location-error"
             role="alert"
-            className="border-hairline bg-background absolute top-1/2 left-1/2 z-[60] w-[min(16rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-3.5 shadow-lg"
+            // z-[62]: 지도 기능 드롭다운(z-[61], "내 위치"를 그 메뉴 안에서 누르면 메뉴가 열린
+            // 채로 남는다)보다 위에 떠야 안내가 메뉴에 가려지지 않는다.
+            className="border-hairline bg-background absolute top-1/2 left-1/2 z-[62] w-[min(16rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-3.5 shadow-lg"
             // 모바일은 하단 시트가 지도 아래쪽을 가리므로, "보이는 지도" 영역(시트 위쪽)의
             // 세로 중앙에 오도록 top을 직접 계산한다. 데스크톱은 overlay가 0이라 그대로 중앙.
             style={
