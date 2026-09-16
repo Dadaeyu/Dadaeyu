@@ -344,22 +344,6 @@ export function BoardSection() {
             />
             이미지 첨부 허용
           </label>
-          <label className="text-stone flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.allowFile}
-              onChange={(e) => setForm((prev) => ({ ...prev, allowFile: e.target.checked }))}
-            />
-            파일 첨부 허용
-          </label>
-          <label className="text-stone flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.allowSecret}
-              onChange={(e) => setForm((prev) => ({ ...prev, allowSecret: e.target.checked }))}
-            />
-            비밀글 허용
-          </label>
         </div>
         <div className="max-w-[10rem] space-y-1">
           <label className="text-xs font-semibold text-gray-500">첨부 최대 개수</label>
