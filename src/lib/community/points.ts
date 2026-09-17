@@ -81,6 +81,18 @@ export async function awardPoints(input: AwardPointsInput): Promise<AwardPointsR
   }
 
   const supabase = createAdminClient();
+
+  // 탈퇴/정지 회원은 본인이 직접 하지 않은 행동(예: 남이 옛 글에 좋아요를 누름)으로도
+  // 포인트가 계속 쌓일 수 있다. 지급 전에 활성 회원인지 먼저 확인해 막는다.
+  const { data: member } = await supabase
+    .from(T.members)
+    .select("status")
+    .eq("id", input.userId)
+    .maybeSingle();
+  if (!member || member.status !== "active") {
+    return { awarded: 0, skipped: true, reason: "member_inactive" };
+  }
+
   const since = startOfTodayKstIso();
 
   if (!input.allowDuplicateRef && input.refType != null && input.refId != null) {
