@@ -324,12 +324,11 @@ export function BoardPostsSection() {
             <tr className={tableHeadRowClass}>
               <th className={tableThClass}>ID</th>
               <th className={tableThClass}>게시판</th>
-              <th className={`${tableThLeftClass} min-w-[14rem]`}>제목</th>
+              <th className={`${tableThLeftClass} min-w-[10rem]`}>제목</th>
               <th className={tableThClass}>작성자</th>
               <th className={tableThClass}>조회</th>
               <th className={tableThClass}>좋아요</th>
               <th className={tableThClass}>댓글</th>
-              <th className={tableThClass}>공지</th>
               <th className={tableThClass}>사용 여부</th>
               <th className={tableThClass}>작성일</th>
               <th className={tableThClass}>
@@ -340,14 +339,14 @@ export function BoardPostsSection() {
           <tbody className={tableBodyClass}>
             {loading && (
               <tr>
-                <td colSpan={11} className="text-stone px-4 py-8 text-center">
+                <td colSpan={10} className="text-stone px-4 py-8 text-center">
                   불러오는 중…
                 </td>
               </tr>
             )}
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={11} className="text-stone px-4 py-8 text-center">
+                <td colSpan={10} className="text-stone px-4 py-8 text-center">
                   게시글이 없습니다.
                 </td>
               </tr>
@@ -361,16 +360,13 @@ export function BoardPostsSection() {
                   <td className={`${tableTdCenterClass} text-stone whitespace-nowrap`}>
                     {p.board_nm}
                   </td>
-                  <td className="text-ink max-w-[20rem] min-w-[14rem] px-4 py-3.5 text-left font-semibold">
-                    <span className="line-clamp-2 break-keep">{p.title}</span>
+                  <td className="text-ink max-w-[12rem] px-4 py-3.5 text-left font-semibold">
+                    <span className="block truncate">{p.title}</span>
                   </td>
                   <td className={`${tableTdCenterClass} text-stone`}>{p.writer_nm}</td>
                   <td className={`${tableTdCenterClass} text-stone`}>{p.view_cnt}</td>
                   <td className={`${tableTdCenterClass} text-stone`}>{p.like_cnt}</td>
                   <td className={`${tableTdCenterClass} text-stone`}>{p.comment_cnt}</td>
-                  <td className={tableTdCenterClass}>
-                    {p.notice_yn && <Badge tone="warn">공지</Badge>}
-                  </td>
                   <td className={tableTdCenterClass}>
                     <Badge tone={p.use_yn ? "brand" : "error"}>
                       {p.use_yn ? "사용" : "미사용"}

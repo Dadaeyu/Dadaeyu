@@ -235,7 +235,12 @@ export function BoardSection() {
   };
 
   const deleteBoard = async (board: AdminBoard) => {
-    if (!confirm(`"${board.board_nm}" 게시판을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    if (
+      !confirm(
+        `"${board.board_nm}" 게시판을 삭제할까요?\n게시판에 있는 게시글도 모두 함께 삭제되며, 되돌릴 수 없습니다.`
+      )
+    )
+      return;
     setSaving(true);
     setError(null);
     try {

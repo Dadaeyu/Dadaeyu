@@ -182,11 +182,18 @@ export async function DELETE(request: Request) {
 
   try {
     const supabase = createAdminClient();
+
+    // 게시글이 있어도 게시판을 삭제할 수 있게, 게시판 소속 게시글을 먼저 지운다.
+    // 댓글·답글·좋아요·신고 등은 게시글 개별 삭제 때와 동일하게 tb_post 삭제 시
+    // DB에서 함께 정리된다.
+    const { error: deletePostsError } = await supabase.from("tb_post").delete().eq("board_id", id);
+    if (deletePostsError) throw deletePostsError;
+
     const { error } = await supabase.from("tb_board").delete().eq("board_id", id);
     if (error) {
       if (error.code === "23503") {
         return NextResponse.json(
-          { error: "게시글이 있는 게시판은 삭제할 수 없습니다. 먼저 게시글을 모두 삭제해 주세요." },
+          { error: "게시판을 삭제할 수 없습니다. 운영팀에 문의해 주세요." },
           { status: 409 }
         );
       }
