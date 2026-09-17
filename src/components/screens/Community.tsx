@@ -911,8 +911,12 @@ function CommunityWrite() {
     ? `/community/new?${searchParams.toString()}`
     : "/community/new";
 
+  // 화면 진입 시 1회만 검사한다 — deps에 auth?.user가 있어 검사를 안 막으면, 글 쓰던 중
+  // (다른 곳에서) 로그아웃해도 auth.user가 바뀔 때마다 다시 실행돼 로그인 확인창이 또 뜬다.
+  const loginCheckedRef = useRef(false);
   useEffect(() => {
-    if (auth?.loading) return;
+    if (auth?.loading || loginCheckedRef.current) return;
+    loginCheckedRef.current = true;
     void requireLoginOrRedirect(auth?.user, router, writeNextPath, dialogConfirm);
   }, [auth?.loading, auth?.user, router, dialogConfirm, writeNextPath]);
 
