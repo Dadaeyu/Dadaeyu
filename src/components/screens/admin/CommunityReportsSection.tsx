@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Eraser, FileText, MessageSquare } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { formatDateTime } from "./helpers";
 import { AdminListShell } from "./AdminListShell";
@@ -46,6 +47,7 @@ const TABS: { key: ReportTab; label: string }[] = [
 ];
 
 export function CommunityReportsSection() {
+  const { confirm: dialogConfirm, dialog } = useConfirmDialog();
   const [tab, setTab] = useState<ReportTab>("all");
   const [page, setPage] = useState(0);
   const [searchInput, setSearchInput] = useState("");
@@ -126,7 +128,8 @@ export function CommunityReportsSection() {
   // 신고이력 초기화: tb_community_report에서 해당 대상 row 전부 삭제 + report_cnt 0.
   // 게시글이 신고 누적으로 자동 숨김돼 있었다면, 다시 "사용"으로 되돌릴지 별도로 물어본다.
   const resetReports = async (item: ReportGroupItem) => {
-    if (!confirm("이 대상의 신고 이력을 초기화할까요? 신고 기록이 모두 삭제됩니다.")) return;
+    if (!(await dialogConfirm("이 대상의 신고 이력을 초기화할까요? 신고 기록이 모두 삭제됩니다.")))
+      return;
     setResetting(true);
     try {
       const res = await fetch("/api/admin/community-reports/reset", {
@@ -138,7 +141,7 @@ export function CommunityReportsSection() {
       if (!res.ok) throw new Error(json.error ?? "초기화에 실패했습니다.");
 
       if (item.targetType === "post" && json.wasHidden) {
-        if (confirm("이 게시글을 다시 '사용' 상태로 전환할까요?")) {
+        if (await dialogConfirm("이 게시글을 다시 '사용' 상태로 전환할까요?")) {
           await fetch("/api/admin/board-posts", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -158,72 +161,75 @@ export function CommunityReportsSection() {
 
   if (selected) {
     return (
-      <div className="space-y-5">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
-            <ArrowLeft className="h-4 w-4" />
-            목록으로
-          </Button>
-          <h1 className="text-ink text-xl font-semibold tracking-[-0.02em]">신고 상세</h1>
-        </div>
-
-        {detailError && <div className={adminAlertClass}>{detailError}</div>}
-
-        <div className={`${adminPanelClass} space-y-4 p-5`}>
-          <div className="flex flex-wrap items-center gap-2">
-            {selected.targetType === "post" ? (
-              <>
-                <Badge tone="tag">{selected.boardNm}</Badge>
-                <span className="text-ink font-semibold">{selected.title}</span>
-              </>
-            ) : (
-              <>
-                <Badge tone="tag">댓글</Badge>
-                <span className="text-ink font-semibold">{selected.content}</span>
-              </>
-            )}
+      <>
+        <div className="space-y-5">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
+              <ArrowLeft className="h-4 w-4" />
+              목록으로
+            </Button>
+            <h1 className="text-ink text-xl font-semibold tracking-[-0.02em]">신고 상세</h1>
           </div>
 
-          <div>
-            <p className="text-stone mb-2 text-xs font-semibold">
-              신고 사유 ({detailItems.length}건)
-            </p>
-            <div className="divide-hairline-soft divide-y">
-              {detailLoading && (
-                <p className="text-stone px-1 py-6 text-center text-sm">불러오는 중…</p>
+          {detailError && <div className={adminAlertClass}>{detailError}</div>}
+
+          <div className={`${adminPanelClass} space-y-4 p-5`}>
+            <div className="flex flex-wrap items-center gap-2">
+              {selected.targetType === "post" ? (
+                <>
+                  <Badge tone="tag">{selected.boardNm}</Badge>
+                  <span className="text-ink font-semibold">{selected.title}</span>
+                </>
+              ) : (
+                <>
+                  <Badge tone="tag">댓글</Badge>
+                  <span className="text-ink font-semibold">{selected.content}</span>
+                </>
               )}
-              {!detailLoading && detailItems.length === 0 && (
-                <p className="text-stone px-1 py-6 text-center text-sm">신고 내역이 없습니다.</p>
-              )}
-              {!detailLoading &&
-                detailItems.map((r) => (
-                  <div
-                    key={r.reportId}
-                    className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-ink font-medium">{r.reasonNm}</span>
-                      <span className="text-stone text-xs">{r.reporterNickname}</span>
+            </div>
+
+            <div>
+              <p className="text-stone mb-2 text-xs font-semibold">
+                신고 사유 ({detailItems.length}건)
+              </p>
+              <div className="divide-hairline-soft divide-y">
+                {detailLoading && (
+                  <p className="text-stone px-1 py-6 text-center text-sm">불러오는 중…</p>
+                )}
+                {!detailLoading && detailItems.length === 0 && (
+                  <p className="text-stone px-1 py-6 text-center text-sm">신고 내역이 없습니다.</p>
+                )}
+                {!detailLoading &&
+                  detailItems.map((r) => (
+                    <div
+                      key={r.reportId}
+                      className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-ink font-medium">{r.reasonNm}</span>
+                        <span className="text-stone text-xs">{r.reporterNickname}</span>
+                      </div>
+                      <span className="text-stone text-xs">{formatDateTime(r.createdAt)}</span>
                     </div>
-                    <span className="text-stone text-xs">{formatDateTime(r.createdAt)}</span>
-                  </div>
-                ))}
+                  ))}
+              </div>
+            </div>
+
+            <div className="border-hairline-soft flex justify-end border-t pt-4">
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={resetting}
+                onClick={() => resetReports(selected)}
+              >
+                <Eraser className="h-4 w-4" />
+                신고이력 초기화
+              </Button>
             </div>
           </div>
-
-          <div className="border-hairline-soft flex justify-end border-t pt-4">
-            <Button
-              size="sm"
-              variant="destructive"
-              disabled={resetting}
-              onClick={() => resetReports(selected)}
-            >
-              <Eraser className="h-4 w-4" />
-              신고이력 초기화
-            </Button>
-          </div>
         </div>
-      </div>
+        {dialog}
+      </>
     );
   }
 

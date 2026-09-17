@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pencil, Trash2, Eye, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { AdminFormShell, AdminListShell } from "./AdminListShell";
 import { AdminSearchBar } from "./AdminSearchBar";
@@ -104,6 +105,7 @@ function formToPayload(form: BoardFormState) {
 export function BoardSection() {
   const { mode, editingId, page, q, goList, goCreate, goEdit, setPage, setQuery } =
     useAdminListMode();
+  const { confirm: dialogConfirm, dialog } = useConfirmDialog();
 
   const [items, setItems] = useState<AdminBoard[]>([]);
   const [total, setTotal] = useState(0);
@@ -236,9 +238,9 @@ export function BoardSection() {
 
   const deleteBoard = async (board: AdminBoard) => {
     if (
-      !confirm(
+      !(await dialogConfirm(
         `"${board.board_nm}" 게시판을 삭제할까요?\n게시판에 있는 게시글도 모두 함께 삭제되며, 되돌릴 수 없습니다.`
-      )
+      ))
     )
       return;
     setSaving(true);
@@ -367,127 +369,134 @@ export function BoardSection() {
   }
 
   return (
-    <AdminListShell
-      title="게시판 관리"
-      subtitle="게시판을 추가·수정하고 사용 여부를 관리합니다."
-      total={total}
-      page={page}
-      pageSize={DEFAULT_PAGE_SIZE}
-      loading={loading}
-      error={error}
-      onPageChange={setPage}
-      onCreateClick={goCreate}
-      createLabel="새 게시판"
-      toolbar={
-        <AdminSearchBar value={searchInput} onChange={setSearchInput} placeholder="게시판명 검색" />
-      }
-    >
-      <div className={tableWrapClass}>
-        <table className={tableClass}>
-          <thead>
-            <tr className={tableHeadRowClass}>
-              <th className={tableThClass}>ID</th>
-              <th className={`${tableThLeftClass} min-w-[10rem]`}>게시판명</th>
-              <th className={tableThClass}>타입</th>
-              <th className={tableThClass}>정렬</th>
-              <th className={tableThClass}>댓글</th>
-              <th className={tableThClass}>답글</th>
-              <th className={tableThClass}>별점</th>
-              <th className={tableThClass}>사용 여부</th>
-              <th className={tableThClass}>
-                <span className="sr-only">작업</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className={tableBodyClass}>
-            {loading && (
-              <tr>
-                <td colSpan={9} className="text-stone px-4 py-8 text-center">
-                  불러오는 중…
-                </td>
+    <>
+      <AdminListShell
+        title="게시판 관리"
+        subtitle="게시판을 추가·수정하고 사용 여부를 관리합니다."
+        total={total}
+        page={page}
+        pageSize={DEFAULT_PAGE_SIZE}
+        loading={loading}
+        error={error}
+        onPageChange={setPage}
+        onCreateClick={goCreate}
+        createLabel="새 게시판"
+        toolbar={
+          <AdminSearchBar
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder="게시판명 검색"
+          />
+        }
+      >
+        <div className={tableWrapClass}>
+          <table className={tableClass}>
+            <thead>
+              <tr className={tableHeadRowClass}>
+                <th className={tableThClass}>ID</th>
+                <th className={`${tableThLeftClass} min-w-[10rem]`}>게시판명</th>
+                <th className={tableThClass}>타입</th>
+                <th className={tableThClass}>정렬</th>
+                <th className={tableThClass}>댓글</th>
+                <th className={tableThClass}>답글</th>
+                <th className={tableThClass}>별점</th>
+                <th className={tableThClass}>사용 여부</th>
+                <th className={tableThClass}>
+                  <span className="sr-only">작업</span>
+                </th>
               </tr>
-            )}
-            {!loading && items.length === 0 && (
-              <tr>
-                <td colSpan={9} className="text-stone px-4 py-8 text-center">
-                  게시판이 없습니다.
-                </td>
-              </tr>
-            )}
-            {!loading &&
-              items.map((b) => (
-                <tr key={b.board_id} className={tableRowClass}>
-                  <td className={`${tableTdCenterClass} text-stone whitespace-nowrap`}>
-                    #{b.board_id}
-                  </td>
-                  <td className="text-ink min-w-[10rem] px-4 py-3.5 text-left font-semibold">
-                    {b.board_nm}
-                  </td>
-                  <td className={tableTdCenterClass}>
-                    <Badge tone="neutral" className="text-[10px]">
-                      {b.board_type}
-                    </Badge>
-                  </td>
-                  <td className={`${tableTdCenterClass} text-stone`}>{b.sort_order}</td>
-                  <td className={tableTdCenterClass}>
-                    <Badge tone={b.comment_yn ? "brand" : "neutral"}>
-                      {b.comment_yn ? "허용" : "미허용"}
-                    </Badge>
-                  </td>
-                  <td className={tableTdCenterClass}>
-                    <Badge tone={b.reply_yn ? "brand" : "neutral"}>
-                      {b.reply_yn ? "허용" : "미허용"}
-                    </Badge>
-                  </td>
-                  <td className={tableTdCenterClass}>
-                    <Badge tone={b.rating_yn ? "brand" : "neutral"}>
-                      {b.rating_yn ? "사용" : "미사용"}
-                    </Badge>
-                  </td>
-                  <td className={tableTdCenterClass}>
-                    <Badge tone={b.use_yn ? "brand" : "error"}>
-                      {b.use_yn ? "사용" : "미사용"}
-                    </Badge>
-                  </td>
-                  <td className={tableTdCenterClass}>
-                    <div className="flex justify-center gap-1.5">
-                      <Button
-                        size="iconSm"
-                        variant="outline"
-                        disabled={saving}
-                        title="수정"
-                        aria-label="수정"
-                        onClick={() => goEdit(b.board_id)}
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button
-                        size="iconSm"
-                        variant={b.use_yn ? "secondary" : "accent"}
-                        disabled={saving}
-                        title={b.use_yn ? "미사용으로 변경" : "사용으로 변경"}
-                        aria-label={b.use_yn ? "미사용으로 변경" : "사용으로 변경"}
-                        onClick={() => toggleUse(b)}
-                      >
-                        {b.use_yn ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-                      </Button>
-                      <Button
-                        size="iconSm"
-                        variant="destructive"
-                        disabled={saving}
-                        title="삭제"
-                        aria-label="삭제"
-                        onClick={() => deleteBoard(b)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
+            </thead>
+            <tbody className={tableBodyClass}>
+              {loading && (
+                <tr>
+                  <td colSpan={9} className="text-stone px-4 py-8 text-center">
+                    불러오는 중…
                   </td>
                 </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
-    </AdminListShell>
+              )}
+              {!loading && items.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="text-stone px-4 py-8 text-center">
+                    게시판이 없습니다.
+                  </td>
+                </tr>
+              )}
+              {!loading &&
+                items.map((b) => (
+                  <tr key={b.board_id} className={tableRowClass}>
+                    <td className={`${tableTdCenterClass} text-stone whitespace-nowrap`}>
+                      #{b.board_id}
+                    </td>
+                    <td className="text-ink min-w-[10rem] px-4 py-3.5 text-left font-semibold">
+                      {b.board_nm}
+                    </td>
+                    <td className={tableTdCenterClass}>
+                      <Badge tone="neutral" className="text-[10px]">
+                        {b.board_type}
+                      </Badge>
+                    </td>
+                    <td className={`${tableTdCenterClass} text-stone`}>{b.sort_order}</td>
+                    <td className={tableTdCenterClass}>
+                      <Badge tone={b.comment_yn ? "brand" : "neutral"}>
+                        {b.comment_yn ? "허용" : "미허용"}
+                      </Badge>
+                    </td>
+                    <td className={tableTdCenterClass}>
+                      <Badge tone={b.reply_yn ? "brand" : "neutral"}>
+                        {b.reply_yn ? "허용" : "미허용"}
+                      </Badge>
+                    </td>
+                    <td className={tableTdCenterClass}>
+                      <Badge tone={b.rating_yn ? "brand" : "neutral"}>
+                        {b.rating_yn ? "사용" : "미사용"}
+                      </Badge>
+                    </td>
+                    <td className={tableTdCenterClass}>
+                      <Badge tone={b.use_yn ? "brand" : "error"}>
+                        {b.use_yn ? "사용" : "미사용"}
+                      </Badge>
+                    </td>
+                    <td className={tableTdCenterClass}>
+                      <div className="flex justify-center gap-1.5">
+                        <Button
+                          size="iconSm"
+                          variant="outline"
+                          disabled={saving}
+                          title="수정"
+                          aria-label="수정"
+                          onClick={() => goEdit(b.board_id)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          size="iconSm"
+                          variant={b.use_yn ? "secondary" : "accent"}
+                          disabled={saving}
+                          title={b.use_yn ? "미사용으로 변경" : "사용으로 변경"}
+                          aria-label={b.use_yn ? "미사용으로 변경" : "사용으로 변경"}
+                          onClick={() => toggleUse(b)}
+                        >
+                          {b.use_yn ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+                        </Button>
+                        <Button
+                          size="iconSm"
+                          variant="destructive"
+                          disabled={saving}
+                          title="삭제"
+                          aria-label="삭제"
+                          onClick={() => deleteBoard(b)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </AdminListShell>
+      {dialog}
+    </>
   );
 }
