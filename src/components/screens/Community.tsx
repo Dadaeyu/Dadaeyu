@@ -1907,12 +1907,12 @@ function CommunityDetail({ id }: { id: string }) {
           {post.notice_yn ? "공지" : post.board_nm}
         </Badge>
         {(post.can_edit || post.can_delete) && (
-          <div className="flex w-full items-center gap-1 sm:ml-auto sm:w-auto">
+          <div className="ml-auto flex items-center gap-1">
             {post.can_edit && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="min-h-11 flex-1 sm:flex-none"
+                className="min-h-11"
                 onClick={() => router.push(`/community/new?edit=${post.id}`)}
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -1923,7 +1923,7 @@ function CommunityDetail({ id }: { id: string }) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-error min-h-11 flex-1 sm:flex-none"
+                className="text-error min-h-11"
                 disabled={deleting}
                 onClick={handleDelete}
               >
