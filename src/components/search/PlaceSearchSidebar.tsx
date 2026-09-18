@@ -5,7 +5,7 @@
 // 각 화면이 usePlaceSearch/useFilters 를 소유해 값을 넘기고, 지도 화면은 같은 값으로 마커도 그린다.
 // 필터 열림 상태와 목록 스크롤 위치는 이 컴포넌트가 내부 보존한다(상세로 갔다 와도 유지).
 import { useCallback, useRef, useState } from "react";
-import { Search, ChevronLeft, SearchX } from "lucide-react";
+import { Search, ChevronLeft } from "lucide-react";
 import { FilterToggleSection } from "@/components/search/FilterPanel";
 import SearchResultList from "@/components/search/SearchResultList";
 import TourismDetailPanel, {
@@ -70,6 +70,10 @@ interface Props {
 
   // 사이드바 레벨 뒤로가기 (코스 편집 전용). 있으면 목록 상단에 뒤로 버튼.
   onBack?: () => void;
+
+  // true면 로딩·결과 없음 안내를 이 컴포넌트가 직접 보여주지 않는다 — 부모가 지도 위
+  // 오버레이로 대신 보여주는 화면(지도 검색)에서 쓴다.
+  hideInlineStatus?: boolean;
 }
 
 export default function PlaceSearchSidebar({
@@ -107,7 +111,8 @@ export default function PlaceSearchSidebar({
   onChangeOrigin,
   onDismissRoute,
   routeGuide,
-  onBack
+  onBack,
+  hideInlineStatus = false
 }: Props) {
   // 필터 열림 상태 · 목록 스크롤 위치를 이 컴포넌트가 보존 (상세로 전환돼도 인스턴스는 유지됨).
   const [filterOpen, setFilterOpen] = useState(defaultFilterOpen);
@@ -199,20 +204,21 @@ export default function PlaceSearchSidebar({
               : `핫플레이스 ${places.length}개`}
           </span>
         </div>
-        {isSearching || (!hasActiveFilter && isLoadingTopRated) ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-14 text-xs text-gray-400">
-            <span className="border-brand-500 h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-transparent" />
+        {hideInlineStatus ? (
+          // 로딩·결과 없음 안내를 지도 위 오버레이로 대신 보여주는 화면(지도 검색)에서는
+          // 목록 자리를 비워 오버레이와 안내가 겹치지 않게 한다.
+          isSearching || (!hasActiveFilter && isLoadingTopRated) ? null : (
+            <SearchResultList places={places} onSelect={onSelectPlace} />
+          )
+        ) : isSearching || (!hasActiveFilter && isLoadingTopRated) ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-xs text-gray-400">
+            <span className="border-brand-500 h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-200 border-t-transparent" />
             {hasActiveFilter ? "검색 중..." : "불러오는 중..."}
           </div>
         ) : places.length === 0 && hasActiveFilter ? (
-          <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
-            <div className="border-hairline-soft bg-surface-soft flex w-full max-w-[16rem] flex-col items-center gap-2 rounded-2xl border px-5 py-6">
-              <SearchX className="h-6 w-6 text-gray-300" aria-hidden />
-              <p className="text-sm font-semibold text-gray-600">검색된 장소가 없습니다</p>
-              <p className="text-xs leading-relaxed text-gray-400">
-                검색어, 필터를 다시 한번 확인해주세요
-              </p>
-            </div>
+          <div className="flex flex-col items-center justify-center gap-1 py-14 text-center text-gray-400">
+            <p className="text-sm font-medium">조건에 맞는 장소가 없어요</p>
+            <p className="text-xs">필터를 조정해서 다시 찾아보세요</p>
           </div>
         ) : (
           <SearchResultList places={places} onSelect={onSelectPlace} />

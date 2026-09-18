@@ -575,6 +575,29 @@ export default function Map() {
   });
   const markerPlaces = displayPlaces;
 
+  // 검색(또는 핫플레이스 최초 로딩)이 끝났는데 결과가 0개면 지도 가운데에 안내를 띄우고,
+  // 몇 초 뒤 스스로 사라지게 한다. 같은 조건이 또 발생해도(연속으로 빈 검색을 해도) 검색이
+  // "끝나는 시점"마다 다시 뜨도록, isSearching이 true→false로 바뀌는 순간만 타이머를 새로 건다.
+  const showLoading = isSearching || (!hasActiveFilter && isLoadingTopRated);
+  const [noResultsDismissed, setNoResultsDismissed] = useState(true);
+  const wasSearchingRef = useRef(showLoading);
+  useEffect(() => {
+    const justFinished = wasSearchingRef.current && !showLoading;
+    wasSearchingRef.current = showLoading;
+    if (!justFinished) return undefined;
+    if (!(hasActiveFilter && displayPlaces.length === 0)) return undefined;
+    queueMicrotask(() => setNoResultsDismissed(false));
+    const t = window.setTimeout(() => setNoResultsDismissed(true), 3500);
+    return () => window.clearTimeout(t);
+  }, [showLoading, hasActiveFilter, displayPlaces.length]);
+  const showNoResults =
+    !noResultsDismissed && !showLoading && hasActiveFilter && displayPlaces.length === 0;
+
+  // 모바일은 하단 시트가 지도 아래쪽을 가리므로, "보이는 지도" 영역(시트 위쪽)의 세로
+  // 중앙을 top으로 계산한다. 데스크톱은 overlay가 0이라 전체 영역의 중앙이 된다.
+  const overlayCenterTop =
+    mapAreaHeightPx > 0 ? Math.max(0, (mapAreaHeightPx - mapBottomOverlayPx) / 2) : undefined;
+
   return (
     <div
       className="relative -mx-4 -mt-6 -mb-24 flex overflow-hidden md:-mx-6"
@@ -661,6 +684,7 @@ export default function Map() {
             onChangeOrigin={handleChangeOrigin}
             onDismissRoute={handleDismissRoute}
             routeGuide={routeGuide}
+            hideInlineStatus
           />
         </div>
       </aside>
@@ -787,13 +811,7 @@ export default function Map() {
             // z-[62]: 지도 기능 드롭다운(z-[61], "내 위치"를 그 메뉴 안에서 누르면 메뉴가 열린
             // 채로 남는다)보다 위에 떠야 안내가 메뉴에 가려지지 않는다.
             className="border-hairline bg-background absolute top-1/2 left-1/2 z-[62] w-[min(16rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-3.5 shadow-lg"
-            // 모바일은 하단 시트가 지도 아래쪽을 가리므로, "보이는 지도" 영역(시트 위쪽)의
-            // 세로 중앙에 오도록 top을 직접 계산한다. 데스크톱은 overlay가 0이라 그대로 중앙.
-            style={
-              mapAreaHeightPx > 0
-                ? { top: Math.max(0, (mapAreaHeightPx - mapBottomOverlayPx) / 2) }
-                : undefined
-            }
+            style={overlayCenterTop != null ? { top: overlayCenterTop } : undefined}
           >
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
@@ -810,6 +828,39 @@ export default function Map() {
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* 검색 중 로딩 — 지도 가운데. 지도/목록 조작을 막지 않도록 클릭은 통과시킨다. */}
+        {showLoading ? (
+          <div
+            className="pointer-events-none absolute top-1/2 left-1/2 z-[58] -translate-x-1/2 -translate-y-1/2"
+            style={overlayCenterTop != null ? { top: overlayCenterTop } : undefined}
+          >
+            <div className="border-hairline bg-background flex flex-col items-center gap-2 rounded-2xl border px-5 py-4 shadow-lg">
+              <span className="border-brand-500 h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-transparent" />
+              <span className="text-stone text-xs font-medium">
+                {hasActiveFilter ? "검색 중..." : "불러오는 중..."}
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {/* 검색 결과 없음 — 지도 가운데에 떴다가 몇 초 뒤 스스로 사라진다(noResultsDismissed). */}
+        {showNoResults ? (
+          <div
+            role="status"
+            className="pointer-events-none absolute top-1/2 left-1/2 z-[58] w-[min(16rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2"
+            style={overlayCenterTop != null ? { top: overlayCenterTop } : undefined}
+          >
+            <div className="border-hairline bg-background flex flex-col items-center gap-1.5 rounded-2xl border px-5 py-5 text-center shadow-lg">
+              <p className="text-ink text-sm font-semibold tracking-[-0.01em]">
+                검색된 장소가 없습니다
+              </p>
+              <p className="text-stone text-xs leading-relaxed">
+                검색어, 필터를 다시 한번 확인해주세요
+              </p>
             </div>
           </div>
         ) : null}
