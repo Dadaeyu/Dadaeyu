@@ -587,7 +587,7 @@ export default function Map() {
     if (!justFinished) return undefined;
     if (!(hasActiveFilter && displayPlaces.length === 0)) return undefined;
     queueMicrotask(() => setNoResultsDismissed(false));
-    const t = window.setTimeout(() => setNoResultsDismissed(true), 3500);
+    const t = window.setTimeout(() => setNoResultsDismissed(true), 2000);
     return () => window.clearTimeout(t);
   }, [showLoading, hasActiveFilter, displayPlaces.length]);
   const showNoResults =
@@ -854,7 +854,7 @@ export default function Map() {
             className="pointer-events-none absolute top-1/2 left-1/2 z-[58] w-[min(16rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2"
             style={overlayCenterTop != null ? { top: overlayCenterTop } : undefined}
           >
-            <div className="border-hairline bg-background flex flex-col items-center gap-1.5 rounded-2xl border px-5 py-5 text-center shadow-lg">
+            <div className="border-hairline bg-background flex flex-col items-center gap-1 rounded-2xl border px-5 py-3.5 text-center shadow-lg">
               <p className="text-ink text-sm font-semibold tracking-[-0.01em]">
                 검색된 장소가 없습니다
               </p>
