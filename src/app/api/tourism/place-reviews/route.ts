@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-const PREVIEW_COUNT = 2;
 // 리뷰로 취급하는 게시판은 "후기"(board_id 1) 게시글만.
 const REVIEW_BOARD_ID = 1;
 
@@ -35,7 +34,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       total: rows.length,
       average_rating: averageRating,
-      reviews: rows.slice(0, PREVIEW_COUNT).map((r) => ({
+      reviews: rows.map((r) => ({
         id: r.post_id,
         title: r.title,
         content: r.content,
