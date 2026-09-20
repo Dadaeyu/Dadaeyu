@@ -843,12 +843,6 @@ function getMyLocationErrorCopy(errorReason: MyLocationErrorReason): {
       help: "브라우저에서 위치 권한을 켜면 내 위치를 지도에 표시할 수 있어요."
     };
   }
-  if (errorReason === "outside_daejeon") {
-    return {
-      title: "대전 밖 위치예요",
-      help: "내 위치는 대전 내에서만 확인할 수 있어요. 위치 없이도 장소 검색은 가능해요."
-    };
-  }
   return {
     title: "위치를 다시 확인해 주세요",
     help: "위치를 확인하지 못했어요. 위치 없이 계속 둘러볼 수 있어요."

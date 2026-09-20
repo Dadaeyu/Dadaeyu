@@ -336,7 +336,8 @@ export default function TourismDetailPanel({
       <div className="sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-gray-100 bg-white px-3 py-2.5">
         <button
           onClick={onBack}
-          className="rounded-lg p-1.5 text-gray-600 transition-colors hover:bg-gray-100"
+          aria-label="뒤로가기"
+          className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>

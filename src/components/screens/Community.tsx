@@ -953,7 +953,7 @@ function CommunityWrite() {
         throw new Error(
           json.error ?? (isEditing ? "수정에 실패했습니다." : "등록에 실패했습니다.")
         );
-      router.push(
+      router.replace(
         isEditing
           ? `/community/${editParam}`
           : json.post?.id

@@ -2208,11 +2208,7 @@ function CourseDetail({ id }: { id: string }) {
   useEffect(() => {
     if (myLocationStatus !== "error") return;
     const message =
-      myLocationError === "denied"
-        ? "위치 접근 권한이 꺼져 있어요"
-        : myLocationError === "outside_daejeon"
-          ? "내 위치는 대전 내에서만 확인할 수 있어요"
-          : "내 위치를 확인하지 못했어요";
+      myLocationError === "denied" ? "위치 접근 권한이 꺼져 있어요" : "내 위치를 확인하지 못했어요";
     setFavoriteNotice(message);
     setTimeout(() => setFavoriteNotice(""), 2000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
