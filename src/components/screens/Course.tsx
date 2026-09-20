@@ -2922,8 +2922,10 @@ function CourseDetail({ id }: { id: string }) {
 
   return (
     <div
-      className="relative -mx-4 -mt-6 -mb-24 flex overflow-hidden md:-mx-6"
-      style={{ height: "calc(100dvh - 64px)" }}
+      // 모바일은 하단 고정 네비게이션(MobileNav)이 이 영역 위에 겹쳐 그려지므로, 그만큼
+      // (main의 원래 pb-24 여유와 동일한 6rem) 높이에서 더 빼야 시트 맨 아래 내용이 네비게이션에
+      // 가려지지 않는다. 데스크톱은 네비게이션이 없어(md:hidden) 뺄 필요가 없다.
+      className="relative -mx-4 -mt-6 -mb-24 flex h-[calc(100dvh-64px-6rem)] overflow-hidden md:-mx-6 md:h-[calc(100dvh-64px)]"
     >
       {/* ── LEFT SIDEBAR (desktop) / 모바일 바텀시트 — 보기·편집·검색·상세 모두 이 패널 하나로 관리한다 ── */}
       <aside
