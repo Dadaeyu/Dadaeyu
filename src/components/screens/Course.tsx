@@ -41,8 +41,9 @@ import {
 } from "lucide-react";
 import { Filters, DEFAULT_FILTERS, FilterFields, useFilters } from "@/components/PlaceFilters";
 import type { SearchPlace } from "@/lib/search/kakaoSearch";
-import { buildPlaceRouteMapHref } from "@/lib/search/mapRouteHref";
 import { usePlaceSearch, type TourismDetail } from "@/hooks/usePlaceSearch";
+import { usePlaceRouteGuide } from "@/hooks/usePlaceRouteGuide";
+import { parseCommunityPostReturnPath } from "@/lib/navigation/returnPath";
 import {
   getCategoryColor,
   LCLSSYSTM1_COLORS,
@@ -1737,6 +1738,8 @@ function CourseDetail({ id }: { id: string }) {
   const isAiPreview = id === AI_PREVIEW_ROUTE_ID;
   const numId = Number(id);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const communityReturnPath = parseCommunityPostReturnPath(searchParams.get("from"));
   const { user } = useAuth();
 
   // 기존 코스 조회 — tb_course + tb_course_detail(+tb_place 조인)로 실제 데이터를 가져온다.
@@ -2060,6 +2063,27 @@ function CourseDetail({ id }: { id: string }) {
   const [selectedSearchPlace, setSelectedSearchPlace] = useState<CoursePlace | null>(null);
   const [selectedSearchDetail, setSelectedSearchDetail] = useState<TourismDetail | null>(null);
   const [selectedSearchDetailLoading, setSelectedSearchDetailLoading] = useState(false);
+  const {
+    routePath,
+    routeGuide,
+    routeOrigin,
+    routeOriginPhase,
+    selectedRouteId,
+    placeRouteActive,
+    handleBeginRoute,
+    handlePickOrigin,
+    handleChangeOrigin,
+    handleDismissRoute,
+    handleStartRoute
+  } = usePlaceRouteGuide();
+  const coursePlaceDestination =
+    selectedSearchPlace?.lat != null && selectedSearchPlace.lng != null
+      ? {
+          lat: selectedSearchPlace.lat,
+          lng: selectedSearchPlace.lng,
+          name: selectedSearchPlace.name
+        }
+      : null;
   const [isEditing, setIsEditing] = useState(isNew);
   const [dayGuidePickerOpen, setDayGuidePickerOpen] = useState(false);
   const [dayGuideMode, setDayGuideMode] = useState<RouteMode | null>(null);
@@ -2950,7 +2974,7 @@ function CourseDetail({ id }: { id: string }) {
             onBack={() => setPlaceSearchOpen(false)}
           />
         ) : selectedSearchPlace ? (
-          /* ── 코스 장소 상세(목록·마커). 보기 모드 경로안내는 지도에서 연다. 편집 중에는 끄고, 뒤로가면 코스 패널. ── */
+          /* ── 코스 장소 상세(목록·마커). 보기 모드 경로안내는 이 지도에서 연다. 편집 중에는 끄고, 뒤로가면 코스 패널. ── */
           <TourismDetailPanel
             sp={
               {
@@ -2966,19 +2990,20 @@ function CourseDetail({ id }: { id: string }) {
             }
             detail={selectedSearchDetail}
             isLoading={selectedSearchDetailLoading}
-            onBack={() => setSelectedSearchPlace(null)}
-            onBeginRoute={
-              !isEditing && selectedSearchPlace.contentId
-                ? () =>
-                    router.push(
-                      buildPlaceRouteMapHref({
-                        contentId: selectedSearchPlace.contentId ?? "",
-                        name: selectedSearchPlace.name,
-                        from: `/course/${id}`
-                      })
-                    )
-                : undefined
-            }
+            onBack={() => {
+              handleDismissRoute();
+              setSelectedSearchPlace(null);
+            }}
+            onBeginRoute={!isEditing && coursePlaceDestination ? handleBeginRoute : undefined}
+            onStartRoute={(mode) => {
+              void handleStartRoute(mode, coursePlaceDestination);
+            }}
+            routeOrigin={routeOrigin}
+            routeOriginPhase={routeOriginPhase}
+            onPickOrigin={handlePickOrigin}
+            onChangeOrigin={handleChangeOrigin}
+            onDismissRoute={handleDismissRoute}
+            routeGuide={routeGuide}
           />
         ) : isEditing ? (
           /* ── 편집 패널 ── */
@@ -3289,6 +3314,10 @@ function CourseDetail({ id }: { id: string }) {
             <div className="border-hairline flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
               <button
                 onClick={() => {
+                  if (communityReturnPath) {
+                    router.replace(communityReturnPath);
+                    return;
+                  }
                   const saved = readCourseListReturn();
                   router.push(saved ? `/course?tab=${saved.tab}` : "/course");
                 }}
@@ -3655,15 +3684,36 @@ function CourseDetail({ id }: { id: string }) {
       {/* ── MAP AREA ── (모바일 편집 시 지도는 그대로 보이고 편집 패널이 하단 시트로 뜸) */}
       <div ref={mapAreaRef} className="relative flex-1 overflow-hidden">
         <KakaoMap
-          markers={placeSearchOpen ? searchResultMarkers : mapMarkers}
+          markers={
+            placeSearchOpen
+              ? searchResultMarkers
+              : [
+                  ...mapMarkers,
+                  ...(routeOrigin && placeRouteActive
+                    ? [
+                        {
+                          id: "route-origin",
+                          lat: routeOrigin.lat,
+                          lng: routeOrigin.lng,
+                          color: "#2563eb",
+                          shape: "dot" as const,
+                          label: "출",
+                          zIndex: 8
+                        } satisfies MapMarker
+                      ]
+                    : [])
+                ]
+          }
           selectedId={placeSearchOpen ? ps.searchDetailId : selectedMarkerId}
           onSelect={(id) => {
+            if (id === "route-origin") return;
             if (placeSearchOpen) {
               ps.setSearchDetailId(id);
               return;
             }
             const src = markerSources.find((m) => m.markerId === id);
             if (!src) return;
+            if (src.item.id !== selectedSearchPlace?.id) handleDismissRoute();
             setSelectedSearchPlace(src.item);
           }}
           onDeselect={() => {
@@ -3671,9 +3721,11 @@ function CourseDetail({ id }: { id: string }) {
               ps.setSearchDetailId(null);
               return;
             }
+            if (placeRouteActive) return;
+            handleDismissRoute();
             setSelectedSearchPlace(null);
           }}
-          path={placeSearchOpen ? [] : (dayGuidePath ?? coursePath)}
+          path={placeSearchOpen ? [] : placeRouteActive ? routePath : (dayGuidePath ?? coursePath)}
           onPathClick={(day) => setActiveDay(day)}
           // "장소 추가" 검색 중엔 코스 경로가 아니라 검색 결과가 카메라를 맡아야 하므로 fitPathKey를
           // 비워서(resetViewTrigger/autoResetViewTrigger가 대신 카메라를 움직인다) 지도 화면과
@@ -3685,24 +3737,36 @@ function CourseDetail({ id }: { id: string }) {
           fitPathKey={
             placeSearchOpen
               ? null
-              : dayGuideMode && dayGuidePath && !dayGuideLoading
-                ? `guide-${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}-${dayGuideSelectedRouteId}`
-                : mapMarkers.length > 0
-                  ? `course-${id}-${mapMarkers.length}-${mapResetNonce}`
-                  : null
+              : placeRouteActive && routeGuide && !routeGuide.loading
+                ? `place-route-${routeGuide.mode}-${routeGuide.distanceM ?? "x"}-${selectedRouteId}-${routePath.length}`
+                : dayGuideMode && dayGuidePath && !dayGuideLoading
+                  ? `guide-${activeDay}-${dayGuideMode}-${dayGuideDistanceM ?? "x"}-${dayGuideSelectedRouteId}`
+                  : mapMarkers.length > 0
+                    ? `course-${id}-${mapMarkers.length}-${mapResetNonce}`
+                    : null
           }
           pathSummary={
-            dayGuideMode &&
-            dayGuidePath &&
-            !dayGuideLoading &&
-            dayGuideDistanceM != null &&
-            dayGuideDurationSec != null
+            placeRouteActive &&
+            routeGuide &&
+            !routeGuide.loading &&
+            routeGuide.distanceM != null &&
+            routeGuide.durationSec != null
               ? {
-                  distanceM: dayGuideDistanceM,
-                  durationSec: dayGuideDurationSec,
-                  tollFare: dayGuideTollFare ?? 0
+                  distanceM: routeGuide.distanceM,
+                  durationSec: routeGuide.durationSec,
+                  tollFare: routeGuide.tollFare ?? 0
                 }
-              : null
+              : dayGuideMode &&
+                  dayGuidePath &&
+                  !dayGuideLoading &&
+                  dayGuideDistanceM != null &&
+                  dayGuideDurationSec != null
+                ? {
+                    distanceM: dayGuideDistanceM,
+                    durationSec: dayGuideDurationSec,
+                    tollFare: dayGuideTollFare ?? 0
+                  }
+                : null
           }
           bottomOverlayPx={mapBottomOverlayPx}
           myLocation={myLocation}
@@ -3763,6 +3827,7 @@ function CourseDetail({ id }: { id: string }) {
                     return;
                   }
                   if (dayGuideMode) clearDayGuide();
+                  handleDismissRoute();
                   setSelectedSearchPlace(null);
                   setMapResetNonce((n) => n + 1);
                 }}

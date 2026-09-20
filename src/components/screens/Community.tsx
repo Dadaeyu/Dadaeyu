@@ -38,6 +38,7 @@ import { COMMUNITY_DEFAULT_PAGE_SIZE, COMMUNITY_PAGE_SIZES } from "@/lib/paginat
 import { ListPagination } from "@/components/community/ListPagination";
 import { useOptionalAuth } from "@/context/AuthContext";
 import { requireLoginOrRedirect } from "@/lib/auth/require-login-redirect";
+import { buildCourseHrefFromCommunityPost } from "@/lib/navigation/returnPath";
 import { CommunityLevelBadge } from "@/components/community/CommunityLevelBadge";
 import {
   CommunityBoardList,
@@ -2061,7 +2062,11 @@ function CommunityDetail({ id }: { id: string }) {
           )}
           {post.attached_course && (
             <button
-              onClick={() => router.push(`/course/${post.attached_course!.course_id}`)}
+              onClick={() =>
+                router.push(
+                  buildCourseHrefFromCommunityPost(post.attached_course!.course_id, post.id)
+                )
+              }
               aria-label={`첨부된 코스, ${post.attached_course.course_nm}${
                 post.course_rating != null ? `, 별점 ${post.course_rating}점` : ""
               }, 코스 상세보기`}

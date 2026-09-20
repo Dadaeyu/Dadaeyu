@@ -11,12 +11,6 @@ type CourseRow = {
   open_yn: string | null;
 };
 
-function formatCoursePeriod(start: string | null, end: string | null): string | null {
-  if (!start && !end) return null;
-  if (start && end) return `${start} ~ ${end}`;
-  return start ?? end;
-}
-
 /** 내 코스 좋아요: tb_course_like → tb_course (2단계, 최신순) */
 export async function fetchMyCourseLikes(userId: string): Promise<LikedCourse[]> {
   const supabase = createClient();
@@ -62,4 +56,4 @@ export async function fetchMyCourseLikes(userId: string): Promise<LikedCourse[]>
   return result;
 }
 
-export { formatCoursePeriod };
+export { formatCoursePeriod } from "./course-period";

@@ -36,7 +36,7 @@ export function buildPeriodLabel(start: string | null, end: string | null): stri
   return "";
 }
 
-import { isEndBeforeStart } from "@/lib/date-range";
+import { isEndBeforeStart } from "../date-range.ts";
 
 /** date input 값(YYYY-MM-DD) 검증. 빈 값은 null */
 export function normalizeEventDate(value: string | null | undefined): string | null {
