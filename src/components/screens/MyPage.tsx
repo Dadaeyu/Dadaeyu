@@ -5,7 +5,8 @@ import { Heart, MapPin, Route, FileText, Pencil, Settings } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { fetchMyPlaceLikes } from "@/lib/supabase/place-likes";
-import { fetchMyCourseLikes, formatCoursePeriod } from "@/lib/supabase/course-likes";
+import { fetchMyCourseLikes } from "@/lib/supabase/course-likes";
+import { formatCoursePeriod } from "@/lib/supabase/course-period";
 import { fetchMyCourses, courseDurationLabel, isCoursePublic } from "@/lib/supabase/courses";
 import { fetchMyReports, REPORT_STATUS_LABELS } from "@/lib/supabase/reports";
 import { fetchMyPosts } from "@/lib/supabase/community";
@@ -121,10 +122,10 @@ export default function MyPage() {
               <h2 className="text-ink text-xl font-bold">{member?.nickname ?? "회원"}</h2>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 <span className="bg-surface text-steel rounded-full px-2 py-0.5 text-xs">
-                  {gender}
+                  성별 {gender}
                 </span>
                 <span className="bg-surface text-steel rounded-full px-2 py-0.5 text-xs">
-                  {age}
+                  나이대 {age}
                 </span>
               </div>
             </div>

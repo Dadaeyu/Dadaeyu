@@ -11,13 +11,8 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { LocateFixed, X, MoreVertical, Palette, RotateCcw, ZoomIn, Check } from "lucide-react";
 import { useFilters } from "@/components/PlaceFilters";
-import KakaoMap, { type MapMarker, type MapPathSegment } from "@/components/KakaoMap";
+import KakaoMap, { type MapMarker } from "@/components/KakaoMap";
 import PlaceSearchSidebar from "@/components/search/PlaceSearchSidebar";
-import {
-  type PlaceRouteGuideState,
-  type RouteOriginPhase,
-  type RouteOriginPlace
-} from "@/components/search/TourismDetailPanel";
 import {
   getCategoryColor,
   LCLSSYSTM1_COLORS,
@@ -28,14 +23,8 @@ import { useMyLocation, type MyLocationErrorReason } from "@/hooks/useMyLocation
 import { useLockBodyScroll } from "@/hooks/useLockBodyScroll";
 import { getMapRenderPlaces } from "@/lib/search/mapDeepLinkState";
 import { parseCourseReturnPath } from "@/lib/search/mapRouteHref";
-import {
-  fetchDirections,
-  openKakaoMapRoute,
-  pickRouteOption,
-  buildRoutePathFromOption,
-  type RouteMode,
-  type RouteOption
-} from "@/lib/kakao/directions";
+import { openKakaoMapRoute, type RouteMode } from "@/lib/kakao/directions";
+import { usePlaceRouteGuide } from "@/hooks/usePlaceRouteGuide";
 import RouteOptionPicker from "@/components/search/RouteOptionPicker";
 import TrafficLegend from "@/components/search/TrafficLegend";
 import {
@@ -361,61 +350,26 @@ export default function Map() {
     }
   };
 
-  const [routePath, setRoutePath] = useState<MapPathSegment[]>([]);
-  const [routeGuide, setRouteGuide] = useState<PlaceRouteGuideState | null>(null);
-  const [routeStops, setRouteStops] = useState<
-    { lat: number; lng: number; name?: string }[] | null
-  >(null);
-  const routeOptionsRef = useRef<RouteOption[] | null>(null);
-  const [selectedRouteId, setSelectedRouteId] = useState("0");
-  const routeRequestIdRef = useRef(0);
-  const [routeOrigin, setRouteOrigin] = useState<RouteOriginPlace | null>(null);
-  const [routeOriginPhase, setRouteOriginPhase] = useState<RouteOriginPhase>("idle");
-
-  const handleSelectRoute = (id: string) => {
-    const options = routeOptionsRef.current;
-    if (!options) return;
-    const opt = options.find((r) => r.id === id);
-    if (!opt) return;
-    setSelectedRouteId(id);
-    setRoutePath([
-      buildRoutePathFromOption(
-        opt,
-        routeGuide?.mode ?? "car",
-        routeGuide?.mode === "walk" ? "#0d9488" : "#2563eb"
-      )
-    ]);
-    setRouteGuide((prev) =>
-      prev
-        ? {
-            ...prev,
-            distanceM: opt.distanceM,
-            durationSec: opt.durationSec,
-            tollFare: opt.tollFare,
-            selectedRouteId: id,
-            showTrafficLegend:
-              prev.mode === "car" && !opt.fallback && Boolean(opt.trafficChunks?.length)
-          }
-        : prev
-    );
-  };
-
-  const clearRouteGuide = () => {
-    routeRequestIdRef.current += 1;
-    routeOptionsRef.current = null;
-    setSelectedRouteId("0");
-    setRouteGuide(null);
-    setRoutePath([]);
-    setRouteStops(null);
-  };
-
-  const handleBeginRoute = () => {
+  const expandRouteSheet = () => {
     setSheetDragPct(null);
     setMobileSheetSnap((snap) => (snap === "peek" ? "half" : snap));
-    if (routeOriginPhase === "searching") return;
-    clearRouteGuide();
-    setRouteOriginPhase(routeOrigin ? "picked" : "searching");
   };
+
+  const {
+    routePath,
+    routeGuide,
+    routeStops,
+    routeOrigin,
+    routeOriginPhase,
+    selectedRouteId,
+    handleBeginRoute,
+    handlePickOrigin,
+    handleChangeOrigin,
+    handleDismissRoute,
+    handleStartRoute,
+    clearRouteGuide,
+    setRouteOriginPhase
+  } = usePlaceRouteGuide({ onExpandSheet: expandRouteSheet });
 
   useEffect(() => {
     if (!startRouteOnLoadRef.current) return;
@@ -425,111 +379,15 @@ export default function Map() {
     setSheetDragPct(null);
     setMobileSheetSnap((snap) => (snap === "peek" ? "half" : snap));
     setRouteOriginPhase("searching");
-  }, [initialContentId, searchDetail]);
+  }, [initialContentId, searchDetail, setRouteOriginPhase]);
 
-  const handlePickOrigin = (place: RouteOriginPlace) => {
-    setRouteOrigin(place);
-    setRouteOriginPhase("picked");
-    setSheetDragPct(null);
-    setMobileSheetSnap((snap) => (snap === "peek" ? "half" : snap));
-  };
-
-  const handleChangeOrigin = () => {
-    clearRouteGuide();
-    setRouteOriginPhase("searching");
-    setSheetDragPct(null);
-    setMobileSheetSnap((snap) => (snap === "peek" ? "half" : snap));
-  };
-
-  const handleDismissRoute = () => {
-    clearRouteGuide();
-    setRouteOriginPhase("idle");
-  };
-
-  const applyDirectionsResult = (
-    result: Awaited<ReturnType<typeof fetchDirections>>,
-    mode: RouteMode,
-    stops: { lat: number; lng: number; name?: string }[],
-    onOpenKakao: () => void
-  ) => {
-    const options = result.routes?.length ? result.routes : [pickRouteOption(result)];
-    const multi = options.length > 1 ? options : null;
-    routeOptionsRef.current = multi;
-    const primary = pickRouteOption(result, "0");
-    setSelectedRouteId(primary.id);
-    setRoutePath([
-      buildRoutePathFromOption(primary, mode, mode === "walk" ? "#0d9488" : "#2563eb")
-    ]);
-    const showTrafficLegend =
-      mode === "car" && !result.fallback && Boolean(primary.trafficChunks?.length);
-    setRouteGuide({
-      mode,
-      loading: false,
-      error: result.fallback ? "대략 경로예요. 정확한 안내는 카카오맵에서 시작하세요." : null,
-      distanceM: primary.distanceM,
-      durationSec: primary.durationSec,
-      tollFare: primary.tollFare,
-      routeOptions: multi,
-      selectedRouteId: primary.id,
-      onSelectRoute: handleSelectRoute,
-      showTrafficLegend,
-      onOpenKakao,
-      onClear: clearRouteGuide
-    });
-  };
-
-  const handleStartRoute = async (mode: RouteMode) => {
+  const startPlaceRoute = (mode: RouteMode) => {
     if (!searchDetail) return;
-    if (!routeOrigin) {
-      setRouteOriginPhase("searching");
-      return;
-    }
-
-    const origin = {
-      lat: routeOrigin.lat,
-      lng: routeOrigin.lng,
-      name: routeOrigin.name
-    };
-    const destination = {
+    void handleStartRoute(mode, {
       lat: searchDetail.lat,
       lng: searchDetail.lng,
       name: searchDetail.name
-    };
-    const stops = [origin, destination];
-    const requestId = ++routeRequestIdRef.current;
-    setRouteStops(stops);
-    setRouteGuide({
-      mode,
-      loading: true,
-      error: null,
-      distanceM: null,
-      durationSec: null,
-      onOpenKakao: () => openKakaoMapRoute(stops, mode),
-      onClear: clearRouteGuide
     });
-
-    try {
-      const result = await fetchDirections({ origin, destination, mode });
-      if (requestId !== routeRequestIdRef.current) return;
-      applyDirectionsResult(result, mode, stops, () => openKakaoMapRoute(stops, mode));
-    } catch (e) {
-      if (requestId !== routeRequestIdRef.current) return;
-      routeOptionsRef.current = null;
-      setSelectedRouteId("0");
-      setRoutePath([{ points: stops, color: "#94a3b8", dashed: true }]);
-      setRouteGuide({
-        mode,
-        loading: false,
-        error:
-          e instanceof Error
-            ? `${e.message} 카카오맵으로 안내할 수 있어요.`
-            : "경로 미리보기에 실패했어요. 카카오맵으로 안내할 수 있어요.",
-        distanceM: null,
-        durationSec: null,
-        onOpenKakao: () => openKakaoMapRoute(stops, mode),
-        onClear: clearRouteGuide
-      });
-    }
   };
 
   const activeFilterCount = activeCount;
@@ -653,7 +511,7 @@ export default function Map() {
             isLoadingDetail={isLoadingDetail}
             onBackFromDetail={backFromDetail}
             onLikeChange={refreshLiked}
-            onStartRoute={handleStartRoute}
+            onStartRoute={startPlaceRoute}
             onBeginRoute={handleBeginRoute}
             routeOrigin={routeOrigin}
             routeOriginPhase={routeOriginPhase}

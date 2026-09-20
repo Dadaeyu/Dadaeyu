@@ -1,5 +1,5 @@
 import type { TourismMyCourse, TourismSharedCourse } from "./types";
-import { formatCoursePeriod } from "./course-likes";
+import { formatCoursePeriod } from "./course-period";
 
 /** 내가 만든 코스 — 서버 API 경유 (tb_course RLS 우회·세션 검증) */
 export async function fetchMyCourses(_userId?: string): Promise<TourismMyCourse[]> {
