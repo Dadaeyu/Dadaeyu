@@ -12,7 +12,7 @@ import {
 } from "./homeBackExit.ts";
 
 function createFakeWindow() {
-  const listeners = new Set<(event: PopStateEvent) => void>();
+  const listeners = new Map<(event: PopStateEvent) => void, boolean>();
   const fakeLocation = {
     href: "https://dadaeyu.vercel.app/",
     pathname: "/"
@@ -43,15 +43,27 @@ function createFakeWindow() {
       back() {}
     },
     confirm: () => false,
-    addEventListener(_type: "popstate", listener: (event: PopStateEvent) => void) {
-      listeners.add(listener);
+    close() {},
+    addEventListener(_type: "popstate", listener: (event: PopStateEvent) => void, capture = false) {
+      listeners.set(listener, capture);
     },
     removeEventListener(_type: "popstate", listener: (event: PopStateEvent) => void) {
       listeners.delete(listener);
     },
     dispatchPopState(nextState: unknown) {
-      const event = { state: nextState } as PopStateEvent;
-      for (const listener of [...listeners]) listener(event);
+      state = nextState;
+      let stopped = false;
+      const event = {
+        state: nextState,
+        stopImmediatePropagation: () => {
+          stopped = true;
+        }
+      } as PopStateEvent;
+      for (const [listener] of [...listeners].sort((a, b) => Number(b[1]) - Number(a[1]))) {
+        if (stopped) break;
+        listener(event);
+      }
+      return stopped;
     }
   };
 
@@ -222,5 +234,149 @@ test("home back exit guard does not intercept back after leaving home", () => {
   window.dispatchPopState(null);
 
   assert.equal(confirmCount, 0);
+  cleanup();
+});
+
+function createNavigationWindow(firstIndex = 0) {
+  const window = createFakeWindow();
+  const entries = [
+    ...(firstIndex > 0 ? [{ index: 0, key: "previous-document", sameDocument: false }] : []),
+    { index: firstIndex, key: "first", sameDocument: true },
+    { index: 8, key: "home", sameDocument: true },
+    { index: 9, key: "sentinel", sameDocument: true }
+  ];
+  const navigation = { currentEntry: entries[entries.length - 2], entries: () => entries };
+  Object.assign(window, { navigation });
+  const steps: number[] = [];
+  window.history.go = (delta = 0) => {
+    steps.push(delta);
+  };
+  window.confirm = () => true;
+  return { window, navigation, steps, entries };
+}
+
+const guardOptions = {
+  pathname: "/",
+  standalone: true,
+  userAgent: "Android",
+  confirmMessage: "앱을 종료하시겠습니까?"
+};
+
+test("종료 확인 후 이전 화면들을 건너뛰고 홈의 Next 상태를 첫 기록에 보존한다", () => {
+  const { window, navigation, steps, entries } = createNavigationWindow();
+  const homeState = { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: { route: "/" } };
+  let nextRestores = 0;
+  let readyCount = 0;
+  window.addEventListener("popstate", () => {
+    nextRestores += 1;
+  });
+  const cleanup = installHomeBackExitGuard({
+    window,
+    ...guardOptions,
+    onExitFallback: () => {
+      readyCount += 1;
+    }
+  });
+  window.dispatchPopState(homeState);
+  assert.deepEqual(steps, [-8]);
+  assert.equal(readyCount, 0);
+
+  navigation.currentEntry = entries[0];
+  window.history.replaceState({ __NA: true, route: "/course" }, "", "/course");
+  assert.equal(window.dispatchPopState(window.history.state), true);
+  assert.equal(window.location.pathname, "/");
+  assert.deepEqual(window.history.state, homeState);
+  assert.equal(nextRestores, 1, "Next must not restore the old course after confirmation");
+  assert.equal(readyCount, 1);
+  cleanup();
+});
+
+test("이전 문서나 앞으로 가기 기록을 포함한 history.length로 과도하게 이동하지 않는다", () => {
+  const { window, steps } = createNavigationWindow(3);
+  Object.defineProperty(window.history, "length", { value: 30 });
+  const cleanup = installHomeBackExitGuard({ window, ...guardOptions });
+  window.dispatchPopState(null);
+  assert.deepEqual(steps, [-5]);
+  cleanup();
+});
+
+test("이미 첫 기록이면 새로고침하거나 가드를 다시 쌓지 않고 추가 뒤로가기를 안내한다", () => {
+  const { window, navigation, entries, steps } = createNavigationWindow();
+  navigation.currentEntry = entries[0];
+  let readyCount = 0;
+  const cleanup = installHomeBackExitGuard({
+    window,
+    ...guardOptions,
+    onExitFallback: () => {
+      readyCount += 1;
+    }
+  });
+  window.dispatchPopState(null);
+  assert.deepEqual(steps, []);
+  assert.equal(readyCount, 1);
+  assert.equal(hasHomeExitGuardState(window.history.state), false);
+  cleanup();
+});
+
+test("창 닫기를 지원하면 추가 기록 이동과 안내를 하지 않는다", () => {
+  const { window, steps } = createNavigationWindow();
+  let closeCount = 0;
+  window.close = () => {
+    closeCount += 1;
+    Object.defineProperty(window, "closed", { value: true });
+  };
+  let readyCount = 0;
+  const cleanup = installHomeBackExitGuard({
+    window,
+    ...guardOptions,
+    onExitFallback: () => {
+      readyCount += 1;
+    }
+  });
+  window.dispatchPopState(null);
+  assert.equal(closeCount, 1);
+  assert.deepEqual(steps, []);
+  assert.equal(readyCount, 0);
+  cleanup();
+});
+
+test("종료 기록 이동을 기다리다가 해제되면 나중의 popstate를 가로채지 않는다", () => {
+  const { window, navigation, entries } = createNavigationWindow();
+  const cleanup = installHomeBackExitGuard({ window, ...guardOptions });
+  window.dispatchPopState(null);
+  cleanup();
+  navigation.currentEntry = entries[0];
+  assert.equal(window.dispatchPopState(null), false);
+});
+
+test("종료 대상으로 지정하지 않은 기록으로 이동하면 해당 탐색을 가로채지 않는다", () => {
+  const { window } = createNavigationWindow();
+  let readyCount = 0;
+  const cleanup = installHomeBackExitGuard({
+    window,
+    ...guardOptions,
+    onExitFallback: () => {
+      readyCount += 1;
+    }
+  });
+  window.dispatchPopState(null);
+  assert.equal(window.dispatchPopState(null), false);
+  assert.equal(readyCount, 0);
+  cleanup();
+});
+
+test("종료를 반복해서 취소해도 매번 확인하고 홈 가드를 복원한다", () => {
+  const window = createFakeWindow();
+  let confirms = 0;
+  window.confirm = () => {
+    confirms += 1;
+    return false;
+  };
+  const cleanup = installHomeBackExitGuard({ window, ...guardOptions });
+  for (let index = 0; index < 3; index += 1) {
+    window.dispatchPopState(null);
+    assert.equal(hasHomeExitGuardState(window.history.state), true);
+  }
+  assert.equal(confirms, 3);
   cleanup();
 });
