@@ -66,20 +66,65 @@ export function closeTopHomeOverlay(document: Document): boolean {
   return true;
 }
 
+type AppNavigation = {
+  currentEntry: { index: number; key: string } | null;
+  entries(): { index: number; key: string; sameDocument: boolean }[];
+};
+
+function exitAppHistory(window: Window, onExitFallback: () => void): () => void {
+  window.close();
+  if (window.closed) return () => {};
+
+  const navigation = (window as Window & { navigation?: AppNavigation }).navigation;
+  const current = navigation?.currentEntry;
+  const first = navigation?.entries().find((entry) => entry.sameDocument);
+  if (!current || !first || first.index > current.index) {
+    // Older browsers retain their native back behavior.
+    window.history.back();
+    return () => {};
+  }
+
+  if (first.index === current.index) {
+    onExitFallback();
+    return () => {};
+  }
+
+  const homeUrl = window.location.href;
+  const homeState = window.history.state;
+  const cleanup = () => window.removeEventListener("popstate", onExitPopState, true);
+  const onExitPopState = (event: PopStateEvent) => {
+    cleanup();
+    if (navigation.currentEntry?.key !== first.key) return;
+    // Keep Next from restoring an old route while clearing the app's back stack.
+    // The original Home state includes Next's router tree and must stay intact.
+    event.stopImmediatePropagation();
+    window.history.replaceState(homeState, "", homeUrl);
+    onExitFallback();
+  };
+
+  window.addEventListener("popstate", onExitPopState, true);
+  // length includes forward entries, so -history.length can overshoot and do nothing.
+  window.history.go(first.index - current.index);
+  return cleanup;
+}
+
 export function installHomeBackExitGuard({
   window,
   pathname,
   standalone,
   userAgent,
-  confirmMessage
+  confirmMessage,
+  onExitFallback = () => {}
 }: {
   window: Window;
   pathname: string;
   standalone: boolean;
   userAgent: string;
   confirmMessage: string;
+  onExitFallback?: () => void;
 }): () => void {
   if (!shouldEnableHomeExitGuard({ pathname, standalone, userAgent })) return () => {};
+  let cleanupExit = () => {};
 
   const pushGuardState = () => {
     if (hasHomeExitGuardState(window.history.state)) return;
@@ -109,7 +154,7 @@ export function installHomeBackExitGuard({
 
     if (window.confirm(confirmMessage)) {
       window.removeEventListener("popstate", onPopState);
-      window.history.back();
+      cleanupExit = exitAppHistory(window, onExitFallback);
       return;
     }
 
@@ -121,5 +166,6 @@ export function installHomeBackExitGuard({
 
   return () => {
     window.removeEventListener("popstate", onPopState);
+    cleanupExit();
   };
 }
