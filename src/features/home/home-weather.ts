@@ -203,9 +203,18 @@ export function isFreshDaejeonCurrentWeatherCondition(
   now = new Date()
 ) {
   if (!/대전/u.test(condition.area)) return false;
-  const match = condition.observedAt.match(/^(\d{4})-(\d{2})-(\d{2}) \d{2}시$/u);
+  const match = condition.observedAt.match(/^(\d{4}-\d{2}-\d{2}) (\d{2})시$/u);
   if (!match) return false;
-  return `${match[1]}${match[2]}${match[3]}` === formatKoreanDate(now);
+  const koreanHour = `${match[1]}T${match[2]}`;
+  const observedAt = Date.parse(`${koreanHour}:00:00+09:00`);
+  if (!Number.isFinite(observedAt)) return false;
+  // Reject normalized invalid dates such as February 30.
+  if (new Date(observedAt + 9 * 60 * 60 * 1000).toISOString().slice(0, 13) !== koreanHour) {
+    return false;
+  }
+  // Allow the previous hourly observation plus API/cache delivery time, across midnight.
+  const age = now.getTime() - observedAt;
+  return age >= 0 && age <= 2 * 60 * 60 * 1000;
 }
 
 function isDaejeonWeatherItem(item: HomeWeatherItem) {
