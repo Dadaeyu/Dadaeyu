@@ -447,6 +447,21 @@ test("단차나 턱이 없다는 설명은 이용 가능한 근거로 구분한�
   );
 });
 
+test("단차 없음과 함께 이용 불가나 확인 필요가 명시되면 추천에서 제외한다", () => {
+  for (const [value, status] of [
+    ["단차가 없습니다. 휠체어 이용 불가", "unavailable"],
+    ["단차가 없습니다. 휠체어 이용 가능 여부 확인 필요", "unknown"]
+  ] as const) {
+    const place: HomePlace = {
+      ...basePlace,
+      accessibility: [{ key: "route", label: "접근로", value }]
+    };
+
+    assert.equal(getHomeEvidenceStatus(place.accessibility[0]), status, value);
+    assert.deepEqual(rankHomePlaces([place], ["step_free"]), [], value);
+  }
+});
+
 test("문의나 확인 요청만 있는 안내는 이용 가능 근거로 보지 않는다", () => {
   for (const value of ["전화 문의", "방문 전 문의", "확인 요망", "시설 정보 불명"]) {
     assert.equal(

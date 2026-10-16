@@ -2,9 +2,16 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { T } from "@/lib/supabase/tables";
-import type { TourismCoursePlace, TourismSharedCourse } from "@/lib/supabase/types";
+import type {
+  CourseAccessibilityPlaceStatus,
+  CourseAccessibilitySummary,
+  TourismCoursePlace,
+  TourismSharedCourse
+} from "@/lib/supabase/types";
 import { getBakeryPlaceIds, splitThemeSelection, BAKERY_THEME_CODE } from "@/lib/theme/bakeryTheme";
-import { normalizeContentIds } from "@/lib/chat/discoveryLinks";
+import { normalizeAccessibilityNeeds, normalizeContentIds } from "@/lib/chat/discoveryLinks";
+import { evaluateAccessibilityNeeds } from "@/lib/chat/accessibilityEvidence";
+import { BF_FIELDS } from "@/lib/place/accessibilityFields";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +50,18 @@ type MemberRow = {
   id: string;
   nickname: string | null;
   role: string | null;
+};
+
+type BarrierFreeFlags = {
+  has_blind: boolean;
+  has_deaf: boolean;
+  has_gait: boolean;
+  has_infant: boolean;
+};
+
+type BarrierFreeDetail = BarrierFreeFlags & {
+  contentid: string;
+  [key: string]: string | boolean | null;
 };
 
 function isActiveFlag(yn: string | null | undefined): boolean {
@@ -374,6 +393,75 @@ function resolveSort(sortParam: string | null): { field: CourseSortField; ascend
   }
 }
 
+function buildCourseAccessibilitySummary({
+  courseId,
+  detailRows,
+  placeMap,
+  barrierFreeByContentId,
+  needs,
+  lookupFailed = false
+}: {
+  courseId: number;
+  detailRows: DetailRow[];
+  placeMap: Map<number, PlaceRow>;
+  barrierFreeByContentId: Map<string, BarrierFreeDetail>;
+  needs: string[];
+  lookupFailed?: boolean;
+}): CourseAccessibilitySummary | undefined {
+  if (!needs.length) return undefined;
+
+  const courseDetails = detailRows.filter((detail) => detail.course_id === courseId);
+  const places = courseDetails.map((detail) => {
+    const candidate = detail.place_id == null ? undefined : placeMap.get(detail.place_id);
+    const place = candidate && isActiveFlag(candidate.delete_yn) ? candidate : undefined;
+    const contentId = place?.contentid || null;
+    const barrierFree = contentId ? barrierFreeByContentId.get(contentId) : undefined;
+    const evidence = barrierFree
+      ? evaluateAccessibilityNeeds({ metadata: { accessibility: barrierFree } }, needs)
+      : [];
+    const matchedNeeds = evidence
+      .filter((item) => item.status === "confirmed")
+      .map((item) => item.need);
+    const restrictedNeeds = evidence
+      .filter((item) => item.status === "restricted")
+      .map((item) => item.need);
+    const unknownNeeds = needs.filter(
+      (need) => !matchedNeeds.includes(need) && !restrictedNeeds.includes(need)
+    );
+    const status: CourseAccessibilityPlaceStatus["status"] =
+      restrictedNeeds.length > 0
+        ? "restricted"
+        : matchedNeeds.length === needs.length
+          ? "confirmed"
+          : "unknown";
+
+    return {
+      place_id: detail.place_id,
+      title: place?.title?.trim() || "장소 정보 없음",
+      status,
+      matchedNeeds,
+      unknownNeeds,
+      restrictedNeeds
+    };
+  });
+  const confirmedPlaceCount = places.filter((place) => place.status === "confirmed").length;
+  const unknownPlaceCount = places.filter((place) => place.status === "unknown").length;
+  const restrictedPlaceCount = places.filter((place) => place.status === "restricted").length;
+
+  return {
+    dataStatus: lookupFailed ? "unavailable" : "ready",
+    needs,
+    totalPlaceCount: places.length,
+    confirmedPlaceCount,
+    unknownPlaceCount,
+    restrictedPlaceCount,
+    note: lookupFailed
+      ? "접근성 자료를 불러오지 못해 조건을 확인하지 못했어요. 잠시 뒤 다시 확인해 주세요."
+      : "공개된 장소별 무장애 상세 정보 기준이며, 장소 사이 이동 경로의 무장애 여부를 보장하지 않습니다.",
+    places
+  };
+}
+
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 
@@ -396,6 +484,9 @@ export async function GET(request: Request) {
     const dateTo = (url.searchParams.get("dateTo") ?? "").trim();
     const minRating = Number(url.searchParams.get("minRating") ?? "0");
     const contentIds = normalizeContentIds((url.searchParams.get("contentIds") ?? "").split(","));
+    const evidenceNeeds = normalizeAccessibilityNeeds(
+      (url.searchParams.get("needs") ?? "").split(",")
+    );
     const mine = url.searchParams.get("mine") === "1";
     const { field: sortField, ascending: sortAscending } = resolveSort(
       url.searchParams.get("sort")
@@ -603,6 +694,7 @@ export async function GET(request: Request) {
     ];
 
     const placeMap = new Map<number, PlaceRow>();
+    const allPlaceMap = new Map<number, PlaceRow>();
     if (placeIds.length > 0) {
       const { data: places, error: placesError } = await admin
         .from(T.place)
@@ -610,6 +702,7 @@ export async function GET(request: Request) {
         .in("place_id", placeIds);
       if (placesError) throw placesError;
       for (const p of (places ?? []) as PlaceRow[]) {
+        allPlaceMap.set(p.place_id, p);
         if (!isActiveFlag(p.delete_yn)) continue;
         placeMap.set(p.place_id, p);
       }
@@ -683,29 +776,36 @@ export async function GET(request: Request) {
 
     const allContentIds = [
       ...new Set(
-        [...placeMap.values()]
+        [...allPlaceMap.values()]
           .map((p) => (p.contentid != null && p.contentid !== "" ? p.contentid : null))
           .filter((v): v is string => v != null)
       )
     ];
-    const bfFlagsByContentId = new Map<
-      string,
-      { has_blind: boolean; has_deaf: boolean; has_gait: boolean; has_infant: boolean }
-    >();
+    const bfFlagsByContentId = new Map<string, BarrierFreeFlags>();
+    const barrierFreeByContentId = new Map<string, BarrierFreeDetail>();
+    let evidenceLookupFailed = false;
     if (allContentIds.length > 0) {
       const { data: bfRows, error: bfErr } = await admin
         .from("tb_place_barrierfree")
         .select("contentid, has_blind, has_deaf, has_gait, has_infant")
         .in("contentid", allContentIds);
       if (bfErr) throw bfErr;
-      for (const b of (bfRows ?? []) as {
-        contentid: string;
-        has_blind: boolean;
-        has_deaf: boolean;
-        has_gait: boolean;
-        has_infant: boolean;
-      }[]) {
+      for (const b of (bfRows ?? []) as Array<BarrierFreeFlags & { contentid: string }>) {
         bfFlagsByContentId.set(b.contentid, b);
+      }
+
+      if (evidenceNeeds.length > 0) {
+        const { data: bfDetailRows, error: bfDetailErr } = await admin
+          .from("tb_place_barrierfree")
+          .select(["contentid", ...BF_FIELDS].join(","))
+          .in("contentid", allContentIds);
+        if (!bfDetailErr) {
+          for (const b of (bfDetailRows ?? []) as unknown as BarrierFreeDetail[]) {
+            barrierFreeByContentId.set(b.contentid, b);
+          }
+        } else {
+          evidenceLookupFailed = true;
+        }
       }
     }
 
@@ -734,7 +834,7 @@ export async function GET(request: Request) {
         badgeCounts.set(label, (badgeCounts.get(label) ?? 0) + 1);
       };
       for (const pid of placeIdsByCourse.get(c.course_id) ?? []) {
-        const place = placeMap.get(pid);
+        const place = allPlaceMap.get(pid);
         if (!place) continue;
         if (place.lclssystm1) bump(themeLabelByCode.get(place.lclssystm1));
         if (bakeryPlaceIdSet.has(pid)) bump(themeLabelByCode.get(BAKERY_THEME_CODE));
@@ -750,6 +850,15 @@ export async function GET(request: Request) {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)
         .map(([label]) => label);
+
+      const accessibilitySummary = buildCourseAccessibilitySummary({
+        courseId: c.course_id,
+        detailRows,
+        placeMap: allPlaceMap,
+        barrierFreeByContentId,
+        needs: evidenceNeeds,
+        lookupFailed: evidenceLookupFailed
+      });
 
       return {
         course_id: c.course_id,
@@ -771,7 +880,8 @@ export async function GET(request: Request) {
           .filter((v): v is string => !!v),
         hashtags,
         author_nickname: member?.nickname?.trim() || "여행자",
-        author_role: member?.role ?? null
+        author_role: member?.role ?? null,
+        ...(accessibilitySummary ? { accessibilitySummary } : {})
       };
     });
 

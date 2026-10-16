@@ -96,6 +96,26 @@ export interface TourismCoursePlace {
   contentid: string | null;
 }
 
+export interface CourseAccessibilityPlaceStatus {
+  place_id: number | null;
+  title: string;
+  status: "confirmed" | "unknown" | "restricted";
+  matchedNeeds: string[];
+  unknownNeeds: string[];
+  restrictedNeeds: string[];
+}
+
+export interface CourseAccessibilitySummary {
+  dataStatus?: "ready" | "unavailable";
+  needs: string[];
+  totalPlaceCount: number;
+  confirmedPlaceCount: number;
+  unknownPlaceCount: number;
+  restrictedPlaceCount: number;
+  note: string;
+  places: CourseAccessibilityPlaceStatus[];
+}
+
 /** 내가 만든 코스 (tb_course.register = auth.uid) */
 export interface TourismMyCourse {
   course_id: number;
@@ -120,6 +140,7 @@ export interface TourismSharedCourse extends TourismMyCourse {
   hashtags: string[]; // 테마+접근성 종합 상위 3개(표시용, "내 코스" 카드와 동일 로직)
   author_nickname: string;
   author_role: string | null;
+  accessibilitySummary?: CourseAccessibilitySummary;
 }
 
 /** @deprecated 원격에는 tb_courses 없음 — TourismMyCourse 사용 */

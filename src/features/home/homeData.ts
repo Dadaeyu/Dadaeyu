@@ -808,15 +808,17 @@ export function getHomeEvidenceStatus(
   if (!value) return "unknown";
 
   const safeAbsence =
-    /(단차|턱|높이\s*차이|계단)\s*(?:가|이)?\s*(?:0\s*(?:cm|㎝)?|없(?:음|습니다|다|어|으며|고))/u;
-  if (safeAbsence.test(value)) return "available";
+    /(단차|턱|높이\s*차이|계단)\s*(?:가|이)?\s*(?:0\s*(?:cm|㎝)?|없(?:음|습니다|다|어|으며|고))/gu;
+  const remainingValue = value.replace(safeAbsence, " ");
 
   const negative =
     /(미설치|미제공|운영하지|지원하지|이용\s*(?:이\s*)?불가|접근\s*(?:이\s*)?불가|진입\s*(?:이\s*)?불가|확인\s*(?:이\s*)?불가|이용하기\s*어려|접근하기\s*어려|없(?:음|습니다|다)|설치되어\s*있지|마련되어\s*있지)/u;
-  if (negative.test(value)) return "unavailable";
+  if (negative.test(remainingValue)) return "unavailable";
 
   const uncertain = /(미확인|확인\s*(?:필요|요망)|문의|알\s*수\s*없|불명|미정|정보\s*(?:없|부족))/u;
-  if (uncertain.test(value)) return "unknown";
+  if (uncertain.test(remainingValue)) return "unknown";
+
+  if (remainingValue !== value) return "available";
 
   const positive =
     /(접근\s*가능|진입\s*가능|이용\s*가능|대여\s*가능|설치|구비|비치|보유|완비|마련|경사로|승강기|엘리베이터|장애인\s*(?:전용\s*)?(?:화장실|주차)|있(?:음|습니다|다))/u;

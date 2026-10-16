@@ -10,7 +10,11 @@ import {
   resolveRequestedRecommendationLimit,
   selectDiverseItems
 } from "@/lib/chat/recommendationDiversity";
-import { filterRowsByAccessibilityEvidence } from "@/lib/chat/accessibilityEvidence";
+import {
+  evaluateAccessibilityNeeds,
+  filterRowsByAccessibilityEvidence,
+  type AccessibilityNeedEvidence
+} from "@/lib/chat/accessibilityEvidence";
 import {
   formatChatAccessibilityText,
   formatChatDisplayText,
@@ -56,6 +60,7 @@ type ChatResponse = {
     source: string;
   };
   places?: PlaceCard[];
+  accessibilityNeeds?: string[];
   chips: string[];
   confidence: Confidence;
   sources: string[];
@@ -77,6 +82,8 @@ type PlaceCard = {
   activity: string;
   tourDetails: string[];
   accessibility: string[];
+  accessibilityEvidence?: AccessibilityNeedEvidence[];
+  informationUpdatedAt?: string | null;
   latitude: string | null;
   longitude: string | null;
   source: string | null;
@@ -788,7 +795,7 @@ function createSuccessResponse({
     });
   }
   const prioritizedPlaces = prioritizeConversationPlaces(
-    buildPlaceCards(evidenceRows),
+    buildPlaceCards(evidenceRows, analysis.accessibility_needs),
     conversationContext
   );
   const recommendationLimit = resolveRequestedRecommendationLimit(inputMessage, {
@@ -836,6 +843,7 @@ function createSuccessResponse({
   return {
     message: responseMessage,
     places,
+    accessibilityNeeds: analysis.accessibility_needs.filter((need) => need !== "easy_explanation"),
     chips,
     confidence: "medium",
     sources: [],
@@ -1168,7 +1176,7 @@ function formatAccessibilityFact(item: string) {
   return `${withTopicParticle(label)} ${naturalDetail}${/[.!?]$/u.test(naturalDetail) ? "" : "."}`;
 }
 
-function buildPlaceCards(rows: KnowledgeRow[]): PlaceCard[] {
+function buildPlaceCards(rows: KnowledgeRow[], needs: string[] = []): PlaceCard[] {
   const groupedRows = new Map<string, KnowledgeRow[]>();
 
   for (const row of rows) {
@@ -1198,6 +1206,8 @@ function buildPlaceCards(rows: KnowledgeRow[]): PlaceCard[] {
       const accessibility = Array.from(
         new Set(placeRows.flatMap((row) => buildPlaceAccessibilitySummary(row)))
       ).slice(0, 6);
+      const accessibilityEvidence = buildGroupedAccessibilityEvidence(placeRows, needs);
+      const informationUpdatedAt = getFirstTextFromRows(placeRows, getRowInformationUpdatedAt);
 
       return {
         contentId,
@@ -1208,6 +1218,8 @@ function buildPlaceCards(rows: KnowledgeRow[]): PlaceCard[] {
         activity: getMergedActivityHint(placeRows),
         tourDetails: buildPlaceTourDetails(placeRows),
         accessibility,
+        ...(accessibilityEvidence.length ? { accessibilityEvidence } : {}),
+        informationUpdatedAt,
         latitude,
         longitude,
         source: getPublicChatSourceLabel(rawSource)
@@ -1326,6 +1338,27 @@ function buildPlaceTourDetails(rows: KnowledgeRow[]) {
         .filter(Boolean)
     )
   ).slice(0, 5);
+}
+
+function buildGroupedAccessibilityEvidence(rows: KnowledgeRow[], needs: string[]) {
+  if (!needs.length) return [];
+
+  const effectiveNeeds = Array.from(new Set(needs.filter((need) => need !== "easy_explanation")));
+  const evaluatedRows = rows
+    .map((row) => evaluateAccessibilityNeeds(row, effectiveNeeds))
+    .filter((items) => items.length > 0);
+
+  return effectiveNeeds.map((need) => {
+    const itemsForNeed = evaluatedRows.flatMap((items) =>
+      items.filter((item) => item.need === need)
+    );
+    return (
+      itemsForNeed.find((item) => item.status === "restricted") ||
+      itemsForNeed.find((item) => item.status === "confirmed") ||
+      itemsForNeed[0] ||
+      evaluateAccessibilityNeeds({ metadata: { accessibility: {} } }, [need])[0]
+    );
+  });
 }
 
 function isUsefulTourSummary(summary: string | null, title: string) {
@@ -2031,6 +2064,16 @@ function buildRowSearchText(row: KnowledgeRow) {
   ];
 
   return normalizeForSearch(metadataValues.filter(Boolean).join(" "));
+}
+
+function getRowInformationUpdatedAt(row: KnowledgeRow) {
+  return (
+    textMetadataValue(row.metadata?.modifiedtime) ||
+    textMetadataValue(row.metadata?.modifiedTime) ||
+    textMetadataValue(row.metadata?.updated_at) ||
+    row.updated_at ||
+    null
+  );
 }
 
 function getRowAccessibility(row: KnowledgeRow) {

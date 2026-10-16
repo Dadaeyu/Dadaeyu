@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
+import * as chatSession from "../lib/chat/session.ts";
 
 const source = await readFile(new URL("./AuthContext.tsx", import.meta.url), "utf8");
 
@@ -88,6 +89,16 @@ function depsChanged(prev: unknown[] | undefined, next: unknown[] | undefined) {
 }
 
 class AuthProviderHarness {
+  readonly chatStorageValues = new Map<string, string>();
+  readonly chatStorage = {
+    getItem: (key: string) => this.chatStorageValues.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      this.chatStorageValues.set(key, value);
+    },
+    removeItem: (key: string) => {
+      this.chatStorageValues.delete(key);
+    }
+  };
   private AuthProvider!: AuthProviderMock;
   private effectsToRun: number[] = [];
   private readonly getSessionDeferred: Deferred<{ data: { session: SessionMock | null } }>;
@@ -215,6 +226,10 @@ class AuthProviderHarness {
       module: authModule,
       require: (id: string) => {
         if (id === "react") return this.react;
+        if (id === "@/lib/chat/session")
+          return {
+            clearChatSession: () => chatSession.clearChatSession(this.chatStorage)
+          };
         if (id === "react/jsx-runtime") return this.jsxRuntime;
         if (id === "@/lib/supabase/client") return { createClient: () => supabaseClient };
         if (id === "@/lib/auth/actions") return { callEnsureMember: async () => {} };
@@ -309,6 +324,17 @@ test("탈퇴 상태 회원의 남은 클라이언트 세션을 종료한다", ()
   assert.match(source, /auth\.signOut\(\)/u);
   assert.match(source, /setUser\(null\)/u);
   assert.match(source, /setSession\(null\)/u);
+});
+
+test("챗봇이 닫혀 있어도 로그아웃하면 저장된 대화를 삭제한다", async () => {
+  const getSession = createDeferred<{ data: { session: SessionMock | null } }>();
+  const harness = new AuthProviderHarness(getSession);
+  chatSession.writeChatSession(harness.chatStorage, "user-a", {
+    messages: [{ id: 1, role: "user", text: "이전 사용자의 질문" }],
+    input: ""
+  });
+  await harness.value?.signOut();
+  assert.equal(chatSession.readChatSession(harness.chatStorage, "user-a"), null);
 });
 
 test("로그아웃 직전 시작된 회원 정보 요청은 로그아웃 이후 상태를 다시 채우지 않는다", () => {

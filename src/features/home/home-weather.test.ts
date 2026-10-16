@@ -225,6 +225,52 @@ test("home seasonal advice stays simple and travel-focused", () => {
   assert.match(getHomeSeasonAdvice(new Date("2026-10-10T00:00:00.000Z")).tips[0], /해가 짧아/u);
 });
 
+test("자정 직후에도 직전 시간의 대전 실황을 현재 날씨로 표시한다", () => {
+  const currentWeather = currentWeatherPayload({
+    observedAt: "2026-09-05 23시",
+    precipitation: "none",
+    temperatureC: 22
+  });
+  const notice = buildHomeWeatherNotice({ currentWeather }, new Date("2026-09-05T15:20:00.000Z"));
+  assert.equal(notice.weather.status, "ready");
+});
+
+test("같은 날짜여도 오래되거나 미래인 실황과 잘못된 시각은 현재 날씨에서 제외한다", () => {
+  for (const observedAt of ["2026-09-05 00시", "2026-09-05 11시", "2026-09-05 99시"]) {
+    const currentWeather = currentWeatherPayload({
+      observedAt,
+      precipitation: "none",
+      temperatureC: 22
+    });
+    assert.equal(
+      buildHomeWeatherNotice({ currentWeather }, new Date("2026-09-05T01:00:00Z")).weather.status,
+      "fallback",
+      observedAt
+    );
+  }
+});
+
+test("실황의 유효 시간은 2시간까지이며 잘못된 달력 날짜는 허용하지 않는다", () => {
+  const currentWeather = currentWeatherPayload({
+    observedAt: "2026-09-05 08시",
+    precipitation: "none",
+    temperatureC: 22
+  });
+  assert.equal(
+    buildHomeWeatherNotice({ currentWeather }, new Date("2026-09-05T01:00:00Z")).weather.status,
+    "ready"
+  );
+  assert.equal(
+    buildHomeWeatherNotice({ currentWeather }, new Date("2026-09-05T01:00:01Z")).weather.status,
+    "fallback"
+  );
+  currentWeather.condition!.observedAt = "2026-02-30 23시";
+  assert.equal(
+    buildHomeWeatherNotice({ currentWeather }, new Date("2026-03-02T15:20:00Z")).weather.status,
+    "fallback"
+  );
+});
+
 function weatherPayload({
   currentWeather,
   items,

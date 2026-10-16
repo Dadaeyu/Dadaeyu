@@ -4,6 +4,8 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useAccessibility } from "@/context/AccessibilityContext";
+import { useAuth } from "@/context/AuthContext";
+import { clearChatSession, readChatSession, writeChatSession } from "@/lib/chat/session";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import type { TourismSharedCourse } from "@/lib/supabase/types";
 import { HomePlaceImage } from "@/features/home/HomePlaceImage";
@@ -14,11 +16,14 @@ import {
 } from "@/lib/chat/discoveryLinks";
 import {
   formatChatAccessibilityText,
+  formatChatEvidenceText,
   formatChatDisplayText,
+  formatInformationDate,
   getPublicChatSourceLabel
 } from "@/lib/chat/presentation";
 import { getChatScrollTarget } from "@/lib/chat/scrollTarget";
 import { requestChatJson } from "@/lib/chat/client-request";
+import { getAccessibilityNeedLabel } from "@/lib/chat/accessibilityEvidence";
 import {
   Accessibility,
   ArrowRight,
@@ -29,6 +34,7 @@ import {
   Mic,
   MicOff,
   Route,
+  RotateCcw,
   Send,
   Star,
   Square,
@@ -37,109 +43,7 @@ import {
   X
 } from "lucide-react";
 
-type Confidence = "high" | "medium" | "low";
-
-type ChatResponse = {
-  message: string;
-  card?: {
-    title: string;
-    rows: string[];
-    source: string;
-  };
-  places?: PlaceRecommendation[];
-  courses?: TourismSharedCourse[];
-  chips: string[];
-  confidence: Confidence;
-  sources: string[];
-  debug?: {
-    analysis: QueryAnalysis;
-    inputMessage?: string;
-    rag?: RagDebug;
-    searchTerms: string[];
-    weather?: WeatherDebug;
-  };
-};
-
-type PlaceRecommendation = {
-  contentId: string | null;
-  title: string;
-  category: string | null;
-  address: string | null;
-  tel: string | null;
-  activity: string;
-  tourDetails?: string[];
-  accessibility: string[];
-  latitude: string | null;
-  longitude: string | null;
-  source: string | null;
-};
-
-type WeatherDebug = {
-  items: Array<{
-    cityAreaId: string | null;
-    cityName: string | null;
-    doName: string | null;
-    kmaTci: string | null;
-    tciGrade: string | null;
-    tm: string | null;
-    totalCityName: string | null;
-  }>;
-  request?: {
-    cityAreaId?: string | null;
-    currentDate: string;
-    day: string;
-    endpoint: string;
-  };
-  source: string;
-  status: "not_requested" | "not_configured" | "ready" | "empty" | "unavailable";
-  statusMessage: string;
-};
-
-type RagDebug = {
-  dbMatches: Array<{
-    category: string | null;
-    chunkIndex: number | null;
-    contentPreview: string | null;
-    rank: number;
-    similarity: number | null;
-    source: string | null;
-    title: string | null;
-  }>;
-  embedding?: {
-    dimensions?: number;
-    input?: string;
-    model?: string;
-    status: "created" | "failed" | "not_configured" | "skipped";
-    vectorPreview?: number[];
-    vectorPreviewNote?: string;
-  };
-  searchMode: "vector" | "keyword" | "none";
-  statusMessage: string;
-  vectorCandidateCount?: number;
-};
-
-type QueryAnalysis = {
-  in_scope: boolean;
-  scope_reason: string;
-  intent: "recommend_place" | "check_accessibility" | "ask_info";
-  accessibility_needs: string[];
-  weather_sensitive: boolean;
-  place_name: string | null;
-  location: string | null;
-  keywords: string[];
-};
-
-type Message =
-  | {
-      id: number;
-      role: "assistant";
-      content: ChatResponse;
-    }
-  | {
-      id: number;
-      role: "user";
-      text: string;
-    };
+import type { ChatResponse, PlaceRecommendation, Message } from "@/lib/chat/types";
 
 type ChatHistoryItem = {
   role: "assistant" | "user";
@@ -200,12 +104,28 @@ interface Props {
   accessibilityNeeds?: string[];
 }
 
-export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
+export default function Chatbot(props: Props) {
+  const { user, loading } = useAuth();
+  if (loading) return <p role="status">대화를 준비하고 있어요.</p>;
+  const owner = user?.id ?? "guest";
+  return <ChatbotSession key={owner} {...props} owner={owner} />;
+}
+
+function ChatbotSession({ onClose, accessibilityNeeds = [], owner }: Props & { owner: string }) {
   const { readAloud } = useAccessibility();
-  const [messages, setMessages] = useState<Message[]>([
-    { id: 1, role: "assistant", content: INITIAL_RESPONSE }
-  ]);
-  const [input, setInput] = useState("");
+  const [restored] = useState(() => {
+    try {
+      return readChatSession(window.sessionStorage, owner);
+    } catch {
+      return null;
+    }
+  });
+  const [messages, setMessages] = useState<Message[]>(
+    () => restored?.messages ?? [{ id: 1, role: "assistant", content: INITIAL_RESPONSE }]
+  );
+  const restoredLast = restored?.messages.at(-1);
+  const interruptedQuestion = restoredLast?.role === "user" ? restoredLast.text : "";
+  const [input, setInput] = useState(restored?.input || interruptedQuestion);
   const [isLoading, setIsLoading] = useState(false);
   const [isAutoTtsEnabled, setIsAutoTtsEnabled] = useState(readAloud);
   const [speakingMessageId, setSpeakingMessageId] = useState<number | null>(null);
@@ -213,12 +133,14 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
   const [isListening, setIsListening] = useState(false);
   const [isConversationMode, setIsConversationMode] = useState(false);
   const [voiceInputStatus, setVoiceInputStatus] = useState("");
-  const [requestNotice, setRequestNotice] = useState("");
-  const [retryQuestion, setRetryQuestion] = useState("");
+  const [requestNotice, setRequestNotice] = useState(
+    interruptedQuestion ? "이전 질문의 답변이 완료되지 않았어요. 다시 시도할 수 있어요." : ""
+  );
+  const [retryQuestion, setRetryQuestion] = useState(interruptedQuestion);
   const messageListRef = useRef<HTMLDivElement>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
-  const lastAutoSpokenMessageIdRef = useRef<number | null>(null);
-  const nextIdRef = useRef(1);
+  const lastAutoSpokenMessageIdRef = useRef<number | null>(restoredLast?.id ?? null);
+  const nextIdRef = useRef(Math.max(1, ...messages.map((message) => message.id)));
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const conversationModeRef = useRef(false);
   const conversationRestartTimerRef = useRef<number | null>(null);
@@ -226,8 +148,10 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
   const voiceSessionIdRef = useRef(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const activeRequestRef = useRef<AbortController | null>(null);
-  const pendingQuestionRef = useRef("");
-  const pendingUserMessageIdRef = useRef<number | null>(null);
+  const pendingQuestionRef = useRef(interruptedQuestion);
+  const pendingUserMessageIdRef = useRef<number | null>(
+    restoredLast?.role === "user" ? restoredLast.id : null
+  );
   const relatedRequestsRef = useRef(new Set<AbortController>());
   const speechRequestIdRef = useRef(0);
   const {
@@ -237,6 +161,14 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
     stop: stopTts,
     unlock: unlockTts
   } = useTextToSpeech();
+
+  useEffect(() => {
+    try {
+      writeChatSession(window.sessionStorage, owner, { messages, input });
+    } catch {
+      /* Disabled storage leaves live chat usable. */
+    }
+  }, [messages, input, owner]);
 
   function nextId() {
     nextIdRef.current += 1;
@@ -251,6 +183,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
 
     return () => {
       window.clearTimeout(timerId);
+      speechRequestIdRef.current += 1;
       clearConversationRestartTimer();
       recognitionRef.current?.abort();
       activeRequestRef.current?.abort();
@@ -293,6 +226,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
   const scrollTargetMessageId = scrollTarget.kind === "message" ? scrollTarget.messageId : null;
 
   const stopSpeech = useCallback(() => {
+    speechRequestIdRef.current += 1;
     stopTts();
     setSpeakingMessageId(null);
   }, [stopTts]);
@@ -357,7 +291,9 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
     }
 
     stopSpeech();
+    const speechRequestId = speechRequestIdRef.current;
     const unlocked = await unlockTts();
+    if (speechRequestIdRef.current !== speechRequestId) return;
     if (!unlocked) {
       setVoiceInputStatus("브라우저에서 음성 재생이 차단되었어요. 다시 눌러주세요.");
       return;
@@ -376,7 +312,9 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
     }
 
     stopSpeech();
+    const speechRequestId = speechRequestIdRef.current;
     const unlocked = await unlockTts();
+    if (speechRequestIdRef.current !== speechRequestId) return;
     if (!unlocked) {
       setVoiceInputStatus("브라우저에서 자동 읽기를 시작하지 못했어요. 다시 눌러주세요.");
       return;
@@ -569,13 +507,13 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
         cache: "no-store"
       } as const;
       let payload = await requestChatJson<{ items?: TourismSharedCourse[] }>(
-        buildRelatedCourseQuery(contentIds),
+        buildRelatedCourseQuery(contentIds, 3, data.accessibilityNeeds ?? accessibilityNeeds),
         init,
         8_000
       );
       if (!payload.items?.length && courseRequested && contentIds.length) {
         payload = await requestChatJson<{ items?: TourismSharedCourse[] }>(
-          buildRelatedCourseQuery([]),
+          buildRelatedCourseQuery([], 3, data.accessibilityNeeds ?? accessibilityNeeds),
           init,
           8_000
         );
@@ -619,8 +557,6 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
     if (!text || isLoadingRef.current) return;
     const controller = new AbortController();
     activeRequestRef.current = controller;
-    const speechRequestId = speechRequestIdRef.current + 1;
-    speechRequestIdRef.current = speechRequestId;
     pendingQuestionRef.current = text;
     setRequestNotice("");
     setRetryQuestion("");
@@ -634,6 +570,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
 
     abortVoiceInput();
     stopSpeech();
+    const speechRequestId = speechRequestIdRef.current;
     const ttsUnlockPromise = shouldUnlockTts ? unlockTts() : Promise.resolve(true);
     setMessages((current) => [
       ...current.filter((entry) => entry.id !== retryMessageId),
@@ -695,6 +632,7 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
       stopSpeech();
     } finally {
       if (activeRequestRef.current === controller) {
+        speechRequestIdRef.current += 1;
         activeRequestRef.current = null;
         isLoadingRef.current = false;
         setIsLoading(false);
@@ -708,6 +646,11 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
   }
 
   function closeChat() {
+    stopChatActivity();
+    onClose();
+  }
+
+  function stopChatActivity() {
     activeRequestRef.current?.abort();
     activeRequestRef.current = null;
     speechRequestIdRef.current += 1;
@@ -718,7 +661,26 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
     clearConversationRestartTimer();
     abortVoiceInput();
     stopSpeech();
-    onClose();
+  }
+
+  function startNewChat() {
+    stopChatActivity();
+    isLoadingRef.current = false;
+    setIsLoading(false);
+    pendingUserMessageIdRef.current = null;
+    pendingQuestionRef.current = "";
+    setRetryQuestion("");
+    setRequestNotice("이전 대화를 지웠어요. 새 질문을 입력해 주세요.");
+    setVoiceInputStatus("");
+    setInput("");
+    const id = nextId();
+    lastAutoSpokenMessageIdRef.current = id;
+    setMessages([{ id, role: "assistant", content: INITIAL_RESPONSE }]);
+    try {
+      clearChatSession(window.sessionStorage);
+    } catch {
+      /* Storage may be disabled. */
+    }
   }
 
   useEffect(() => {
@@ -756,15 +718,29 @@ export default function Chatbot({ onClose, accessibilityNeeds = [] }: Props) {
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={closeChat}
-            className="text-slate hover:bg-surface grid h-12 w-12 shrink-0 place-items-center rounded-md"
-            aria-label="채팅창 닫기"
-          >
-            <X className="h-6 w-6" aria-hidden="true" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={startNewChat}
+              className="text-slate hover:bg-surface flex min-h-12 items-center gap-1 rounded-md px-2 text-xs font-semibold"
+              aria-label="이전 대화를 지우고 새 대화 시작"
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />새 대화
+            </button>
+            <button
+              type="button"
+              onClick={closeChat}
+              className="text-slate hover:bg-surface grid h-12 w-12 shrink-0 place-items-center rounded-md"
+              aria-label="채팅창 닫기"
+            >
+              <X className="h-6 w-6" aria-hidden="true" />
+            </button>
+          </div>
         </header>
+
+        <p className="text-steel px-4 pb-2 text-xs leading-relaxed">
+          대화는 이 탭에 최근 40개까지 6시간 동안 임시 보관돼요. 새 대화를 누르면 지워져요.
+        </p>
 
         <details className="border-hairline border-t px-4 py-2">
           <summary className="text-slate flex min-h-12 cursor-pointer items-center gap-2 text-sm font-medium select-none">
@@ -1064,6 +1040,9 @@ function PlaceRecommendationList({ places }: { places: PlaceRecommendation[] }) 
         {places.map((place, index) => {
           const placeKey = `${place.source || place.title}-${index}`;
           const sourceLabel = getPublicChatSourceLabel(place.source);
+          const confirmedNeeds = (place.accessibilityEvidence ?? []).filter(
+            (item) => item.status === "confirmed"
+          );
 
           return (
             <article
@@ -1106,6 +1085,14 @@ function PlaceRecommendationList({ places }: { places: PlaceRecommendation[] }) 
 
               <div className="grid gap-5 px-4 py-4 sm:px-5">
                 <div>
+                  <h5 className="text-ink text-[13px] font-semibold">추천 이유</h5>
+                  <p className="text-slate mt-1.5 text-[13px] leading-6">
+                    {confirmedNeeds.length
+                      ? `질문과 관련된 장소 중 ${confirmedNeeds.map((item) => item.label).join(", ")} 정보가 자료에서 확인돼요.`
+                      : "질문과 관련된 장소로 찾았어요. 필요한 접근성 조건은 아래 정보와 안내처를 통해 확인해 주세요."}
+                  </p>
+                </div>
+                <div>
                   <h5 className="text-[13px] font-extrabold text-gray-950">
                     이곳에서 할 수 있는 것
                   </h5>
@@ -1130,6 +1117,36 @@ function PlaceRecommendationList({ places }: { places: PlaceRecommendation[] }) 
                   tone="brand"
                 />
 
+                {place.accessibilityEvidence?.length ? (
+                  <div>
+                    <h5 className="text-ink text-[13px] font-semibold">요청한 조건 확인</h5>
+                    <ul className="mt-2 space-y-2">
+                      {place.accessibilityEvidence.map((item) => (
+                        <li
+                          key={item.need}
+                          className="border-hairline rounded-md border bg-white p-3 text-xs leading-relaxed"
+                        >
+                          <span className="text-ink font-semibold">{item.label}</span>
+                          <span
+                            className={`ml-2 font-semibold ${item.status === "confirmed" ? "text-brand-800" : item.status === "restricted" ? "text-amber-800" : "text-steel"}`}
+                          >
+                            {item.status === "confirmed"
+                              ? "자료에서 확인"
+                              : item.status === "restricted"
+                                ? "제한 안내"
+                                : "미확인"}
+                          </span>
+                          <p className="text-slate mt-1 break-words">
+                            {item.evidence
+                              ? formatChatEvidenceText(item.evidence)
+                              : "해당 조건을 판단할 자료가 부족해요. 방문 전 문의해 주세요."}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
                 <div className="rounded-xl border border-gray-200 bg-white px-3.5 py-3">
                   <h5 className="text-[12px] font-extrabold text-gray-900">방문 전에</h5>
                   <ul className="mt-2 grid gap-1.5 text-[12px] leading-relaxed text-gray-600">
@@ -1142,11 +1159,13 @@ function PlaceRecommendationList({ places }: { places: PlaceRecommendation[] }) 
                   </ul>
                 </div>
 
-                {sourceLabel ? (
-                  <p className="border-t border-gray-200 pt-3 text-[11px] leading-relaxed font-semibold text-gray-500">
-                    정보 기준: {sourceLabel}
-                  </p>
-                ) : null}
+                <p className="text-steel border-hairline border-t pt-3 text-xs leading-relaxed">
+                  정보 출처: {sourceLabel || "출처 정보 없음"}
+                  <br />
+                  자료 갱신일: {formatInformationDate(place.informationUpdatedAt)}
+                  <br />
+                  자료의 갱신일이며 현장 점검일은 아니에요.
+                </p>
               </div>
             </article>
           );
@@ -1201,7 +1220,7 @@ function CourseRecommendationList({ courses }: { courses: TourismSharedCourse[] 
       <div className="mb-3">
         <h3 className="text-[15px] font-extrabold text-gray-950">함께 둘러보기 좋은 코스</h3>
         <p className="mt-1 text-[12px] leading-relaxed font-semibold text-gray-500">
-          다대유에 공개된 코스 중에서 골랐어요.
+          다대유에 공개된 코스예요. 조건별 확인 결과를 함께 살펴보세요.
         </p>
       </div>
 
@@ -1214,52 +1233,125 @@ function CourseRecommendationList({ courses }: { courses: TourismSharedCourse[] 
             .join(" · ");
 
           return (
-            <Link
+            <article
               key={course.course_id}
-              href={`/course/${course.course_id}`}
-              className="group border-hairline hover:border-brand-300 focus-visible:outline-brand-600 grid min-h-28 grid-cols-[7rem_minmax(0,1fr)] overflow-hidden rounded-2xl border bg-white shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
-              aria-label={`${course.course_nm} 코스 자세히 보기`}
+              className="border-hairline overflow-hidden rounded-2xl border bg-white shadow-sm"
             >
-              <span className="bg-surface relative block min-h-28 overflow-hidden">
-                <HomePlaceImage
-                  src={image}
-                  fallbackSources={course.places.map((place) => place.firstimage)}
-                  alt={course.course_nm}
-                  compactFallback
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transform-none"
-                />
-              </span>
+              <Link
+                href={`/course/${course.course_id}`}
+                className="group hover:bg-surface focus-visible:outline-brand-600 grid min-h-28 grid-cols-[7rem_minmax(0,1fr)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+                aria-label={`${course.course_nm} 코스 자세히 보기`}
+              >
+                <span className="bg-surface relative block min-h-28 overflow-hidden">
+                  <HomePlaceImage
+                    src={image}
+                    fallbackSources={course.places.map((place) => place.firstimage)}
+                    alt={course.course_nm}
+                    compactFallback
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transform-none"
+                  />
+                </span>
 
-              <span className="flex min-w-0 flex-col p-3.5">
-                <strong className="line-clamp-2 text-[14px] leading-snug font-extrabold text-gray-950">
-                  {course.course_nm}
-                </strong>
-                {placeTrail ? (
-                  <span className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed font-semibold text-gray-500">
-                    {placeTrail}
+                <span className="flex min-w-0 flex-col p-3.5">
+                  <strong className="line-clamp-2 text-[14px] leading-snug font-extrabold text-gray-950">
+                    {course.course_nm}
+                  </strong>
+                  {placeTrail ? (
+                    <span className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed font-semibold text-gray-500">
+                      {placeTrail}
+                    </span>
+                  ) : null}
+                  <span className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-extrabold text-gray-600">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-800">
+                      <Star className="h-3 w-3" aria-hidden="true" />
+                      {course.average_rating.toFixed(1)}
+                      {course.review_count ? ` · 후기 ${course.review_count}` : ""}
+                    </span>
+                    <span className="bg-brand-50 text-brand-800 inline-flex items-center gap-1 rounded-full px-2 py-1">
+                      <Heart className="h-3 w-3" aria-hidden="true" />
+                      {course.like_count}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1">
+                      <Route className="h-3 w-3" aria-hidden="true" />
+                      {course.place_count || course.places.length}곳
+                    </span>
                   </span>
-                ) : null}
-                <span className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-extrabold text-gray-600">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-800">
-                    <Star className="h-3 w-3" aria-hidden="true" />
-                    {course.average_rating.toFixed(1)}
-                    {course.review_count ? ` · 후기 ${course.review_count}` : ""}
-                  </span>
-                  <span className="bg-brand-50 text-brand-800 inline-flex items-center gap-1 rounded-full px-2 py-1">
-                    <Heart className="h-3 w-3" aria-hidden="true" />
-                    {course.like_count}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1">
-                    <Route className="h-3 w-3" aria-hidden="true" />
-                    {course.place_count || course.places.length}곳
+                  <span className="text-brand-800 mt-auto inline-flex items-center justify-end gap-1 pt-2 text-[12px] font-extrabold">
+                    코스 자세히 보기
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                   </span>
                 </span>
-                <span className="text-brand-800 mt-auto inline-flex items-center justify-end gap-1 pt-2 text-[12px] font-extrabold">
-                  코스 자세히 보기
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </span>
-              </span>
-            </Link>
+              </Link>
+              {course.accessibilitySummary ? (
+                <div className="border-hairline border-t px-3.5 py-3 text-xs leading-relaxed">
+                  <p className="text-ink font-semibold">
+                    {course.accessibilitySummary.dataStatus === "unavailable" ? (
+                      "접근성 자료 조회 실패로 조건을 확인하지 못했어요."
+                    ) : course.accessibilitySummary.totalPlaceCount > 0 ? (
+                      <>
+                        전체 {course.accessibilitySummary.totalPlaceCount}곳 중 조건 확인{" "}
+                        {course.accessibilitySummary.confirmedPlaceCount}곳{" · "}미확인{" "}
+                        {course.accessibilitySummary.unknownPlaceCount}곳{" · "}제한 안내{" "}
+                        {course.accessibilitySummary.restrictedPlaceCount}곳
+                      </>
+                    ) : (
+                      "등록된 방문지 정보가 없어 접근성을 판단할 수 없어요."
+                    )}
+                  </p>
+                  <p className="text-steel mt-1">
+                    적용 조건:{" "}
+                    {course.accessibilitySummary.needs.map(getAccessibilityNeedLabel).join(" · ")}
+                  </p>
+                  {course.accessibilitySummary.places.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="text-brand-800 flex min-h-11 cursor-pointer items-center font-semibold">
+                        장소별 확인 결과 보기
+                      </summary>
+                      <ul className="space-y-2 pb-2">
+                        {course.accessibilitySummary.places.map((place, index) => (
+                          <li
+                            key={`${place.place_id}-${index}`}
+                            className="bg-surface rounded-md p-2.5"
+                          >
+                            <strong className="text-ink">{place.title}</strong>
+                            <span className="text-slate block">
+                              {place.status === "confirmed"
+                                ? "자료에서 조건 확인"
+                                : place.status === "restricted"
+                                  ? "제한 안내 있음"
+                                  : "일부 조건 미확인"}
+                            </span>
+                            {place.matchedNeeds.length > 0 && (
+                              <span className="text-slate block">
+                                확인: {place.matchedNeeds.map(getAccessibilityNeedLabel).join(", ")}
+                              </span>
+                            )}
+                            {place.unknownNeeds.length > 0 && (
+                              <span className="text-steel block">
+                                미확인:{" "}
+                                {place.unknownNeeds.map(getAccessibilityNeedLabel).join(", ")}
+                              </span>
+                            )}
+                            {place.restrictedNeeds.length > 0 && (
+                              <span className="block text-amber-800">
+                                제한 안내:{" "}
+                                {place.restrictedNeeds.map(getAccessibilityNeedLabel).join(", ")}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                  <p className="text-steel mt-1">{course.accessibilitySummary.note}</p>
+                </div>
+              ) : (
+                <p className="border-hairline text-steel border-t px-3.5 py-3 text-xs leading-relaxed">
+                  접근성 조건을 확인하지 않은 코스예요. 방문지와 장소 사이 이동 경로를 확인해
+                  주세요.
+                </p>
+              )}
+            </article>
           );
         })}
       </div>
