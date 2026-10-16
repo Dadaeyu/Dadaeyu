@@ -7,6 +7,63 @@ const HTML_ENTITIES: Record<string, string> = {
   quot: '"'
 };
 
+const EVIDENCE_FIELD_LABELS: Record<string, string> = {
+  route: "대중교통",
+  exit: "출입구",
+  entrance: "출입구",
+  elevator: "엘리베이터",
+  restroom: "화장실",
+  toilet: "화장실",
+  parking: "주차",
+  wheelchair: "휠체어",
+  stroller: "유모차",
+  publictransport: "접근로",
+  public_transport: "대중교통",
+  braileblock: "점자블록",
+  helpdog: "보조견",
+  guidehuman: "안내 인력",
+  audioguide: "음성 안내",
+  bigprint: "큰 글자 안내",
+  brailepromotion: "점자 안내물",
+  guidesystem: "유도 안내",
+  blindhandicapetc: "시각 지원",
+  signguide: "수어 안내",
+  videoguide: "영상 안내",
+  hearingroom: "청각 지원 객실",
+  hearinghandicapetc: "청각 지원",
+  handicapetc: "이동 지원",
+  lactationroom: "수유실",
+  babysparechair: "아기의자",
+  infantsfamilyetc: "영유아 편의"
+};
+
+export function formatChatEvidenceText(value: string) {
+  return formatChatAccessibilityText(value).replace(
+    /(^| \/ )([a-z_]+)\s+/gu,
+    (match, prefix: string, field: string) =>
+      EVIDENCE_FIELD_LABELS[field] ? `${prefix}${EVIDENCE_FIELD_LABELS[field]}: ` : match
+  );
+}
+
+export function formatInformationDate(value?: string | null) {
+  if (!value) return "정보 없음";
+  if (/^\d{8}(?:\d{6})?$/u.test(value)) {
+    const year = Number(value.slice(0, 4));
+    const month = Number(value.slice(4, 6));
+    const day = Number(value.slice(6, 8));
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day
+      ? `${year}. ${month}. ${day}.`
+      : "정보 없음";
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "정보 없음"
+    : date.toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
+}
+
 export function formatChatDisplayText(value: string) {
   return decodeHtmlEntities(value)
     .replace(/\r\n?/g, "\n")

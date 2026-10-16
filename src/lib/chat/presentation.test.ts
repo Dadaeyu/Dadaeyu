@@ -88,3 +88,20 @@ test("place cards stay visible for recommendation narrowing but not for detail-o
     false
   );
 });
+test("접근성 근거의 DB 필드명은 읽을 수 있는 항목명으로 바꾸고 원문 제한을 유지한다", async () => {
+  const { formatChatEvidenceText } = await import("./presentation.ts");
+  assert.equal(formatChatEvidenceText("exit 주출입구 경사로 있음"), "출입구: 주출입구 경사로 있음");
+  assert.equal(
+    formatChatEvidenceText("restroom 장애인 화장실 이용 불가"),
+    "화장실: 장애인 화장실 이용 불가"
+  );
+});
+
+test("자료 갱신일은 TourAPI 숫자 날짜와 ISO 날짜를 읽고 잘못된 날짜는 숨긴다", async () => {
+  const { formatInformationDate } = await import("./presentation.ts");
+  assert.equal(formatInformationDate("20260920153000"), "2026. 9. 20.");
+  assert.equal(formatInformationDate("20260920"), "2026. 9. 20.");
+  assert.equal(formatInformationDate("2026-09-20T00:00:00Z"), "2026. 9. 20.");
+  assert.equal(formatInformationDate("20260230000000"), "정보 없음");
+  assert.equal(formatInformationDate(null), "정보 없음");
+});

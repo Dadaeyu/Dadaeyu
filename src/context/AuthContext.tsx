@@ -16,6 +16,7 @@ import { callEnsureMember } from "@/lib/auth/actions";
 import { fetchMember, fetchUserPreferences } from "@/lib/supabase/member";
 import type { DbMember, DbUserPreferences } from "@/lib/supabase/types";
 import { getPublicSupabaseConfig } from "@/lib/supabase/config";
+import { clearChatSession } from "@/lib/chat/session";
 
 interface AuthContextValue {
   user: User | null;
@@ -120,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "SIGNED_OUT") clearChatSession();
       if (s?.user) {
         // 의도적 로그아웃 이후에는 실제 SIGNED_IN 전까지 옛 세션을 무시한다.
         if (suppressStaleSessionRef.current && event !== "SIGNED_IN") {
@@ -143,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearAuthState, loadUserData]);
 
   const signOut = useCallback(async () => {
+    clearChatSession();
     if (!PUBLIC_SUPABASE_CONFIGURED) return;
     suppressStaleSessionRef.current = true;
     clearAuthState();

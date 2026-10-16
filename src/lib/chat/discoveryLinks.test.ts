@@ -5,6 +5,7 @@ import {
   buildRelatedCourseQuery,
   getKnowledgeContentId,
   isCourseRecommendationRequest,
+  normalizeAccessibilityNeeds,
   normalizeContentIds
 } from "./discoveryLinks.ts";
 
@@ -35,6 +36,17 @@ test("related course queries prefer existing courses containing recommended plac
     "/api/courses/shared?limit=3&sort=rating_desc&contentIds=123%2C456"
   );
   assert.equal(buildRelatedCourseQuery([]), "/api/courses/shared?limit=3&sort=rating_desc");
+});
+
+test("related course queries can include safe accessibility needs for suitability evidence", () => {
+  assert.equal(
+    buildRelatedCourseQuery(["123"], 3, ["wheelchair", "easy_explanation", "bad-value!"]),
+    "/api/courses/shared?limit=3&sort=rating_desc&contentIds=123&needs=wheelchair"
+  );
+  assert.deepEqual(
+    normalizeAccessibilityNeeds([" wheelchair ", "wheelchair", "accessible_toilet"]),
+    ["wheelchair", "accessible_toilet"]
+  );
 });
 
 test("natural Korean course requests are distinguished from place-only questions", () => {

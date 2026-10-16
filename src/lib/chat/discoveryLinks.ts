@@ -16,7 +16,7 @@ export function buildInternalPlaceMapHref(place: InternalPlaceMapTarget) {
   return `/map?${params.toString()}`;
 }
 
-export function buildRelatedCourseQuery(contentIds: string[], limit = 3) {
+export function buildRelatedCourseQuery(contentIds: string[], limit = 3, needs: string[] = []) {
   const params = new URLSearchParams({
     limit: String(Math.max(1, Math.min(limit, 10))),
     sort: "rating_desc"
@@ -25,6 +25,10 @@ export function buildRelatedCourseQuery(contentIds: string[], limit = 3) {
 
   if (normalizedContentIds.length) {
     params.set("contentIds", normalizedContentIds.join(","));
+  }
+  const normalizedNeeds = normalizeAccessibilityNeeds(needs);
+  if (normalizedNeeds.length) {
+    params.set("needs", normalizedNeeds.join(","));
   }
 
   return `/api/courses/shared?${params.toString()}`;
@@ -41,6 +45,16 @@ export function normalizeContentIds(values: string[], limit = 20) {
 export function isCourseRecommendationRequest(message: string) {
   const normalized = message.replace(/\s+/gu, " ").trim();
   return /(코스|동선|여행\s*일정|하루\s*(?:여행|나들이)|루트)/u.test(normalized);
+}
+
+export function normalizeAccessibilityNeeds(values: string[], limit = 12) {
+  const normalized = values
+    .map((value) => value.trim())
+    .filter(
+      (value) => /^[a-z_]+$/u.test(value) && value.length <= 40 && value !== "easy_explanation"
+    );
+
+  return Array.from(new Set(normalized)).slice(0, Math.max(0, limit));
 }
 
 export function getKnowledgeContentId(metadata: Record<string, unknown> | null | undefined) {
